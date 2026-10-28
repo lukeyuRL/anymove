@@ -241,11 +241,14 @@ def show():
                 self.out.appendPlainText(str(exc))
                 return
             preview_notice = ""
-            if motion.get("calibration_status") == "unverified_identity_same_rig_preview":
+            if motion.get("calibration_status") in (
+                "unverified_identity_same_rig_preview",
+                "unverified_rest_basis_conjugation_preview",
+            ):
                 preview_notice = (
                     "\nEXPERIMENTAL DRAGON PREVIEW: Blender XYZ -> iClone FK "
-                    "axes are NOT CALIBRATED; this may deform or twist the "
-                    "creature. Root motion is excluded.\n"
+                    "axes are NOT CALIBRATED; a rest basis hypothesis may be "
+                    "wrong. Root motion is excluded.\n"
                 )
             message = (
                 "Confirm project FPS is %s and timeline is at Frame 0.\n" %
