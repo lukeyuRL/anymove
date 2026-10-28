@@ -1,7 +1,7 @@
 """Read the selected iClone 8/9 Skin Bones without changing scene state.
 
-No Blender assumptions: RLPy matrices are transposed to a column-vector
-contract. Current pose transforms are snapshots, NOT skin bind matrices.
+The runtime probes the RLPy matrix translation convention before converting to
+column-vector matrices. Current pose snapshots are NOT skin bind matrices.
 This module imports RLPy lazily to support tests in stock Python.
 """
 import json
@@ -26,13 +26,43 @@ def selected_object(rlpy):
     return selection[0]
 
 
-def _native_matrix(transform):
-    """Transpose RMatrix4's row-vector matrix into 16 column-vector floats."""
+def probe_matrix_layout(rlpy):
+    """Measure whether RMatrix4 stores translation in row 3 or column 3.
+
+    The provided Legacy RLPy wrapper documents M(row,col), MakeIdentity,
+    SetTranslate and RVector3, but does not specify storage convention. Probe
+    with a non-zero synthetic translation rather than trusting a guess.
+    """
+    try:
+        mat = rlpy.RMatrix4()
+        mat.MakeIdentity()
+        mat.SetTranslate(rlpy.RVector3(13.0, 17.0, 19.0))
+        vals = [float(mat.M(r, c)) for r in range(4) for c in range(4)]
+    except Exception as exc:
+        raise ContractError("RLPy matrix layout probe failed: %s" % exc)
+    expected = (13.0, 17.0, 19.0)
+    row = (vals[12], vals[13], vals[14])
+    col = (vals[3], vals[7], vals[11])
+    is_row = all(abs(a-b) < 1e-5 for a,b in zip(row, expected))
+    is_col = all(abs(a-b) < 1e-5 for a,b in zip(col, expected))
+    if is_row == is_col:
+        raise ContractError("RLPy matrix translation convention is ambiguous")
+    return "transpose" if is_row else "direct"
+
+
+def _native_matrix(transform, layout):
+    """Convert an RMatrix4 to canonical row-major/column-vector format."""
+    if layout not in ("transpose", "direct"):
+        raise ContractError("unverified native matrix layout")
     mat = transform.Matrix()
-    return [float(mat.M(c, r)) for r in range(4) for c in range(4)]
+    return [float(mat.M(c, r) if layout == "transpose" else mat.M(r, c))
+            for r in range(4) for c in range(4)]
 
 
-def snapshot(obj):
+def snapshot(obj, rlpy=None):
+    if rlpy is None:
+        import RLPy as rlpy
+    matrix_layout = probe_matrix_layout(rlpy)
     skel = _get_skeleton(obj)
     nodes = list(skel.GetSkinBones() or [])
     if not nodes:
@@ -51,8 +81,8 @@ def snapshot(obj):
             p = None
         records[key] = {
             "id": key, "name": str(node.GetName()), "parent_id": p,
-            "snapshot_local_matrix": _native_matrix(node.LocalTransform()),
-            "snapshot_world_matrix": _native_matrix(node.WorldTransform()),
+            "snapshot_local_matrix": _native_matrix(node.LocalTransform(), matrix_layout),
+            "snapshot_world_matrix": _native_matrix(node.WorldTransform(), matrix_layout),
         }
 
     def path(key, stack=None):
@@ -79,6 +109,7 @@ def snapshot(obj):
                    "object_type": str(obj.GetType())},
         "coordinates": {"matrix_convention": "column_vector_row_major",
                         "raw_unit": "iClone_native_unverified", "meters_per_unit": None,
+                        "native_matrix_layout": matrix_layout,
                         "world_up": "+Z", "world_forward": "-Y"},
         "reference": {"kind": "current_snapshot",
                       "warning": "NOT a bind/rest pose; iClone GetBoneTPosePosition provides position only."},
@@ -92,7 +123,7 @@ def snapshot(obj):
 def export_selected(path, rlpy=None):
     if rlpy is None:
         import RLPy as rlpy
-    data = snapshot(selected_object(rlpy))
+    data = snapshot(selected_object(rlpy), rlpy=rlpy)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
     return data

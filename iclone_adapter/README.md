@@ -6,6 +6,7 @@ Target branch: `iClone`. The original Blender/AnyMove pipeline stays untouched.
 
 - **P0 built:** read one selected rigged Avatar/Prop's Skin Bone hierarchy, native current-pose local/world transforms, supported SDK flags and export JSON.
 - **P0 NOT verified:** true Skin Bind/Rest Pose, native-to-metre scale, per-asset animation control semantics and iClone 8/9 real runtime.
+- **P1 SDK audit:** enforce project FPS via `RFps.ToDouble`, extend new clips with `RIClip.SetLength`, and handle all `RStatus.IsError()` outcomes. Matrix layout is runtime-probed rather than assumed.
 - **P1 built:** strictly typed in-scene FK **channel** motion, optional synthetic 48-frame sine test, safety preflight, new motion clip and attempted rollback.
 - **P1 NOT verified:** end-to-end real SDK write/readback, clip range, FK/IK interaction, arbitrary Skeleton retargeting, AnyMove Blender Euler conversion, root motion and Generic Solver.
 - DINOv2 and torch **must run in a separate Python 3.11 process**, not the iClone Python 3.8 host.
@@ -23,7 +24,7 @@ show()
 ```
 
 1. **Inspect selected skeleton**: check `GetSkinBones`, `GetClipCount`, `AddClip`, `DeleteClip`, and other API capabilities, without modifying the scene.
-2. **Export current-pose skeleton snapshot**: write `skeleton.json`. The reference is **current_snapshot**, not verified bind pose. Bones' local/world matrices are transposed from RLPy's row-vector convention and retain **unverified native units**. No scene changes.
+2. **Export current-pose skeleton snapshot**: write `skeleton.json`. The reference is **current_snapshot**, not verified bind pose. RLPy matrix translation layout is first probed using a synthetic nonzero RMatrix4 translation; the resulting canonical matrices retain **unverified native units**. No scene changes.
 3. **Create 48-frame diagnostic FK motion**: choose a skin bone; save `test_fk.json` with an X-channel sine curve, 24 fps. This is an *iClone channel-space* diagnostic, NOT AnyMove capture.
 4. Open an expendable iClone scene with the **same selected avatar**, **zero existing motion clips**, **project 24 FPS**, **timeline at frame 0**. Use **Write FK motion**. The dialog explicitly requires acknowledgment of the scene mutation.
 5. Inspect the result manually. A successful tool return is marked `keys_written_unverified`, not proven correct. Verify that the bone rotates around the intended X channel, moves over 48 frames, and the last frame returns to zero.
@@ -53,6 +54,8 @@ Python 3.8 and 3.11 are targeted. Tests use mock RLPy to cover hierarchy, row-ve
 - https://wiki.reallusion.com/IC_8_Python_API:End_Effector_Animation
 - https://wiki.reallusion.com/IC_8_Python_API:Dealing_With_Custom_FPS
 - https://wiki.reallusion.com/IC_Python_API:RLPy_RTransform
+
+The attached **OpenPlugin_IC8** SDK reference bundle was reviewed on 2026-10-28. Its legacy binding documents `RMatrix4.M(row,col)`, `MakeIdentity`, `SetTranslate`, `RFps.ToDouble`, `RIClip.SetLength(RTime)` and `RStatus.IsError()`. These declarations are static evidence, not an iClone runtime pass. The source bundle is not copied into this repository.
 
 ## Next engineering blockers
 

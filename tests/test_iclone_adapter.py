@@ -73,11 +73,17 @@ class MathTests(unittest.TestCase):
 
 
 class Matrix:
-    def __init__(self, raw):
-        self.raw = raw
+    def __init__(self, raw=None):
+        self.raw = list(raw) if raw is not None else list(IDENTITY)
 
     def M(self, row, col):
         return self.raw[4*row+col]
+
+    def MakeIdentity(self):
+        self.raw = list(IDENTITY)
+
+    def SetTranslate(self, vec):
+        self.raw[12:15] = list(vec)
 
 
 class Transform:
@@ -138,6 +144,11 @@ class Layer:
 class Clip:
     def __init__(self):
         self.layers = {}
+        self.length = None
+
+    def SetLength(self, length):
+        self.length = length
+        return True
 
     def GetControl(self, name, bone):
         if name != "Layer":
@@ -194,17 +205,28 @@ class Scene:
         return [self.avatar]
 
 
+class Fps:
+    def ToDouble(self):
+        return 24.0
+
+
 class Global:
+    def __init__(self):
+        self.fps = Fps()
+
     def GetTime(self):
         return 0
 
     def GetFps(self):
-        return 24
+        return self.fps
 
 
 class RLPyMock:
     class RStatus:
         Failure = False
+
+    RMatrix4 = Matrix
+    RVector3 = staticmethod(lambda x, y, z: (x, y, z))
 
     def __init__(self, avatar):
         self.RScene = Scene(avatar)
@@ -223,7 +245,7 @@ class RLPyTests(unittest.TestCase):
     def test_snapshot_and_writer(self):
         avatar = Avatar()
         r = RLPyMock(avatar)
-        data = snapshot(avatar)
+        data = snapshot(avatar, rlpy=r)
         self.assertEqual(len(data["bones"]), 2)
         self.assertEqual(data["reference"]["kind"], "current_snapshot")
         # Reallusion row-vector translation is transposed into column vector.
@@ -233,6 +255,7 @@ class RLPyTests(unittest.TestCase):
             write_selected(m, rlpy=r)
         result = write_selected(m, rlpy=r, fps_confirmed=True)
         self.assertEqual(result["frame_count"], 6)
+        self.assertEqual(avatar.skeleton.clips[0].length, 6)
         self.assertEqual(len(avatar.skeleton.clips), 1)
         self.assertEqual(len(avatar.skeleton.clips[0].layers[2].block.ctrls[
             "Rotation/RotationX"].values), 6)
@@ -242,7 +265,7 @@ class RLPyTests(unittest.TestCase):
     def test_failed_clip_preflight_rolls_back(self):
         avatar = Avatar()
         r = RLPyMock(avatar)
-        m = make_sine_test(snapshot(avatar), "2", frames=3)
+        m = make_sine_test(snapshot(avatar, rlpy=r), "2", frames=3)
         class BrokenClip:
             def GetControl(self, *args):
                 return None
@@ -255,6 +278,32 @@ class RLPyTests(unittest.TestCase):
             write_selected(m, rlpy=r, fps_confirmed=True)
         self.assertTrue(avatar.skeleton.rollback)
         self.assertEqual(len(avatar.skeleton.clips), 0)
+
+    def test_fps_mismatch_rejected_before_clip(self):
+        avatar = Avatar()
+        r = RLPyMock(avatar)
+        m = make_sine_test(snapshot(avatar, rlpy=r), "2")
+        r.RGlobal.fps.ToDouble = lambda: 30.0
+        with self.assertRaises(ContractError):
+            write_selected(m, rlpy=r, fps_confirmed=True)
+        self.assertEqual(avatar.skeleton.GetClipCount(), 0)
+
+    def test_sdk_status_error_triggers_rollback(self):
+        avatar = Avatar()
+        r = RLPyMock(avatar)
+        m = make_sine_test(snapshot(avatar, rlpy=r), "2")
+        class Status:
+            def IsError(self):
+                return True
+        original_add = avatar.skeleton.AddClip
+        def bad_add(t):
+            clip = original_add(t)
+            clip.SetLength = lambda value: Status()
+            return clip
+        avatar.skeleton.AddClip = bad_add
+        with self.assertRaises(ContractError):
+            write_selected(m, rlpy=r, fps_confirmed=True)
+        self.assertTrue(avatar.skeleton.rollback)
 
     def test_writer_rejects_mismatched_skeleton(self):
         avatar = Avatar()

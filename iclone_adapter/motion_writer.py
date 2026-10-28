@@ -8,9 +8,21 @@ from .rlpy_reader import _get_skeleton, selected_object, snapshot
 from .schema import ContractError
 
 
-def preflight(obj, motion):
+def _require_sdk_ok(status, operation):
+    """RStatus.IsError handles failure codes beyond the single Failure enum."""
+    if status is None:
+        raise ContractError("%s returned no SDK status" % operation)
+    if callable(getattr(status, "IsError", None)):
+        if status.IsError():
+            raise ContractError("%s returned SDK error" % operation)
+    elif status is not True:
+        # bool True is used by the offline mock, not expected from real RLPy.
+        raise ContractError("%s returned an unrecognized status" % operation)
+
+
+def preflight(obj, motion, rlpy):
     skel = _get_skeleton(obj)
-    current = snapshot(obj)
+    current = snapshot(obj, rlpy=rlpy)
     validate_motion(motion, current)
     required = ("AddClip", "DeleteClip", "GetClipCount", "GetSkinBones")
     missing = [x for x in required if not callable(getattr(skel, x, None))]
@@ -44,23 +56,27 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
     if rlpy is None:
         import RLPy as rlpy
     obj = selected_object(rlpy)
-    skel, nodes = preflight(obj, motion)
+    skel, nodes = preflight(obj, motion, rlpy)
     if rlpy.GetFrameIndex(rlpy.RGlobal.GetTime(), rlpy.RGlobal.GetFps()) != 0:
         raise ContractError("move timeline to frame 0 before writing")
-    # iClone 8 uses 6,000 ticks/second. Validate project FPS if RTime
-    # exposes ToInt(); this also detects accidental 24-vs-30 FPS exports.
+    # RFps.ToDouble() is documented by the supplied Legacy RLPy binding.
+    # A user confirmation does not replace a machine-checked FPS match.
     project_fps = rlpy.RGlobal.GetFps()
-    one = rlpy.IndexedFrameTime(1, project_fps)
-    zero = rlpy.IndexedFrameTime(0, project_fps)
-    if callable(getattr(one, "ToInt", None)) and callable(getattr(zero, "ToInt", None)):
-        ticks = one.ToInt() - zero.ToInt()
-        if abs(ticks - 6000.0 / motion["fps"]) > 0.51:
-            raise ContractError("project FPS differs from motion FPS")
+    if not callable(getattr(project_fps, "ToDouble", None)):
+        raise ContractError("SDK RFps.ToDouble unavailable; refusing unverified FPS")
+    actual_fps = float(project_fps.ToDouble())
+    if abs(actual_fps - float(motion["fps"])) > 1e-5:
+        raise ContractError("project FPS %s differs from motion FPS %s" %
+                            (actual_fps, motion["fps"]))
     clip = None
     try:
-        clip = skel.AddClip(rlpy.IndexedFrameTime(0, rlpy.RGlobal.GetFps()))
+        clip = skel.AddClip(rlpy.IndexedFrameTime(0, project_fps))
         if clip is None:
             raise ContractError("iClone failed to create a motion clip")
+        # RIClip.SetLength(RTime) is documented. Establish the full clip
+        # duration before creating keys, rather than assuming a default range.
+        length = rlpy.IndexedFrameTime(motion["frame_count"], project_fps)
+        _require_sdk_ok(clip.SetLength(length), "SetLength")
         channels = {}
         for bone_id in motion["tracks"]:
             transform = clip.GetControl("Layer", nodes[bone_id])
@@ -74,14 +90,11 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
                 raise ContractError("missing FK XYZ rotation control: " + bone_id)
             channels[bone_id] = axes
 
-        project_fps = rlpy.RGlobal.GetFps()
         for frame in range(motion["frame_count"]):
             t = rlpy.IndexedFrameTime(frame, project_fps)
             for bone_id, track in motion["tracks"].items():
                 for ctrl, radians in zip(channels[bone_id], track[frame]):
-                    result = ctrl.SetValue(t, float(radians))
-                    if result == rlpy.RStatus.Failure:
-                        raise ContractError("SDK failed writing FK key")
+                    _require_sdk_ok(ctrl.SetValue(t, float(radians)), "SetValue")
         return {"status": "keys_written_unverified",
                 "frame_count": motion["frame_count"],
                 "bone_count": len(motion["tracks"]),
@@ -89,9 +102,7 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
     except Exception as exc:
         if clip is not None:
             try:
-                result = skel.DeleteClip(clip)
-                if result == rlpy.RStatus.Failure:
-                    raise ContractError("DeleteClip returned failure")
+                _require_sdk_ok(skel.DeleteClip(clip), "DeleteClip")
             except Exception as rollback_error:
                 raise ContractError("P1 write failed (%s); ROLLBACK FAILED (%s), scene may be modified" %
                                     (exc, rollback_error))
