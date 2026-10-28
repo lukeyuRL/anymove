@@ -8,7 +8,10 @@ import unittest
 from iclone_adapter.root_translation_sampler import (
     VERSION,capture_root_sample,save_samples
 )
-from iclone_adapter.root_translation_compare import compare_root_trajectory
+from iclone_adapter.root_translation_compare import (
+    compare_root_trajectory,recompute_existing_report
+)
+from iclone_adapter.verify_import import DEFAULT_SOURCE
 from iclone_adapter.schema import ContractError
 
 
@@ -112,7 +115,8 @@ class RootSampleTests(unittest.TestCase):
         samples={"schema_version":VERSION,"fps":24.,"samples":[
             {"frame":f,"original_axis_local_xyz":[float(f),32.,86.]}
             for f in (0,31,62,93,123)]}
-        result=compare_root_trajectory(blender,samples,expected_scale=100.)
+        result=compare_root_trajectory(blender,samples,expected_scale=100.,
+                                       position_space="armature")
         self.assertEqual(result["result"],"direction_and_path_match_after_uniform_scaling")
         self.assertAlmostEqual(result["best_fit_native_units_per_blender_unit"],100.,places=8)
         self.assertAlmostEqual(result["suggested_position_scale_multiplier"],1.,places=7)
@@ -124,12 +128,12 @@ class RootSampleTests(unittest.TestCase):
         original={"schema_version":VERSION,"fps":24.,"samples":[
             {"frame":i,"original_axis_local_xyz":[0.,float(i),0.]}
             for i in (0,1,2,3)]}
-        report=compare_root_trajectory(blender,original)
+        report=compare_root_trajectory(blender,original,position_space="armature")
         self.assertEqual(report["result"],"opposite_or_incompatible_travel_direction")
         original["samples"]=[
             {"frame":i,"original_axis_local_xyz":[0.,0.,0.]}
             for i in (0,1,2,3)]
-        self.assertEqual(compare_root_trajectory(blender,original)["result"],
+        self.assertEqual(compare_root_trajectory(blender,original,position_space="armature")["result"],
                          "iclone_pelvis_translation_static")
 
     def test_fps_and_missing_baseline_fail(self):
@@ -138,11 +142,56 @@ class RootSampleTests(unittest.TestCase):
             {"frame":i,"original_axis_local_xyz":[float(i),0,0]}
             for i in (0,1,2)]}
         with self.assertRaises(ContractError):
-            compare_root_trajectory(blender,original)
+            compare_root_trajectory(blender,original,position_space="armature")
         original["fps"]=30
         original["samples"]=original["samples"][1:]
         with self.assertRaises(ContractError):
-            compare_root_trajectory(blender,original)
+            compare_root_trajectory(blender,original,position_space="armature")
+
+    def test_previous_real_dragon_data_corrects_mixed_space_error(self):
+        # Source and target delta vectors were captured in the real 124-frame
+        # Dragon; old code incorrectly returned negative scale and 142deg.
+        pairs=[
+            (0,[0.,0.,0.],[0.,0.,0.]),
+            (31,[-.028549998998641968,-.045850008726119995,.08476001024246216],
+                [-2.854999542236328,7.0300586223602295,-6.591148376464844]),
+            (62,[-.03578001260757446,-.057550013065338135,.051050007343292236],
+                [-3.5779991149902344,7.074015378952026,-3.0231399536132812]),
+            (93,[-.018040001392364502,.02647000551223755,.02325001358985901],
+                [-1.8040008544921875,-1.7759350538253784,-3.0427474975585938]),
+            (123,[-.010450005531311035,.02737000584602356,.01091998815536499],
+                 [-1.0450019836425781,-2.2512254118919373,-1.9014739990234375]),
+        ]
+        prior={"result":"opposite_or_incompatible_travel_direction",
+               "expected_native_units_per_blender_unit":100.,
+               "samples":[{"frame":f,"blender_hips_delta":b,
+                           "iclone_pelvis_delta_native":p}
+                          for f,b,p in pairs]}
+        with open(DEFAULT_SOURCE,encoding="utf-8") as f:
+            rig=json.load(f)
+        raw=recompute_existing_report(prior,position_space="armature")
+        self.assertLess(raw["best_fit_native_units_per_blender_unit"],0.)
+        self.assertEqual(raw["result"],"opposite_or_incompatible_travel_direction")
+        corrected=recompute_existing_report(
+            prior,source_rig_info=rig,position_space="pelvis_local")
+        self.assertTrue(corrected["recomputed_from_existing_report"])
+        self.assertEqual(corrected["comparison_space"],"pelvis_local")
+        self.assertEqual(corrected["result"],
+                         "direction_and_path_match_after_uniform_scaling")
+        self.assertAlmostEqual(corrected["best_fit_native_units_per_blender_unit"],
+                               100.,places=3)
+        self.assertLess(corrected["max_direction_angle_deg"],.001)
+        self.assertLess(corrected["path_shape_relative_rms_error"],.00001)
+        self.assertLess(corrected["rms_error_at_expected_scale_native_units"],.00002)
+
+    def test_pelvis_local_requires_reference_rig(self):
+        blender={"names":["hips"],"joints":[[[float(f),0,0]]
+                                            for f in range(4)],"fps":24.}
+        data={"schema_version":VERSION,"fps":24.,"samples":[
+            {"frame":f,"original_axis_local_xyz":[float(f),0,0]}
+            for f in (0,1,3)]}
+        with self.assertRaisesRegex(ContractError,"requires source rig_info"):
+            compare_root_trajectory(blender,data)
 
 
 if __name__=="__main__":

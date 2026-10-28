@@ -355,3 +355,21 @@ The comparison assumes sampled iClone Original Bone Axis pelvis-local
 translation and Blender hips world joint positions share aligned
 source axes, as suggested by previous Dragon FBX import metadata.
 Compare with caution if actor orientation or rig parent transforms differ.
+
+
+## v0.3.5 — Correct mixed-space Root Translation comparison
+
+The actual Dragon report incorrectly returned `opposite_or_incompatible_travel_direction` because its initial numeric comparator used Blender `hips` WORLD offsets against iClone `ConvertToOriginalBoneAxis` Pelvis LOCAL offsets. Blender itself converts the original world `trans` to Pelvis local as `transpose(B_rest_pelvis) @ trans`. In a sample of frames 0,31,62,93,123, comparing in that same space gives best-fit ratio **100.000023**, maximum direction error **0.00005 degrees**, and maximum xyz residual around **1.03e-5 native units** at 100x scene scale. Thus the previously reported -70x scale and 142-degree error are invalid.
+
+This code now compares in Pelvis Rest Local space by default (uses `assets/dragon/rigged/rig_info.json`), and can re-evaluate the existing report without resampling:
+
+```powershell
+cd F:\anymove
+git pull --ff-only origin iClone
+py -3.14 -m iclone_adapter.root_translation_compare `
+  --existing-report F:\anymove_test\dragon_root_translation_comparison.json `
+  --comparison-space pelvis_local --expected-scale 100 `
+  --report-out F:\anymove_test\dragon_root_translation_comparison_corrected.json
+```
+
+To reproduce the legacy (invalid-for-Dragon) raw world-axis comparison, specify `--comparison-space armature`. A coordinate-aligned match validates sampled travel only, not untested frames or production retargeting.
