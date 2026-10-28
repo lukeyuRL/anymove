@@ -239,6 +239,23 @@ class RLPyTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             write_selected(m, rlpy=r, fps_confirmed=True)
 
+    def test_failed_clip_preflight_rolls_back(self):
+        avatar = Avatar()
+        r = RLPyMock(avatar)
+        m = make_sine_test(snapshot(avatar), "2", frames=3)
+        class BrokenClip:
+            def GetControl(self, *args):
+                return None
+        def bad_add(time):
+            clip = BrokenClip()
+            avatar.skeleton.clips.append(clip)
+            return clip
+        avatar.skeleton.AddClip = bad_add
+        with self.assertRaises(ContractError):
+            write_selected(m, rlpy=r, fps_confirmed=True)
+        self.assertTrue(avatar.skeleton.rollback)
+        self.assertEqual(len(avatar.skeleton.clips), 0)
+
     def test_writer_rejects_mismatched_skeleton(self):
         avatar = Avatar()
         r = RLPyMock(avatar)

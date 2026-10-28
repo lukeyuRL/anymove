@@ -60,3 +60,40 @@ Python 3.8 and 3.11 are targeted. Tests use mock RLPy to cover hierarchy, row-ve
 2. Verify FK channels and clip duration, readback and FK/IK override with real iClone runtime (P1 gate).
 3. Implement a Generic Pose quaternion contract and calibrated Blender/AnyMove-to-iClone mapping, before consuming Dragon det.npz/solver motions.
 4. Implement direct viewport dual-camera reference/dataset rendering, DINOv2 training/inference service and retargeting.
+
+## Convert the supplied Dragon detection through AnyMove (external Python 3.11)
+
+The original repo includes `examples/dragon_roar/det.npz`. Without DINOv2
+training, run in the **external** AnyMove environment:
+
+```bash
+MOCAP_CREATURE=assets/dragon python -m mocap.solve \
+  examples/dragon_roar/det.npz assets/dragon/rigged/rig_info.json \
+  runs/dragon/clips/roar/motion.json
+```
+
+Do not load this Blender motion into the P1 writer directly. Instead, export
+a snapshot from the SAME iClone scene and generate a mapping template:
+
+```bash
+python -m iclone_adapter.anymove_bridge map \
+  runs/dragon/clips/roar/motion.json skeleton.json map.json
+```
+
+Inspect `map.json`. For each desired source Bone, set `target_id` to the
+matching ID in `skeleton.json`, provide the calibrated
+`axis_quaternion_wxyz`, and set `calibrated=true` **only after confirming
+the iClone FK channel basis**. The template has no approved mappings by design.
+Convert with:
+
+```bash
+python -m iclone_adapter.anymove_bridge convert \
+  runs/dragon/clips/roar/motion.json skeleton.json iclone_fk.json \
+  --map-json map.json
+```
+
+The output intentionally excludes AnyMove root translation and rotation and
+does not compensate for different bone lengths. This is a per-bone rotation
+test, **not a finished retarget**. It requires a rig with known correspondence
+and verified per-bone axes. To test arbitrary iClone skeletons, first run the
+synthetic FK channel diagnostic and confirm axes in the actual iClone UI.

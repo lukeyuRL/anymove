@@ -47,6 +47,15 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
     skel, nodes = preflight(obj, motion)
     if rlpy.GetFrameIndex(rlpy.RGlobal.GetTime(), rlpy.RGlobal.GetFps()) != 0:
         raise ContractError("move timeline to frame 0 before writing")
+    # iClone 8 uses 6,000 ticks/second. Validate project FPS if RTime
+    # exposes ToInt(); this also detects accidental 24-vs-30 FPS exports.
+    project_fps = rlpy.RGlobal.GetFps()
+    one = rlpy.IndexedFrameTime(1, project_fps)
+    zero = rlpy.IndexedFrameTime(0, project_fps)
+    if callable(getattr(one, "ToInt", None)) and callable(getattr(zero, "ToInt", None)):
+        ticks = one.ToInt() - zero.ToInt()
+        if abs(ticks - 6000.0 / motion["fps"]) > 0.51:
+            raise ContractError("project FPS differs from motion FPS")
     clip = None
     try:
         clip = skel.AddClip(rlpy.IndexedFrameTime(0, rlpy.RGlobal.GetFps()))
