@@ -27,16 +27,12 @@ def preflight(obj, motion, rlpy):
     skel = _get_skeleton(obj)
     current = snapshot(obj, rlpy=rlpy)
     validate_motion(motion, current)
-    required = ("AddClip", "DeleteClip", "GetClipCount", "GetSkinBones")
+    required = ("GetClip", "AddClip", "DeleteClip", "GetClipCount", "GetSkinBones")
     missing = [x for x in required if not callable(getattr(skel, x, None))]
     if missing:
         raise ContractError("missing SDK animation APIs: " + ", ".join(missing))
-    clip_count = int(skel.GetClipCount())
-    if clip_count:
-        raise ContractError(
-            "P1 safety gate: %d existing motion clip(s). "
-            "Use Inspect existing clips to check them, or test a new scene "
-            "with no clips. Existing clips are never overwritten." % clip_count)
+    # Normal iClone characters can have one default Motion Clip.
+    # Reuse one unkeyed clip, or append after the current clips.
     entries, _ = build_bone_registry(skel.GetSkinBones() or [])
     nodes = {entry["id"]: entry["node"] for entry in entries}
     names = {entry["id"]: entry["name"] for entry in entries}
@@ -95,7 +91,83 @@ def _readback(motion, controls, fps, rlpy):
     return peak, evidence
 
 
-def _evaluate_visible_pose(rlpy, obj, node, fps, frame):
+
+def _ticks(value):
+    return value if isinstance(value, int) else int(value.ToInt())
+
+
+def _scene_time(clip, local):
+    convert = getattr(clip, "ClipTimeToSceneTime", None)
+    if not callable(convert):
+        raise ContractError("RIClip.ClipTimeToSceneTime is required for safe placement")
+    return convert(local)
+
+
+def _channels_for_clip(clip, nodes, names):
+    channels = {}
+    for bone_id, node in nodes.items():
+        transform = clip.GetControl("Layer", node)
+        if transform is None:
+            raise ContractError("missing Layer transform control: " + names[bone_id])
+        block = transform.GetDataBlock()
+        if block is None:
+            raise ContractError("missing FK data block: " + names[bone_id])
+        axes = tuple(block.GetControl("Rotation/Rotation" + ax) for ax in "XYZ")
+        if any(ctrl is None for ctrl in axes):
+            raise ContractError("missing FK XYZ rotation control: " + names[bone_id])
+        channels[bone_id] = axes
+    return channels
+
+
+def _choose_clip(skel, nodes, names, fps, rlpy):
+    """Prefer a default unkeyed clip; otherwise create non-overlapping motion."""
+    count = int(skel.GetClipCount())
+    zero = rlpy.IndexedFrameTime(0, fps)
+    one_frame = rlpy.IndexedFrameTime(1, fps)
+    clips = [skel.GetClip(i) for i in range(count)]
+    if any(clip is None for clip in clips):
+        raise ContractError("GetClip returned None for an existing index")
+    if count == 1:
+        existing = clips[0]
+        try:
+            if _ticks(_scene_time(existing, zero)) == _ticks(zero):
+                ctrls = _channels_for_clip(existing, nodes, names)
+                if all(int(ctrl.GetKeyCount()) == 0
+                       for axes in ctrls.values() for ctrl in axes):
+                    return existing, ctrls, "reuse_default", False, count
+        except (AttributeError, TypeError, RuntimeError, ContractError):
+            pass
+    # No overlap: append AFTER the rightmost existing Clip, not at scene frame 0.
+    latest = zero
+    for existing in clips:
+        try:
+            start = _scene_time(existing, zero)
+            end = start + existing.GetClipLength()
+            last_key = _scene_time(existing, existing.GetLength())
+        except Exception as exc:
+            raise ContractError("cannot measure existing Clip's range: %s" % exc)
+        for candidate in (end, last_key):
+            if _ticks(candidate) > _ticks(latest):
+                latest = candidate
+    start = zero if count == 0 else latest + one_frame
+    new_clip = skel.AddClip(start)
+    if new_clip is None:
+        raise ContractError("AddClip failed to create non-overlapping Motion")
+    return new_clip, None, ("create_new" if count == 0 else "append_new"), True, count
+
+
+def _extend_playback_range(rlpy, clip, fps, frames):
+    try:
+        scene_end = _scene_time(clip, rlpy.IndexedFrameTime(frames, fps))
+        if _ticks(scene_end) > _ticks(rlpy.RGlobal.GetEndTime()):
+            _require_sdk_ok(rlpy.RGlobal.SetEndTime(scene_end), "SetEndTime")
+        return {"end_ticks": _ticks(scene_end), "valid": True}
+    except Exception as exc:
+        return {"valid": False, "error": "%s: %s" %
+                (type(exc).__name__, exc)}
+
+
+def _evaluate_visible_pose(rlpy, obj, node, fps, frame, clip):
     """Measure WorldTransform at frame 0 and peak; leave timeline at peak.
 
     The result distinguishes visible bone transforms from FK controller data.
@@ -104,7 +176,7 @@ def _evaluate_visible_pose(rlpy, obj, node, fps, frame):
     try:
         matrices = []
         for f in (0, frame):
-            time = rlpy.IndexedFrameTime(f, fps)
+            time = _scene_time(clip, rlpy.IndexedFrameTime(f, fps))
             _require_sdk_ok(rlpy.RGlobal.SetTime(time), "SetTime")
             if callable(getattr(obj, "Update", None)):
                 obj.Update()
@@ -138,38 +210,41 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
     if abs(float(project_fps.ToDouble()) - float(motion["fps"])) > 1e-5:
         raise ContractError("project FPS differs from motion FPS")
     clip = None
+    created = False
+    strategy = None
+    previous_count = None
+    old_length = None
+    length_extended = False
+    inserted_keys = []
     try:
-        clip = skel.AddClip(rlpy.IndexedFrameTime(0, project_fps))
-        if clip is None:
-            raise ContractError("iClone failed to create a motion clip")
+        clip, channels, strategy, created, previous_count = _choose_clip(
+            skel, nodes, names, project_fps, rlpy)
         length = rlpy.IndexedFrameTime(motion["frame_count"], project_fps)
-        _require_sdk_ok(clip.SetLength(length), "SetLength")
-        channels = {}
-        for bone_id in motion["tracks"]:
-            transform = clip.GetControl("Layer", nodes[bone_id])
-            if transform is None:
-                raise ContractError("missing Layer transform control: " + names[bone_id])
-            block = transform.GetDataBlock()
-            if block is None:
-                raise ContractError("missing FK data block: " + names[bone_id])
-            axes = tuple(block.GetControl("Rotation/Rotation" + ax) for ax in "XYZ")
-            if any(ctrl is None for ctrl in axes):
-                raise ContractError("missing FK XYZ rotation control: " + names[bone_id])
-            channels[bone_id] = axes
+        old_length = clip.GetLength()
+        if created or max(_ticks(old_length), _ticks(clip.GetClipLength())) < _ticks(length):
+            _require_sdk_ok(clip.SetLength(length), "SetLength")
+            length_extended = True
+        if channels is None:
+            channels = _channels_for_clip(clip, nodes, names)
+        if created and any(int(ctrl.GetKeyCount()) for axes in channels.values() for ctrl in axes):
+            raise ContractError("new clip unexpectedly has pre-existing FK keys")
         for frame in range(motion["frame_count"]):
             time = rlpy.IndexedFrameTime(frame, project_fps)
             for bone_id, track in motion["tracks"].items():
                 for ctrl, value in zip(channels[bone_id], track[frame]):
                     _require_sdk_ok(ctrl.SetValue(time, float(value)), "SetValue")
-        if int(skel.GetClipCount()) < 1:
-            raise ContractError("AddClip returned a clip but GetClipCount remains zero")
+                    inserted_keys.append((ctrl, time))
+        if int(skel.GetClipCount()) != previous_count + int(created):
+            raise ContractError("GetClipCount changed unexpectedly")
         peak, evidence = _readback(motion, channels, project_fps, rlpy)
         # From this point a keyed clip exists. UI refresh is best-effort,
         # NOT a reason to delete it or report that the motion disappeared.
         first_bone = max(motion["tracks"], key=lambda bone:
                          max(abs(a) for frame in motion["tracks"][bone]
                              for a in frame))
-        preview = _evaluate_visible_pose(rlpy, obj, nodes[first_bone], project_fps, peak)
+        timeline = _extend_playback_range(rlpy, clip, project_fps, motion["frame_count"])
+        preview = _evaluate_visible_pose(rlpy, obj, nodes[first_bone],
+                                         project_fps, peak, clip)
         changed = preview["bone_world_transform_changed"]
         status = ("fk_keys_verified_pose_changed" if changed is True else
                   "fk_keys_verified_pose_unchanged" if changed is False else
@@ -182,8 +257,16 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
             warnings.append("Could not evaluate visible pose: " + preview["error"])
         for entry in evidence.values():
             warnings.extend(entry["readback_warnings"])
+        if not timeline["valid"]:
+            warnings.append("Timeline may not reach the test Clip: " +
+                            timeline.get("error", "unknown"))
         return {
             "status": status,
+            "clip_strategy": strategy,
+            "clip_count_before": previous_count,
+            "clip_start_ticks": _ticks(_scene_time(
+                clip, rlpy.IndexedFrameTime(0, project_fps))),
+            "timeline": timeline,
             "clip_count_after": int(skel.GetClipCount()),
             "frame_count": motion["frame_count"],
             "bone_count": len(motion["tracks"]),
@@ -197,9 +280,17 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
     except Exception as exc:
         if clip is not None:
             try:
-                _require_sdk_ok(skel.DeleteClip(clip), "DeleteClip")
+                if created:
+                    _require_sdk_ok(skel.DeleteClip(clip), "DeleteClip")
+                else:
+                    # Never delete or overwrite the user's default clip.
+                    # All target FK channels had zero keys before writing.
+                    for ctrl, time in reversed(inserted_keys):
+                        _require_sdk_ok(ctrl.RemoveKey(time), "RemoveKey")
+                    if length_extended:
+                        _require_sdk_ok(clip.SetLength(old_length), "restore clip length")
             except Exception as rollback_error:
                 raise ContractError(
-                    "P1 write failed (%s); ROLLBACK FAILED (%s), scene may be modified" %
+                    "P1 failed (%s); ROLLBACK FAILED (%s), scene may contain keys" %
                     (exc, rollback_error))
         raise
