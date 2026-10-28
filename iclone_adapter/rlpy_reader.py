@@ -7,6 +7,7 @@ This module imports RLPy lazily to support tests in stock Python.
 import json
 
 from .schema import VERSION, ContractError, skeleton_hash, validate_skeleton
+from .bone_registry import build_bone_registry
 
 
 def _get_skeleton(obj):
@@ -76,44 +77,25 @@ def snapshot(obj, rlpy=None):
         import RLPy as rlpy
     matrix_layout = probe_matrix_layout(rlpy)
     skel = _get_skeleton(obj)
-    nodes = list(skel.GetSkinBones() or [])
-    if not nodes:
-        raise ContractError("no accessible Skin Bones")
-    node_ids = [str(node.GetID()) for node in nodes]
-    if len(set(node_ids)) != len(node_ids):
-        raise ContractError("duplicate scene bone IDs")
-    ids = set(node_ids)
-    # Explicitly require unique IDs in a snapshot; parent may be an object,
-    # so only parents contained in GetSkinBones are traversed.
-    records = {}
-    for node, key in zip(nodes, node_ids):
-        parent = node.GetParent()
-        p = str(parent.GetID()) if parent is not None else None
-        if p not in ids:
-            p = None
-        records[key] = {
-            "id": key, "name": str(node.GetName()), "parent_id": p,
+    registry, identity_diagnostics = build_bone_registry(skel.GetSkinBones() or [])
+    records = []
+    for entry in registry:
+        node = entry["node"]
+        record = {
+            "id": entry["id"],
+            "path": entry["path"],
+            "name": entry["name"],
+            "parent_id": entry["parent_id"],
+            "native_scene_id": entry["native_scene_id"],
             "snapshot_local_matrix": _native_matrix(node.LocalTransform(), matrix_layout),
             "snapshot_world_matrix": _native_matrix(node.WorldTransform(), matrix_layout),
+            "rest_local_matrix": None,
         }
-
-    def path(key, stack=None):
-        stack = set() if stack is None else stack
-        if key in stack:
-            raise ContractError("cycle in skin bones")
-        b = records[key]
-        parent = b["parent_id"]
-        # IDs ensure that duplicate names are not confused during this scene.
-        label = b["name"].replace("/", "%2F") + "#" + key
-        return path(parent, stack | {key}) + "/" + label if parent else "/" + label
-
-    for key, b in records.items():
-        b["path"] = path(key)
         try:
-            b["can_animate"] = bool(skel.IsBoneAnimated(nodes[node_ids.index(key)]))
+            record["can_animate"] = bool(skel.IsBoneAnimated(node))
         except (AttributeError, TypeError, RuntimeError):
-            b["can_animate"] = None
-        b["rest_local_matrix"] = None
+            record["can_animate"] = None
+        records.append(record)
 
     data = {
         "schema_version": VERSION,
@@ -125,7 +107,8 @@ def snapshot(obj, rlpy=None):
                         "world_up": "+Z", "world_forward": "-Y"},
         "reference": {"kind": "current_snapshot",
                       "warning": "NOT a bind/rest pose; iClone GetBoneTPosePosition provides position only."},
-        "bones": sorted(records.values(), key=lambda b: b["path"]),
+        "bones": sorted(records, key=lambda b: b["path"]),
+        "identity_diagnostics": identity_diagnostics,
     }
     validate_skeleton(data)
     data["skeleton_hash"] = skeleton_hash(data)

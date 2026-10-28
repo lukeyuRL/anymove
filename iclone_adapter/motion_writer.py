@@ -5,6 +5,7 @@ AnyMove's Blender Euler motion.json requires calibration/retargeting first.
 """
 from .motion_contract import validate_motion
 from .rlpy_reader import _get_skeleton, selected_object, snapshot
+from .bone_registry import build_bone_registry
 from .schema import ContractError
 
 
@@ -30,7 +31,8 @@ def preflight(obj, motion, rlpy):
         raise ContractError("missing SDK animation APIs: " + ", ".join(missing))
     if int(skel.GetClipCount()) != 0:
         raise ContractError("P1 safety gate: object must have zero motion clips")
-    nodes = {str(b.GetID()): b for b in skel.GetSkinBones()}
+    entries, _ = build_bone_registry(skel.GetSkinBones() or [])
+    nodes = {entry["id"]: entry["node"] for entry in entries}
     for bone_id in motion["tracks"]:
         if bone_id not in nodes:
             raise ContractError("bone missing from live skeleton: " + bone_id)

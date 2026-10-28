@@ -4,7 +4,7 @@ Target branch: `iClone`. The original Blender/AnyMove pipeline stays untouched.
 
 ## Status (do not treat this as end-to-end capture)
 
-- **P0 built:** read one selected rigged Avatar/Prop's Skin Bone hierarchy, native current-pose local/world transforms, supported SDK flags and export JSON.
+- **P0 built:** read one selected rigged Avatar/Prop's Skin Bone hierarchy, native current-pose local/world transforms, supported SDK flags and export JSON. Skin Bone identities are hierarchical paths; non-unique `RINode.GetID()` values are reported as diagnostics rather than blocking export.
 - **P0 NOT verified:** true Skin Bind/Rest Pose, native-to-metre scale, per-asset animation control semantics and iClone 8/9 real runtime.
 - **P1 SDK audit:** enforce project FPS via `RFps.ToDouble`, extend new clips with `RIClip.SetLength`, and handle all `RStatus.IsError()` outcomes. Matrix layout is runtime-probed rather than assumed.
 - **P1 built:** strictly typed in-scene FK **channel** motion, optional synthetic 48-frame sine test, safety preflight, new motion clip and attempted rollback.
@@ -116,3 +116,23 @@ overload. This has been replaced in both probe and bone reading paths with
 `float`. Re-run with **the latest iClone branch and reload the Python
 plugin/script**. Export a new `skeleton.json`; do not reuse a partial
 earlier file.
+
+## 2026-10-28: `duplicate scene bone IDs` fix
+
+The screenshot from a 103-bone `Casual_F_0058` character showed `GetSkinBones()`
+working, but the exporter rejected non-unique `RINode.GetID()` values.
+This is not evidence of duplicate bones: an SDK scene node ID is not an
+appropriate unique key for every skin joint. The exporter now uses
+`skin:/<parent>/<bone>` hierarchy-derived keys and preserves native IDs
+only as diagnostics. For names duplicated at different places in the
+hierarchy, full paths distinguish them. Identically named siblings
+receive a numbered suffix determined by the SDK's skin-bone order.
+
+The writer uses the same registry and no longer looks bones up by
+`GetID()`. It rejects unresolved ambiguous parent identities rather than
+inventing connections. Export now includes `identity_diagnostics`:
+`native_id_duplicate_nodes`, `duplicate_name_groups` and `identity_strategy`.
+
+**Note:** Your screenshot also reports `existing_clip_count: 1`. The
+experimental P1 writer still intentionally requires zero existing
+motion clips, so use a separate empty-motion test scene for P1.

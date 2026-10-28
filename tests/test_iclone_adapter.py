@@ -10,6 +10,7 @@ from iclone_adapter.schema import (
 from iclone_adapter.motion_contract import make_sine_test, validate_motion
 from iclone_adapter.rlpy_reader import snapshot, probe_matrix_layout
 from iclone_adapter.motion_writer import write_selected
+from iclone_adapter.bone_registry import build_bone_registry
 
 
 def sample_skeleton():
@@ -163,7 +164,7 @@ class Clip:
     def GetControl(self, name, bone):
         if name != "Layer":
             return None
-        return self.layers.setdefault(bone.GetID(), Layer())
+        return self.layers.setdefault(bone.GetName(), Layer())
 
 
 class Skeleton:
@@ -259,6 +260,42 @@ class RLPyTests(unittest.TestCase):
         rlpy.RMatrix4 = ColumnMatrix
         self.assertEqual(probe_matrix_layout(rlpy), "direct")
 
+    def test_duplicate_scene_ids_preserve_hierarchy(self):
+        avatar = Avatar()
+        r = RLPyMock(avatar)
+        for node in avatar.skeleton.bones:
+            node.GetID = lambda: 0  # Simulate real iClone duplicate RINode IDs.
+        data = snapshot(avatar, rlpy=r)
+        self.assertEqual(len(data["bones"]), 2)
+        self.assertEqual(len({b["id"] for b in data["bones"]}), 2)
+        self.assertEqual(data["identity_diagnostics"]["native_id_duplicate_nodes"], 2)
+        child = next(b for b in data["bones"] if b["name"] == "Bone2")
+        parent = next(b for b in data["bones"] if b["name"] == "Bone1")
+        self.assertEqual(child["parent_id"], parent["id"])
+        motion = make_sine_test(data, child["id"], frames=4)
+        result = write_selected(motion, rlpy=r, fps_confirmed=True)
+        self.assertEqual(result["frame_count"], 4)
+        self.assertIn("Bone2", avatar.skeleton.clips[0].layers)
+
+    def test_same_name_different_parent_paths(self):
+        class NamedBone(Bone):
+            def __init__(self, key, name, parent=None):
+                super(NamedBone, self).__init__(key, parent)
+                self.name = name
+            def GetName(self):
+                return self.name
+            def GetID(self):
+                return 0
+        root = NamedBone(1, "root")
+        left = NamedBone(2, "left", root)
+        right = NamedBone(3, "right", root)
+        a = NamedBone(4, "joint", left)
+        b = NamedBone(5, "joint", right)
+        entries, diag = build_bone_registry([root, left, right, a, b])
+        self.assertEqual(len({v["path"] for v in entries}), 5)
+        self.assertNotEqual(entries[3]["parent_id"], entries[4]["parent_id"])
+        self.assertEqual(diag["native_id_duplicate_nodes"], 5)
+
     def test_snapshot_and_writer(self):
         avatar = Avatar()
         r = RLPyMock(avatar)
@@ -267,14 +304,15 @@ class RLPyTests(unittest.TestCase):
         self.assertEqual(data["reference"]["kind"], "current_snapshot")
         # Reallusion row-vector translation is transposed into column vector.
         self.assertEqual(data["bones"][0]["snapshot_world_matrix"][3], 1.0)
-        m = make_sine_test(data, "2", frames=6)
+        bone = next(b for b in data["bones"] if b["name"] == "Bone2")
+        m = make_sine_test(data, bone["id"], frames=6)
         with self.assertRaises(ContractError):
             write_selected(m, rlpy=r)
         result = write_selected(m, rlpy=r, fps_confirmed=True)
         self.assertEqual(result["frame_count"], 6)
         self.assertEqual(avatar.skeleton.clips[0].length, 6)
         self.assertEqual(len(avatar.skeleton.clips), 1)
-        self.assertEqual(len(avatar.skeleton.clips[0].layers[2].block.ctrls[
+        self.assertEqual(len(avatar.skeleton.clips[0].layers["Bone2"].block.ctrls[
             "Rotation/RotationX"].values), 6)
         with self.assertRaises(ContractError):
             write_selected(m, rlpy=r, fps_confirmed=True)
@@ -282,7 +320,7 @@ class RLPyTests(unittest.TestCase):
     def test_failed_clip_preflight_rolls_back(self):
         avatar = Avatar()
         r = RLPyMock(avatar)
-        m = make_sine_test(snapshot(avatar, rlpy=r), "2", frames=3)
+        m = make_sine_test(snapshot(avatar, rlpy=r), next(b["id"] for b in snapshot(avatar, rlpy=r)["bones"] if b["name"] == "Bone2"), frames=3)
         class BrokenClip:
             def SetLength(self, length):
                 return True
@@ -302,7 +340,7 @@ class RLPyTests(unittest.TestCase):
     def test_fps_mismatch_rejected_before_clip(self):
         avatar = Avatar()
         r = RLPyMock(avatar)
-        m = make_sine_test(snapshot(avatar, rlpy=r), "2")
+        m = make_sine_test(snapshot(avatar, rlpy=r), next(b["id"] for b in snapshot(avatar, rlpy=r)["bones"] if b["name"] == "Bone2"))
         r.RGlobal.fps.ToDouble = lambda: 30.0
         with self.assertRaises(ContractError):
             write_selected(m, rlpy=r, fps_confirmed=True)
@@ -311,7 +349,7 @@ class RLPyTests(unittest.TestCase):
     def test_sdk_status_error_triggers_rollback(self):
         avatar = Avatar()
         r = RLPyMock(avatar)
-        m = make_sine_test(snapshot(avatar, rlpy=r), "2")
+        m = make_sine_test(snapshot(avatar, rlpy=r), next(b["id"] for b in snapshot(avatar, rlpy=r)["bones"] if b["name"] == "Bone2"))
         class Status:
             def IsError(self):
                 return True
@@ -328,7 +366,7 @@ class RLPyTests(unittest.TestCase):
     def test_writer_rejects_mismatched_skeleton(self):
         avatar = Avatar()
         r = RLPyMock(avatar)
-        m = make_sine_test(snapshot(avatar, rlpy=r), "2")
+        m = make_sine_test(snapshot(avatar, rlpy=r), next(b["id"] for b in snapshot(avatar, rlpy=r)["bones"] if b["name"] == "Bone2"))
         m["skeleton_hash"] = "invalid"
         with self.assertRaises(ContractError):
             write_selected(m, rlpy=r, fps_confirmed=True)
