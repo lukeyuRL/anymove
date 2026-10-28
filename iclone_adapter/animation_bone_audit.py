@@ -1,9 +1,10 @@
-"""Read-only diagnostic: Skin Bones vs Motion Bones and their FK Layer keys.
+"""Read-only iClone 8 FK Layer Bone identity and controller diagnostics.
 
-Official iClone documentation distinguishes GetSkinBones from GetMotionBones:
-animation is authored through Motion Bones. The attached iClone 8 Legacy RLPy
-wrapper exposes GetAllAnimationBone() instead of GetMotionBones(); probe BOTH
-when present and report identities without silently assuming equivalence.
+iClone 8 REMOVED the separate Motion Bone rig used in iClone 7.
+Official iClone 8 docs explicitly support FK Layer keys on Skin Bones.
+GetMotionBones() being absent is EXPECTED in iClone 8, not a failure.
+GetAllAnimationBone() may be present: compare IDs and keys, do not assume
+either API provides a separate retargeting rig.
 No SetValue, AddClip, SetTime or scene mutations in this diagnostic.
 """
 from .bone_registry import build_bone_registry
@@ -124,9 +125,11 @@ def audit_animation_bones(motion, clip_index=None, rlpy=None):
         "node_sets":{},
         "same_name_identity_differences":{},
         "diagnostic_warning":(
-            "Reallusion documents Motion Bones as the animation target; "
-            "Skin Bone nodes may be distinct. This audit only READS FK "
-            "controls; key counts and values do not prove rendered motion."
+            "iClone 8 removed the iClone 7 separate Motion Bone skeleton. "
+            "GetSkinBones is a supported FK Layer animation target. "
+            "GetAllAnimationBone is a second available node enumeration. "
+            "This audit only READS FK controls; key counts and values "
+            "do not prove evaluated bone transforms or rendered motion."
         ),
     }
     for label,(nodes,metadata) in sets.items():
@@ -178,4 +181,47 @@ def audit_animation_bones(motion, clip_index=None, rlpy=None):
                     "skin_keys":other.get("key_counts_xyz"),
                     "candidate_keys":channel.get("key_counts_xyz")})
         out["same_name_identity_differences"][label]=changes
+
+    # Conservatively report controller-key integrity, NOT evaluated pose
+    # correctness. Reading three sampled frames cannot prove every key value
+    # or determine the correct Blender -> iClone FK axis conversion.
+    expected_count=motion["frame_count"]
+    target_count=len(wanted)
+    fully_keyed=sum(
+        isinstance(item.get("key_counts_xyz"),list) and
+        item["key_counts_xyz"]==[expected_count]*3
+        for item in skin.values())
+    samples_match=sum(
+        item.get("readback_supported") and
+        item.get("max_abs_error_radians") is not None and
+        item["max_abs_error_radians"]<=1e-3
+        for item in skin.values())
+    max_error=max((item["max_abs_error_radians"] for item in skin.values()
+                  if item.get("max_abs_error_radians") is not None),
+                  default=None)
+    other=out["node_sets"]["all_animation_bones"]
+    same_ids=(
+        other.get("available") is True and
+        other.get("matching_target_names")==target_count and
+        not other.get("missing_target_names") and
+        not other.get("ambiguous_target_names") and
+        not out["same_name_identity_differences"]["all_animation_bones"]
+    )
+    integrity_ok=(
+        len(skin)==target_count and
+        fully_keyed==target_count and samples_match==target_count)
+    out["channel_integrity"]={
+        "result":("sampled_fk_controls_match" if integrity_ok else
+                  "needs_controller_review"),
+        "fully_keyed_target_bones":fully_keyed,
+        "sampled_values_match_target_bones":samples_match,
+        "target_track_count":target_count,
+        "expected_keys_per_axis":expected_count,
+        "observed_max_abs_error_radians":max_error,
+        "all_animation_bone_ids_match_skin":bool(same_ids),
+        "all_frames_value_verified":False,
+        "evaluated_pose_verified":False,
+        "note":"Only three frame values per bone sampled; all XYZ key counts checked. "
+               "This does NOT prove actual FK axis orientation or rendered animation."
+    }
     return out

@@ -81,3 +81,12 @@ A `fk_axis_or_evaluation_mismatch` result identifies the worst Bones and
 measured errors. Upload `dragon_fk_validation.json` for diagnosis. Use an
 unposed skeleton snapshot and the actual matching Motion Clip; otherwise
 errors may reflect a wrong baseline or clip rather than wrong FK axes.
+
+## v0.2.1 correction: iClone 8 does not use separate Motion Bones
+
+The real Dragon Bone audit confirms 41/41 XYZ tracks have 124 keys per
+axis and samples at 0/62/123 match the source to better than 5e-8 rad.
+`GetSkinBones()` and `GetAllAnimationBone()` share the same target IDs.
+Do not apply legacy iClone 7 `GetMotionBones()` retarget assumptions.
+See [MOTION_BONE_AUDIT.md](MOTION_BONE_AUDIT.md) for the detailed
+source-based findings and Blender visual comparison instructions.

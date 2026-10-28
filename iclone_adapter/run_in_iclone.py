@@ -38,7 +38,7 @@ def show():
                 ("Create visible 48-frame FK motion (30 deg)", self.synthetic),
                 ("Write FK motion to selected avatar (modifies scene)", self.import_motion),
                 ("Validate Dragon FK animation vs preview (read-only)", self.validate_dragon),
-                ("Audit Skin vs Motion Bones / FK keys (read-only)", self.audit_motion_bones),
+                ("Audit iClone 8 FK Bone IDs / Keys (read-only)", self.audit_motion_bones),
             ]:
                 button = QtWidgets.QPushButton(label)
                 button.clicked.connect(callback)
@@ -205,7 +205,8 @@ def show():
                     with open(path,"w",encoding="utf-8") as f:
                         json.dump(report,f,ensure_ascii=False,indent=2)
                 summary={"saved_report":path or None,"clip_index":index,
-                         "source_motion_frame_count":motion["frame_count"]}
+                         "source_motion_frame_count":motion["frame_count"],
+                         "channel_integrity":report["channel_integrity"]}
                 for key,info in report["node_sets"].items():
                     summary[key]={
                         "available":info.get("available"),

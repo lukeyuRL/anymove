@@ -1,4 +1,4 @@
-"""Motion Bones vs Skin Bones audit must stay read-only."""
+"""iClone 8 FK Bone/Layer controller audit must stay read-only."""
 import unittest
 
 from iclone_adapter.animation_bone_audit import audit_animation_bones
@@ -25,6 +25,10 @@ class AuditTests(unittest.TestCase):
             "target_bones_with_any_fk_key"],1)
         self.assertEqual(result["node_sets"]["skin_bones"][
             "target_bones_readback_matches_1e3"],1)
+        self.assertEqual(result["channel_integrity"]["result"],"sampled_fk_controls_match")
+        self.assertEqual(result["channel_integrity"]["fully_keyed_target_bones"],1)
+        self.assertFalse(result["channel_integrity"]["evaluated_pose_verified"])
+        self.assertFalse(result["channel_integrity"]["all_frames_value_verified"])
         self.assertFalse(result["node_sets"]["motion_bones"]["available"])
         self.assertEqual(result["clip_index"],0)
         self.assertEqual(ctrl.GetKeyCount(),n_before)
@@ -49,6 +53,7 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(len(result["same_name_identity_differences"][
             "all_animation_bones"]),1)
         self.assertEqual(anim["target_bones_with_any_fk_key"],1)
+        self.assertFalse(result["channel_integrity"]["all_animation_bone_ids_match_skin"])
 
 
 if __name__=="__main__":

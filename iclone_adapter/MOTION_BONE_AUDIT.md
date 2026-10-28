@@ -1,42 +1,89 @@
-# 2026-10-28: real Dragon video vs static Skin Bone API measurements
+# Dragon iClone 8 FK Layer audit: 2026-10-28 findings
 
-Uploaded `dragon_fk_validation.json` reported 41 tracks, nine sampled frames
-(0,9,29,31,38,62,71,93,123), zero axis-valid Bones. On close examination,
-the purported `actual_delta_deg` value was exactly identical on ALL NINE
-frames for each of 41 Bones. The five nonzero offsets (head, neck1, tail1,
-tail2, wing_arm_R) were static offsets relative to the saved unposed
-reference, NOT evidence of animated keys. The supplied 24-FPS, 1.625-second
-`dragon.mp4` visibly animates the wings/forelegs/neck. It is therefore
-incorrect to label that report as proof of a wrong Euler axis.
+## Correct the iClone 7 / iClone 8 API distinction
 
-This is a known distinction in iClone's architecture: [official
-documentation](https://wiki.reallusion.com/IC_Python_API:Animating_A_Character)
-states that **Motion Bones** receive FK animation and are retargeted to
-**Skin Bones**. A [2020 Reallusion feedback issue](https://www.reallusion.com/FeedBackTracker/Issue/Bones-returned-from-GetSkinBones-have-a-different-ID-than-the-same-ones-you-get-from-GetSelectedBones)
-specifically warns that GetSkinBones nodes can be invalid for a Motion
-Clip. The supplied Legacy iClone8 RLPy.py includes
-`RISkeletonComponent.GetAllAnimationBone()`, but not
-`GetMotionBones()`. These APIs must be PROBED rather than conflated.
+The original notes in this file erroneously treated iClone 7's Motion Bones
+as a required second skeleton on iClone 8. That was incorrect. The official
+[iClone 8 Python API](https://wiki.reallusion.com/IC8_Python_API) explicitly
+states that the iClone 7 Motion Bone skeleton was removed in iClone 8, and
+`GetMotionBones()` was deprecated. The official
+[iClone 8 FK/IK example](https://wiki.reallusion.com/IC_8_Python_API:End_Effector_Animation)
+uses `GetControl("Layer", any_bone)` and a Skin Bone to author FK rotations.
 
-**v0.2.0+**:
-- P2 validation checks temporal changes in the actual parent-relative
-  Bone rotation. If all sampled Skin Bone transforms stay identical, it
-  returns `bone_transform_static_axis_unverifiable` and does NOT return
-  the misleading `fk_axis_or_evaluation_mismatch`.
-- A new **Audit Skin vs Motion Bones / FK keys (read-only)** button
-  examines `GetSkinBones`, `GetMotionBones` if exposed, and
-  `GetAllAnimationBone` if exposed, compares name/ID for mapped Bones,
-  checks per-clip Layer FK key counts and samples control values.
-- It does NOT change the existing Writer to guess which Bone set is
-  correct. On a real nonstandard Creature this must be verified from
-  the actual adapter SDK before altering playback.
+An older iClone 7 document and feedback report about distinct Skin/Motion IDs
+do not override the iClone 8 architecture.
 
-To diagnose:
-1. Update repo, reload `launch_iclone.py` in iClone.
-2. Open the scene with the ALL-41-bone Dragon Roar, select Dragon.
-3. Click **Audit Skin vs Motion Bones / FK keys (read-only)**.
-4. Choose the actual `dragon_roar_fk_all.json`, clip index 0 if one.
-5. Save and upload `dragon_bone_channel_audit.json`.
-6. Examine which SDK Bone collection has actual keyed FK channels
-   and which IDs are distinct. Animation source/axis corrections should
-   follow evidence, not precede it.
+## Observed actual Dragon data
+
+The user supplied `dragon_bone_channel_audit.json` from the real iClone 8
+Dragon, with 124-frame `dragon_roar_fk_all.json` on Clip Index 0.
+
+- `GetSkinBones()`: 57 nodes; 41 of 41 requested non-root Bone names.
+- `GetAllAnimationBone()`: 57 nodes, 57 unique names; same 41 mappings.
+- `GetMotionBones()`: absent, as expected for iClone 8.
+- All 41 target Bone IDs identical between `GetSkinBones()` and
+  `GetAllAnimationBone()`.
+- All 41 target Bones have exactly 124 FK rotation keys in **each**
+  of X, Y and Z: 41 * 3 * 124 = **15,252** keys.
+- Frame 0, 62, 123 controller values compare with the expected FK preview:
+  **41/41 sampled matches**, worst absolute numerical difference
+  **4.421234134355245e-8 radians**.
+- This verifies that the intended Layer controller data was written and
+  retained. It is NOT evidence of the correctness of the Euler axis
+  conversion or mesh deformation, nor of missing Root Motion.
+
+The prior `dragon_fk_validation.json` from v0.1.9 sampled nine timeline
+frames and found identical `RINode.LocalTransform/WorldTransform`
+orientation values across frames, despite independently reading varying FK
+Layer controller values, and despite visible motion in the video.
+
+**Interpretation:** that validator did not obtain an evaluated dynamic Bone
+pose from those RINode calls in this scene. It was incorrect to infer
+41 wrong Euler axes or that only five bones were animated. v0.2.0 already
+blocks such false FK axis conclusions when its Bone sampling is static.
+
+## Correct next verification
+
+1. Keep the existing Writer; do **not** switch it to `GetMotionBones`.
+2. Compare a Blender ground-truth render of the **same original Solver
+   `motion.json`** against actual iClone viewport/render images at
+   identical frame numbers; first 0, 31, 62, 93, 123.
+3. Remember Blender original includes `pelvis` `root_quat` and `trans`,
+   while current iClone FK preview explicitly **omits** Root motion.
+   Normalize/alignment by pelvis before judging joint motion.
+4. If the actual target pose differs, test per-bone FK basis/Euler
+   interpretation against the rendered reference, not static
+   `RINode.LocalTransform/WorldTransform` data.
+5. Implement Root quaternion/translation separately with verified SDK
+   controls and scale conversion; do not silently pretend it is present.
+6. For iClone runtime errors while asynchronously changing scene time,
+   do not assume timeline sampling synchronously evaluates RINode;
+   verify the API semantics before re-enabling pose metrics.
+
+## Reading current code
+
+Use **Audit iClone 8 FK Bone IDs / Keys (read-only)** in the plugin. The
+report includes `channel_integrity` with a deliberately narrow result:
+`sampled_fk_controls_match`. No scene or key modifications are made.
+
+## Offline Blender reference screenshots (same source file)
+
+Run from PowerShell with your actual Blender executable path:
+
+```powershell
+cd F:\anymove
+$blender = "C:\Program Files\Blender Foundation\Blender 5.0\blender.exe"
+& $blender -b --python-exit-code 1 -P blender/apply_motion.py -- `
+    assets/dragon/rigged/rigged.blend `
+    assets/dragon/rigged/rig_info.json `
+    runs/dragon/clips/roar/motion.json `
+    runs/dragon/clips/roar/blender_reference `
+    --views persp --engine workbench --frames 0,31,62,93,123
+```
+
+Outputs 5 PNG files under
+`runs/dragon/clips/roar/blender_reference/persp/` in the source's
+camera. Match comparable iClone camera angles if testing visually.
+
+Note: This is screenshot-based validation, not ground-truth numerical
+pixel correspondence without calibrated cameras and root alignment.
