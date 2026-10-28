@@ -7,7 +7,8 @@ When motion.json is ready, the previously verified same-Dragon-rig
 direct_import code validates and writes in the iClone process.
 
 User confirms the scene change explicitly after motion capture finishes.
-No paid fal.ai video-generation calls are made by this workflow.
+The original existing MP4/NPZ path never calls fal.ai; a separate
+start_prompt action is explicitly billable and requires user approval.
 """
 import json
 import pathlib
@@ -18,6 +19,7 @@ from .scene_guard import check_clean_clip
 from .schema import ContractError
 from .verify_import import DEFAULT_SOURCE, audit_rig
 from .video_capture import _input_plan, OUTPUT_MOTION, RECEIPT
+from .prompt_capture import _prompt_plan, _credential_available
 
 REPO=pathlib.Path(__file__).resolve().parents[1]
 
@@ -73,6 +75,16 @@ def unique_capture_folder(parent,source):
         if not candidate.exists():
             return candidate
     raise ContractError("too many capture runs in selected folder")
+
+
+def prompt_worker_arguments(action,capture_path,reader,reference,
+                            model="h3max",seed=1):
+    if not isinstance(action,str) or not action.strip():
+        raise ContractError("prompt action must be nonempty")
+    return ["-m","iclone_adapter.prompt_capture",
+            "--action",action.strip(),"--output",str(capture_path),
+            "--reader",str(reader),"--reference",str(reference),
+            "--model",model,"--seconds","5","--seed",str(seed)]
 
 
 def worker_arguments(input_path,capture_path,reader=None,reference=None):
@@ -176,24 +188,113 @@ class VideoCaptureCoordinator:
                 self.widgets.QMessageBox.No)
             if answer!=self.widgets.QMessageBox.Yes:
                 return
-            self.job={"source":path,"python":python,"capture_path":str(capture),
-                      "output_parent":str(parent),"target":target}
-            process=self.core.QProcess(self.panel)
-            process.setProcessChannelMode(self.core.QProcess.MergedChannels)
-            process.setWorkingDirectory(str(REPO))
-            process.setProgram(python)
-            process.setArguments(arguments)
-            process.readyReadStandardOutput.connect(self._flush)
-            process.finished.connect(self._finished)
-            process.errorOccurred.connect(self._process_error)
-            self.process=process
-            self._log("Starting external Dragon Capture Worker: "+
-                      " ".join(arguments))
-            process.start()
+            self._launch_worker(
+                python,arguments,
+                {"source":path,"python":python,"capture_path":str(capture),
+                 "output_parent":str(parent),"target":target,"mode":"existing"})
         except Exception as exc:
             message=type(exc).__name__+": "+str(exc)
             self._log("Dragon Capture preflight FAILED: "+message)
             self._warning("Dragon Capture blocked",message)
+
+
+    def start_prompt(self):
+        """Explicit opt-in billable prompt -> generated MP4 -> final iProject."""
+        if self.running():
+            self._warning("Dragon capture","Finish the current capture first.")
+            return
+        action,ok=self.widgets.QInputDialog.getMultiLineText(
+            self.panel,"Dragon AI Video Action",
+            "Describe the Dragon movement in English:",
+            "the dragon spreads its wings, roars, then returns to rest.")
+        if not ok or not action.strip():
+            return
+        try:
+            target=preflight_video_target(self.rlpy)
+            reader=REPO/"runs"/"dragon"/"reader.pt"
+            reference=REPO/"runs"/"dragon"/"ref"/"ref.png"
+            if not reader.is_file():
+                chosen,_=self.widgets.QFileDialog.getOpenFileName(
+                    self.panel,"Select trained DRAGON reader.pt",
+                    str(reader.parent),"Dragon PyTorch reader (*.pt)")
+                if not chosen:
+                    return
+                reader=pathlib.Path(chosen)
+            if not reference.is_file():
+                chosen,_=self.widgets.QFileDialog.getOpenFileName(
+                    self.panel,"Select Dragon original two-camera ref.png",
+                    str(reference.parent),"Reference image (*.png *.jpg *.jpeg)")
+                if not chosen:
+                    return
+                reference=pathlib.Path(chosen)
+            python=find_external_python(REPO)
+            if not python:
+                python,_=self.widgets.QFileDialog.getOpenFileName(
+                    self.panel,"Select EXTERNAL Python 3.11 (not iClone 3.8)",
+                    str(REPO),"Python executable (*.exe);;All files (*)")
+                if not python:
+                    return
+            parent=self.widgets.QFileDialog.getExistingDirectory(
+                self.panel,"Choose parent folder for AI video + iProject",
+                str(REPO/"runs"))
+            if not parent:
+                return
+            capture=unique_capture_folder(parent,"dragon_ai_prompt.mp4")
+            if not _credential_available():
+                raise ContractError(
+                    "FAL_KEY missing. Video generation is billable: set "
+                    "FAL_KEY in the external environment or repo .env.")
+            _prompt_plan(action,str(capture),reader,reference,
+                         require_credentials=False,require_python311=False)
+            arguments=prompt_worker_arguments(
+                action,capture,reader,reference)
+            text=(
+                "OPTIONAL PAID AI VIDEO GENERATION\n\n"
+                "Model: MiniMax H3 Max on fal.ai\n"
+                "Duration: 5 seconds; Seed: 1\n"
+                "Action: %s\n\n"
+                "Video provider charges your fal.ai account according to "
+                "its CURRENT pricing. This is a BILLABLE external request; "
+                "model cost and availability may change.\n\n"
+                "If approved, generate the two-camera Dragon video, then "
+                "run DINOv2 + Motion Solver on external Python 3.11. "
+                "After a successful quality check you will be asked AGAIN "
+                "before the iClone scene is modified.\n\n"
+                "Proceed with the paid video-generation request?"%
+                action.strip())
+            answer=self.widgets.QMessageBox.question(
+                self.panel,"Confirm fal.ai external charge",text,
+                self.widgets.QMessageBox.Yes |
+                self.widgets.QMessageBox.No,
+                self.widgets.QMessageBox.No)
+            if answer!=self.widgets.QMessageBox.Yes:
+                self._log("No paid video-generation request was sent.")
+                return
+            self._launch_worker(
+                python,arguments,
+                {"source":"Dragon Prompt: "+action.strip(),
+                 "python":python,"capture_path":str(capture),
+                 "output_parent":str(parent),"target":target,
+                 "mode":"prompt"})
+        except Exception as exc:
+            error=type(exc).__name__+": "+str(exc)
+            self._log("Prompt Capture preflight failed: "+error)
+            self._warning("Prompt Capture blocked",error)
+
+    def _launch_worker(self,python,arguments,job):
+        self.job=job
+        process=self.core.QProcess(self.panel)
+        process.setProcessChannelMode(self.core.QProcess.MergedChannels)
+        process.setWorkingDirectory(str(REPO))
+        process.setProgram(str(python))
+        process.setArguments(arguments)
+        process.readyReadStandardOutput.connect(self._flush)
+        process.finished.connect(self._finished)
+        process.errorOccurred.connect(self._process_error)
+        self.process=process
+        self._log("Starting external Dragon Capture Worker: "+
+                  " ".join(arguments))
+        process.start()
 
     def _flush(self):
         if self.process is None:
@@ -239,9 +340,16 @@ class VideoCaptureCoordinator:
             self._warning("Dragon Capture not imported",msg)
             return
         try:
-            motion=capture/OUTPUT_MOTION
+            motion=pathlib.Path(data.get("motion_file") or
+                                (capture/OUTPUT_MOTION))
+            if not motion.is_file():
+                raise ContractError("Capture reported success but no motion.json exists")
             plan=prepare_direct_import(str(motion),rlpy=self.rlpy)
-            quality=data.get("motion_summary",{}).get("quality_status")
+            quality=(data.get("motion_summary") or {}).get("quality_status")
+            if quality is None and data.get("local_capture_receipt"):
+                with open(data["local_capture_receipt"],encoding="utf-8") as f:
+                    local=json.load(f)
+                quality=(local.get("motion_summary") or {}).get("quality_status")
             question=(
                 "Dragon Solve complete: motion.json is READY\n"
                 "Quality: %s\nFrames: %d\n"
@@ -274,7 +382,7 @@ class VideoCaptureCoordinator:
             if result["status"]=="completed_full_frame_verified_project_saved":
                 self.widgets.QMessageBox.information(
                     self.panel,"AnyMove Dragon iClone Import Complete",
-                    "Video/NPZ -> motion.json -> iClone project complete.\n\n"
+                    "Source -> motion.json -> iClone project complete.\n\n"
                     "Project:\n%s\n\nReports:\n%s"%
                     (result["iProject_path"],result["output_directory"]))
             else:
@@ -291,5 +399,6 @@ class VideoCaptureCoordinator:
             self._warning(
                 "iClone integration failed",message+
                 "\n\nOriginal solved motion.json remains at:\n"+
-                str(capture/OUTPUT_MOTION)+
+                str(pathlib.Path(data.get("motion_file")) if data and
+                                 data.get("motion_file") else capture/OUTPUT_MOTION)+
                 "\nDo not retry in the current scene if keys were already written.")

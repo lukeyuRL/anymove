@@ -28,12 +28,12 @@ def show():
         def __init__(self):
             super(Panel, self).__init__()
             self.setWindowTitle("AnyMove for iClone - Dragon Motion Import v" + __version__)
-            self.resize(660, 520)
+            self.resize(760, 560)
             layout = QtWidgets.QVBoxLayout(self)
             layout.addWidget(QtWidgets.QLabel(
-                "Dragon 42-Bone same-rig: capture existing TWO-CAMERA MP4 or det.npz.\n"
-                "External Python 3.11 does detection + solve; iClone writes every frame.\n"
-                "24 FPS, clean Dragon FBX, no existing Motion Clip required."))
+                "Dragon 42-Bone same-rig: existing two-camera MP4, det.npz or AI prompt.\n"
+                "External Python 3.11 handles video generation / DINOv2 / solver.\n"
+                "24 FPS, clean Dragon FBX; per-frame FK + Root Motion -> iProject."))
             self.root_translation_samples = {}
             self.video_capture = VideoCaptureCoordinator(
                 self,QtWidgets,QtCore,RLPy)
@@ -41,6 +41,8 @@ def show():
             self.out.setReadOnly(True)
             layout.addWidget(self.out)
             for label, callback in [
+                ("GENERATE Dragon video from PROMPT (fal.ai PAID) -> iClone",
+                 self.video_capture.start_prompt),
                 ("CAPTURE Dragon MP4 / det.npz -> motion.json -> iClone + iProject",
                  self.video_capture.start),
                 ("IMPORT AnyMove motion.json -> iClone + iProject (42-Bone Dragon)",

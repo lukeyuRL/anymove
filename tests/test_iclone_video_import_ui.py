@@ -36,6 +36,17 @@ class VideoImportUITests(unittest.TestCase):
             next_path=video_ui.unique_capture_folder(parent,"F:\\videos\\dragon.mp4")
             self.assertNotEqual(next_path,first)
 
+    def test_prompt_worker_arguments_does_not_send_requests(self):
+        command=video_ui.prompt_worker_arguments(
+            "the Dragon roars","/tmp/new","/tmp/model.pt","/tmp/ref.png")
+        self.assertEqual(command[:2],["-m","iclone_adapter.prompt_capture"])
+        self.assertEqual(command[command.index("--model")+1],"h3max")
+        self.assertIn("--action",command)
+        self.assertNotIn("fal.ai key",str(command))
+        with self.assertRaises(ContractError):
+            video_ui.prompt_worker_arguments(
+                "","/tmp/new","/tmp/model.pt","/tmp/ref.png")
+
     def test_worker_arguments_MP4_and_NPZ(self):
         video=video_ui.worker_arguments(
             "/x/demo.mp4","/y/output","/x/reader.pt","/x/ref.png")

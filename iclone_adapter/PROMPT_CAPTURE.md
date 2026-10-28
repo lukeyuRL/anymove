@@ -39,3 +39,37 @@ reader are still per-character prerequisites. A known Dragon pretrained
 Reader is downloadable from the upstream examples-v1 release (use
 tools/fetch_examples.sh dragon --readers --clips on Git Bash), or
 can be trained using the upstream dataset/train steps.
+
+
+## v0.7.0 — Optional explicit user-approved AI prompt to native iProject
+
+Added a SEPARATE opt-in button in the iClone panel:
+
+GENERATE Dragon video from PROMPT (fal.ai PAID) -> iClone
+
+The user enters an English motion description and explicitly confirms
+a billable fal.ai MiniMax H3 Max 5-second video generation. The UI
+checks FAL_KEY in the configured environment/.env, selects the existing
+Dragon-trained reader.pt and reference ref.png, and launches an EXTERNAL
+Python 3.11 QProcess (never heavy dependencies inside iClone).
+
+The original AnyMove scripts build the correct two-camera prompt,
+submit the user-approved fal video request, download the MP4, run
+mocap.detect for both views, run mocap.solve, validate 24 FPS and
+the Dragon motion-quality gates. It then uses the same clean-scene
+reverification, explicit scene-write approval, full 42-Bone per-frame
+FK + Pelvis Position, all-frame SDK readback, and native iProject save.
+
+No video API charge is made unless the user clicked this specific
+paid option and approved the additional confirmation dialog.
+The existing MP4/NPZ button never contacts fal.ai.
+
+One-time setup for this known Dragon remains:
+- 42-Bone original Dragon imported in iClone at 100x FBX scene scale;
+- Dragon-trained reader.pt (pretrained release asset or self-trained);
+- dragon ref.png; NVIDIA CUDA and external Python 3.11 dependencies;
+- FAL_KEY only when using the PAID Prompt button.
+
+Costs and remote model availability are NOT guaranteed. This and
+the MP4-to-iProject UI need actual on-device smoke tests; all
+repository CI tests are software/mock tests.
