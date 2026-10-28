@@ -143,14 +143,19 @@ def show():
                     "axes are NOT CALIBRATED; this may deform or twist the "
                     "creature. Root motion is excluded.\n"
                 )
-            answer = QtWidgets.QMessageBox.warning(
-                self, "Experimental FK clip write",
-                "Confirm project FPS is %s and timeline is at frame 0.\n"
+            message = (
+                "Confirm project FPS is %s and timeline is at Frame 0.\n" %
+                motion.get("fps")
+            )
+            message += (
                 "Use a disposable TEST project only.\n"
                 "If one Clip exists and target FK channels are empty, P1 uses it.\n"
                 "Otherwise it appends a new Clip after existing motion.\n"
-                ("The playhead moves to the peak test pose." +
-                 preview_notice + "\nContinue?") % motion.get("fps"),
+                "The playhead moves to the peak test pose."
+            )
+            message += preview_notice + "\nContinue?"
+            answer = QtWidgets.QMessageBox.warning(
+                self, "Experimental FK clip write", message,
                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
                 QtWidgets.QMessageBox.No)
             if answer != QtWidgets.QMessageBox.Yes:
