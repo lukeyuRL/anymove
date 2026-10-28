@@ -57,7 +57,12 @@ class FullFrameRuntimeAuditTests(unittest.TestCase):
         self.assertGreater(report["channels_with_wrong_key_count"],0)
         self.assertEqual(report["status"],"controller_readback_failed")
         b=clip.GetControl("Layer",avatar.skeleton.bones[0]).block
-        b.ctrls.pop("Position/PositionY")
+        # The mock's AddClip wrapper re-creates missing Position axes on
+        # every GetControl call. Simulate an SDK where the axis is absent,
+        # rather than removing it from the mock's auto-populated dictionary.
+        original_get=b.GetControl
+        b.GetControl=lambda key: (
+            None if key=="Position/PositionY" else original_get(key))
         report=audit_full_controller_frames(motion,rlpy=rlpy)
         self.assertEqual(report["status"],"controller_readback_failed")
         self.assertLess(report["verified_scalar_samples"],
