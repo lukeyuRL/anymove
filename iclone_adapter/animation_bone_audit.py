@@ -6,8 +6,6 @@ wrapper exposes GetAllAnimationBone() instead of GetMotionBones(); probe BOTH
 when present and report identities without silently assuming equivalence.
 No SetValue, AddClip, SetTime or scene mutations in this diagnostic.
 """
-import math
-
 from .bone_registry import build_bone_registry
 from .motion_contract import validate_motion
 from .p1_inspector import _axes, read_float_value
@@ -27,41 +25,6 @@ def _safe_node(node):
     except Exception as exc:
         d["parent_error"]=type(exc).__name__+": "+str(exc)
     return d
-
-
-def _read_track(clip, node, frames, fps, expected):
-    out={"available":False, "key_counts_xyz":None,
-         "sampled_values":[], "max_abs_error_radians":None,
-         "readback_supported":False, "errors":[]}
-    try:
-        axes=_axes(clip,node)
-        if axes is None:
-            out["errors"].append("no Layer FK controls")
-            return out
-        out["available"]=True
-        out["key_counts_xyz"]=[
-            int(ctrl.GetKeyCount()) if ctrl is not None else 0
-            for ctrl in axes]
-        errors=[]
-        readback_count=0
-        for frame in frames:
-            vals=[]
-            for ai,ctrl in enumerate(axes):
-                if ctrl is None:
-                    vals.append(None)
-                    continue
-                try:
-                    v=read_float_value(ctrl, __import__("RLPy").IndexedFrameTime(frame,fps)) if fps is None else None
-                    # The branch above is not used by supported callers.
-                except Exception:
-                    v=None
-                vals.append(v)
-            out["sampled_values"].append({"frame":frame,"xyz":vals})
-        # Use explicit clock factory in the main call (no RLPy import needed
-        # for mocks and no dependency on a specific SWIG module name).
-    except Exception as exc:
-        out["errors"].append("%s: %s"%(type(exc).__name__,exc))
-    return out
 
 
 def _inspect_channel(clip, node, frames, project_fps, indexed_frame_time, track):
