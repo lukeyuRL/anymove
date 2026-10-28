@@ -121,6 +121,52 @@ def _channels_for_clip(clip, nodes, names):
     return channels
 
 
+def _position_channels_for_clip(clip,nodes,names,position_tracks):
+    """Return Pelvis Layer Position/PositionXYZ, refusing partial coverage."""
+    found={}
+    for bone_id in (position_tracks or {}):
+        if bone_id not in nodes:
+            raise ContractError("Root Motion target is not a live Skin Bone: "+bone_id)
+        root=clip.GetControl("Layer",nodes[bone_id])
+        if root is None:
+            raise ContractError("Root Motion pelvis Layer control unavailable")
+        block=root.GetDataBlock()
+        if block is None:
+            raise ContractError("Root Motion pelvis Layer DataBlock unavailable")
+        channels=tuple(block.GetControl("Position/Position"+axis) for axis in "XYZ")
+        if any(c is None for c in channels):
+            raise ContractError(
+                "iClone SDK pelvis Position XYZ Layer controls unavailable; "
+                "experimental Root Translation blocked without writing keys")
+        found[bone_id]=channels
+    return found
+
+
+def _readback_positions(position_tracks,controls,fps,rlpy):
+    evidence={}
+    for bone_id,track in position_tracks.items():
+        axes=controls[bone_id]
+        sample_frames=sorted(set((0,len(track)//2,len(track)-1)))
+        item={"xyz_key_counts":[],"samples":[],"max_abs_error":0.}
+        for axis,ctrl in enumerate(axes):
+            count=int(ctrl.GetKeyCount())
+            item["xyz_key_counts"].append(count)
+            if count<len(track):
+                raise ContractError("Root Position channel has fewer keys than frames")
+        for frame in sample_frames:
+            t=rlpy.IndexedFrameTime(frame,fps)
+            got=[read_float_value(ctrl,t) for ctrl in axes]
+            expected=track[frame]
+            err=max(abs(x-y) for x,y in zip(got,expected))
+            item["max_abs_error"]=max(err,item["max_abs_error"])
+            item["samples"].append({"frame":frame,"written_xyz":expected,
+                                    "readback_xyz":got})
+        if item["max_abs_error"]>1e-3:
+            raise ContractError("Root Position sample readback exceeded 1e-3")
+        evidence[bone_id]=item
+    return evidence
+
+
 def _choose_clip(skel, nodes, names, fps, rlpy, strict_clean=False):
     """Prefer a default unkeyed clip; otherwise create non-overlapping motion."""
     count = int(skel.GetClipCount())
@@ -232,17 +278,31 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
             length_extended = True
         if channels is None:
             channels = _channels_for_clip(clip, nodes, names)
-        if created and any(int(ctrl.GetKeyCount()) for axes in channels.values() for ctrl in axes):
-            raise ContractError("new clip unexpectedly has pre-existing FK keys")
+        # Probe EVERY position channel BEFORE modifying even the first FK
+        # value. An unsupported Pelvis root fails here and rolls back any
+        # just-created empty test Clip, not a half-written animation.
+        position_tracks = motion.get("position_tracks") or {}
+        position_channels = _position_channels_for_clip(
+            clip,nodes,names,position_tracks)
+        if created and any(int(ctrl.GetKeyCount()) for axes in
+                           list(channels.values())+list(position_channels.values())
+                           for ctrl in axes):
+            raise ContractError("new clip unexpectedly has pre-existing FK/Position keys")
         for frame in range(motion["frame_count"]):
             time = rlpy.IndexedFrameTime(frame, project_fps)
             for bone_id, track in motion["tracks"].items():
                 for ctrl, value in zip(channels[bone_id], track[frame]):
                     _require_sdk_ok(ctrl.SetValue(time, float(value)), "SetValue")
                     inserted_keys.append((ctrl, time))
+            for bone_id,track in position_tracks.items():
+                for ctrl,value in zip(position_channels[bone_id],track[frame]):
+                    _require_sdk_ok(ctrl.SetValue(time,float(value)), "Root Position SetValue")
+                    inserted_keys.append((ctrl,time))
         if int(skel.GetClipCount()) != previous_count + int(created):
             raise ContractError("GetClipCount changed unexpectedly")
         peak, evidence = _readback(motion, channels, project_fps, rlpy)
+        root_position_readback = _readback_positions(
+            position_tracks,position_channels,project_fps,rlpy)
         # From this point a keyed clip exists. UI refresh is best-effort,
         # NOT a reason to delete it or report that the motion disappeared.
         first_bone = max(motion["tracks"], key=lambda bone:
@@ -256,6 +316,10 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
                   "fk_keys_verified_pose_unchanged" if changed is False else
                   "fk_keys_verified_pose_unchecked")
         warnings = []
+        if motion.get("root_motion"):
+            warnings.append("EXPERIMENTAL Root Motion: Pelvis Layer convention and "
+                            "Position unit multiplier are not calibrated; visually "
+                            "verify matching Blender frames in a clean project.")
         if changed is False:
             warnings.append("FK keys exist but tested bone WorldTransform did not change; "
                             "check active IK override or try a deforming arm bone.")
@@ -280,6 +344,8 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
             "target_bone_name": names[first_bone],
             "peak_frame": peak,
             "fk_readback": evidence,
+            "root_motion": motion.get("root_motion"),
+            "root_position_readback": root_position_readback,
             "pose_evaluation": preview,
             "warnings": warnings,
             "note": "Keys verified in FK controller, but actual on-screen animation must be confirmed in iClone."

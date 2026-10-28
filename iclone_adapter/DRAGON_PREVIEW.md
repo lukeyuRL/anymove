@@ -196,3 +196,46 @@ cannot establish the correct convention across the creature.
 
 Tests guard shared quaternion extraction, unknown basis rejection,
 raw mode backwards compatibility and full-41 rest quaternion composition.
+
+## v0.3.1 Experimental Pelvis Root Motion
+
+The original `motion.json` contains `root_quat` (Blender wxyz) and
+`trans` (armature-space displacement). Both were skipped in the
+successful 41-joint test.
+
+```powershell
+# 42 Bone rotations: 41 nonroot + experimental pelvis quaternion, no translation
+py -3.14 -m iclone_adapter.dragon_preview `
+  runs\dragon\clips\roar\motion.json F:\anymove_test\skeleton.json `
+  F:\anymove_test\dragon_roar_root_rotation.json `
+  --bones all --basis rest --root-mode rotation
+
+# Full Root Motion with UNVERIFIED user-specified position multiplier:
+py -3.14 -m iclone_adapter.dragon_preview `
+  runs\dragon\clips\roar\motion.json F:\anymove_test\skeleton.json `
+  F:\anymove_test\dragon_roar_root_full_experiment.json `
+  --bones all --basis rest --root-mode full --root-position-scale 1.0
+```
+
+`--root-position-scale 1.0` is **only a controlled starting hypothesis**,
+NOT a verified unit conversion. The iClone imported Dragon has a 100x
+parent object scale, but it is not yet proven whether its Pelvis Layer
+Position controller uses the same parent-local units. Run the read-only
+Pelvis control probe, and use separate clean scenes for Rotation-only
+and Full modes. Do not put Full Root Motion on a valuable project until
+the root Position scale and axes are visually verified against Blender.
+
+For a Blender reference with root quaternion but no translation:
+
+```powershell
+$blender="C:\Program Files\Blender Foundation\Blender 5.0\blender.exe"
+& $blender -b --python-exit-code 1 -P blender/apply_motion.py -- `
+  assets/dragon/rigged/rigged.blend assets/dragon/rigged/rig_info.json `
+  runs/dragon/clips/roar/motion.json runs/dragon/clips/roar/root_rotation_reference `
+  --no-root-translation --save-blend
+```
+
+Compare exact frames with `root_rotation_reference/animation.blend`.
+For Full Root Motion compare with Blender reference *including* the original
+Root position and orientation. The pipeline still does not certify
+Root Motion SDK correctness or automatic translation retargeting.

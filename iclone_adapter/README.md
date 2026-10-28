@@ -235,3 +235,28 @@ Dragon failure caused by reusing an animated project with static Head/Tail
 offsets. Checks are not a comprehensive IK/constraint certification;
 continue using **fresh test projects**. Regenerate the experimental FK JSON
 with this version; old JSON has no baseline and will be rejected.
+
+## v0.3.1 experimental Pelvis Root Motion writer (NOT calibrated)
+
+Generate either `--root-mode rotation` or `--root-mode full` with
+`--basis rest` from the original AnyMove Dragon `motion.json`.
+
+- Rotation: conjugate the original root quaternion by the `pelvis`
+  Blender Armature-space Rest quaternion, write its XYZ Euler to the
+  `pelvis` Bone's RIClip Layer Rotation XYZ.
+- Translation (full mode only): `trans` in original armature axes times
+  explicit `--root-position-scale`, write Pelvis Layer Position XYZ.
+  The scale factor and Pelvis Position convention are **unknown until
+  calibrated in your real iClone 8 Dragon**. We refuse to guess a scale.
+- Position channels must exist in the live clip before any new keys are
+  written. Missing controls cause the new experimental Clip to be rolled
+  back; no partial root write is intentionally left behind.
+- Root Rotation/Position samples are read back. This proves controller
+  storage only, NOT final pose/translation.
+- The clean-scene guard applies to both modes.
+
+Use the read-only in-app button **Inspect Pelvis FK Root Position controls**
+to check if your Dragon exposes `Position/PositionXYZ` before experimenting.
+Root rotation-only allows Blender `--no-root-translation --save-blend`
+for a matched reference; the original `--no-root-motion` reference
+continues to be correct when no iClone root motion is written.

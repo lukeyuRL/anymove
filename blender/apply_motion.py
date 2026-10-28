@@ -9,6 +9,8 @@ blender -b -P blender/apply_motion.py -- rigged.blend rig_info.json motion.json 
   --save-blend               save a Blender animation project at out_dir/animation.blend
   --no-root-motion           keep pelvis root rotation identity and translation zero
                              (compare local FK poses fairly with iClone P2)
+  --no-root-translation      keep root quaternion but zero pelvis world translation
+                             (compare root-rotation-only iClone experiment)
   --frames 10,40,80          render only these frames (stills), for quick comparisons
   --springs fur.json         simulate the fur bones (blender/add_fur_bones.py) as damped springs
   --scale 0.75               render at this fraction of the layout size
@@ -64,7 +66,9 @@ for t in range(T):
         pr.location = Vector((0.0, 0.0, 0.0))
     else:
         pr.rotation_quaternion = Quaternion(motion["root_quat"][t])
-        pr.location = B.transposed() @ Vector(motion["trans"][t])
+        pr.location = (Vector((0.0, 0.0, 0.0)) if
+                       "--no-root-translation" in opts else
+                       B.transposed() @ Vector(motion["trans"][t]))
     pr.keyframe_insert("rotation_quaternion", frame=t)
     pr.keyframe_insert("location", frame=t)
     for i, n in enumerate(names[1:], 1):

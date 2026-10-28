@@ -7,6 +7,7 @@ from .p1_inspector import inspect_selected_animation
 from .fk_pose_validator import validate_live_fk_pose
 from .animation_bone_audit import audit_animation_bones
 from .diagnostics import save_failure_report, raw_skeleton_report
+from .bone_registry import build_bone_registry
 from . import __version__
 from .rlpy_reader import capability_report, export_selected, selected_object
 
@@ -39,6 +40,7 @@ def show():
                 ("Write FK motion to selected avatar (modifies scene)", self.import_motion),
                 ("Validate Dragon FK animation vs preview (read-only)", self.validate_dragon),
                 ("Audit iClone 8 FK Bone IDs / Keys (read-only)", self.audit_motion_bones),
+                ("Inspect Pelvis FK Root Position controls (read-only)", self.inspect_root),
             ]:
                 button = QtWidgets.QPushButton(label)
                 button.clicked.connect(callback)
@@ -229,6 +231,42 @@ def show():
                 QtWidgets.QMessageBox.warning(
                     self,"Bone / Motion Clip diagnostic failed",message)
 
+        def inspect_root(self):
+            try:
+                obj=selected_object(RLPy)
+                skel=obj.GetSkeletonComponent()
+                bones,_=build_bone_registry(skel.GetSkinBones() or [])
+                pelvis=[b for b in bones if b["name"]=="pelvis"]
+                if len(pelvis)!=1:
+                    raise ValueError("exactly one Pelvis bone required")
+                count=int(skel.GetClipCount())
+                if count<1:
+                    self.out.appendPlainText(
+                        "Root channel inspection: no Clip yet. This is normal "
+                        "for a fresh scene. Writer will probe before writing.")
+                    return
+                clip=skel.GetClip(0)
+                control=clip.GetControl("Layer",pelvis[0]["node"])
+                if control is None:
+                    raise ValueError("Pelvis has no Layer control")
+                block=control.GetDataBlock()
+                if block is None:
+                    raise ValueError("Pelvis Layer has no DataBlock")
+                result={"bone":"pelvis","clips":count,"clip_index":0,
+                        "root_position_channels":{},
+                        "root_rotation_channels":{}}
+                for kind in ("Rotation","Position"):
+                    for axis in "XYZ":
+                        key=kind+"/"+kind+axis
+                        channel=block.GetControl(key)
+                        result["root_"+kind.lower()+"_channels"][axis]={
+                            "available":channel is not None,
+                            "key_count":int(channel.GetKeyCount()) if channel is not None else None}
+                self.out.appendPlainText(json.dumps(result,indent=2))
+            except Exception as exc:
+                self.out.appendPlainText("Root channel inspection failed: "+
+                                         type(exc).__name__+": "+str(exc))
+
         def import_motion(self):
             path, _ = QtWidgets.QFileDialog.getOpenFileName(
                 self, "Select explicit iClone FK motion", "", "JSON (*.json)")
@@ -241,14 +279,19 @@ def show():
                 self.out.appendPlainText(str(exc))
                 return
             preview_notice = ""
-            if motion.get("calibration_status") in (
-                "unverified_identity_same_rig_preview",
-                "unverified_rest_basis_conjugation_preview",
-            ):
+            if str(motion.get("calibration_status","")).startswith("unverified_"):
                 preview_notice = (
-                    "\nEXPERIMENTAL DRAGON PREVIEW: Blender XYZ -> iClone FK "
-                    "axes are NOT CALIBRATED; a rest basis hypothesis may be "
-                    "wrong. Root motion is excluded.\n"
+                    "\nEXPERIMENTAL DRAGON PREVIEW: FK channel axes are not "
+                    "production calibrated. Strict unposed-scene guard will "
+                    "reject reused animation projects.\n"
+                )
+            root=motion.get("root_motion")
+            if root:
+                preview_notice += (
+                    "\nUNVERIFIED Pelvis ROOT MOTION: mode %s, position "
+                    "scale %s. Test only; Root Translation units and "
+                    "motion behaviour are not yet calibrated.\n" %
+                    (root.get("components"),root.get("root_position_scale"))
                 )
             message = (
                 "Confirm project FPS is %s and timeline is at Frame 0.\n" %
@@ -256,8 +299,10 @@ def show():
             )
             message += (
                 "Use a disposable TEST project only.\n"
-                "If one Clip exists and target FK channels are empty, P1 uses it.\n"
-                "Otherwise it appends a new Clip after existing motion.\n"
+                "Experimental Dragon clips require a matching unposed "
+                "reference and no existing animation.\n"
+                "Use a clean project; this writer will not append a Dragon "
+                "preview over previous clips.\n"
                 "The playhead moves to the peak test pose."
             )
             message += preview_notice + "\nContinue?"
