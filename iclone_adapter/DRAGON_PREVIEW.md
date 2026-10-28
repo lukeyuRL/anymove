@@ -239,3 +239,62 @@ Compare exact frames with `root_rotation_reference/animation.blend`.
 For Full Root Motion compare with Blender reference *including* the original
 Root position and orientation. The pipeline still does not certify
 Root Motion SDK correctness or automatic translation retargeting.
+
+## v0.3.3 Root Translation axis A/B experiment after visually matching rotation
+
+The user confirmed the **Root Rotation-only iClone preview appears to match**
+Blender's `--no-root-translation` animation. Do not modify the successful
+root quaternion or the 41 joint rotation tracks.
+
+**Important:** the original Blender animation code writes
+`pose_bone.location = transpose(B_rest_pelvis) @ trans`, where AnyMove
+`motion.json.trans` is armature/world-space offset. The original iClone
+prototype sent `trans * scale` unmodified to Pelvis Layer Position XYZ.
+The iClone Pelvis Layer Position coordinate convention has not been proven.
+
+Experimental CLI now supports:
+- `--root-position-space armature`: original raw world/armature displacement
+- `--root-position-space pelvis_local`: Blender Pose Bone location
+  `transpose(B_rest_pelvis) @ trans`
+
+Both choices require `--root-mode full --root-position-scale SCALE`.
+`SCALE` is still **unknown**; a value of 1.0 is a starting hypothesis only,
+not an established unit conversion. Do not put root animation over an
+already animated scene, and check Pelvis Position Layer controls first.
+
+```powershell
+cd F:\anymove
+git pull --ff-only origin iClone
+py -3.14 -m iclone_adapter.dragon_preview `
+  runs\dragon\clips\roar\motion.json F:\anymove_test\skeleton.json `
+  F:\anymove_test\dragon_root_local_full.json `
+  --bones all --basis rest --root-mode full `
+  --root-position-space pelvis_local --root-position-scale 1.0
+
+py -3.14 -m iclone_adapter.dragon_preview `
+  runs\dragon\clips\roar\motion.json F:\anymove_test\skeleton.json `
+  F:\anymove_test\dragon_root_armature_full.json `
+  --bones all --basis rest --root-mode full `
+  --root-position-space armature --root-position-scale 1.0
+```
+
+Build the full Blender reference without removing root data:
+
+```powershell
+$blender="C:\Program Files\Blender Foundation\Blender 5.0\blender.exe"
+& $blender -b --python-exit-code 1 -P blender/apply_motion.py -- `
+  assets/dragon/rigged/rigged.blend `
+  assets/dragon/rigged/rig_info.json `
+  runs/dragon/clips/roar/motion.json `
+  runs/dragon/clips/roar/full_root_reference `
+  --save-blend
+```
+
+Open `full_root_reference/animation.blend`. Compare equivalent frames
+`0,31,62,93,123` against iClone tests in **separate freshly imported
+Dragon scenes**. If `pelvis_local` matches travel *direction* but not
+amplitude, vary **scale only**. If neither works, diagnose Pelvis Layer Position
+semantics instead of adding arbitrary permanent offsets.
+
+This is an experimental B/A validation tool; unit conversion and rendered
+motion have NOT been validated in iClone yet.

@@ -289,9 +289,10 @@ def show():
             if root:
                 preview_notice += (
                     "\nUNVERIFIED Pelvis ROOT MOTION: mode %s, position "
-                    "scale %s. Test only; Root Translation units and "
-                    "motion behaviour are not yet calibrated.\n" %
-                    (root.get("components"),root.get("root_position_scale"))
+                    "scale %s, position space %s. Test only; Root Translation "
+                    "units and channel space are not yet calibrated.\n" %
+                    (root.get("components"),root.get("root_position_scale"),
+                     root.get("root_position_space"))
                 )
             message = (
                 "Confirm project FPS is %s and timeline is at Frame 0.\n" %

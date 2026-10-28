@@ -54,6 +54,44 @@ class RootConversionTests(unittest.TestCase):
         self.assertEqual(out["root_motion"]["components"],"rotation_and_translation")
         validate_motion(out,self.target)
 
+    def test_blender_pelvis_local_matches_rest_matrix_transpose(self):
+        motion=self.source()
+        raw=make_preview(motion,self.target,self.info,bones="all",
+                         basis="rest",root_mode="full",root_position_scale=1.,
+                         root_position_space="armature")
+        pose_local=make_preview(motion,self.target,self.info,bones="all",
+                         basis="rest",root_mode="full",root_position_scale=1.,
+                         root_position_space="pelvis_local")
+        rid=raw["root_motion"]["target_bone_id"]
+        source=motion["trans"][1]
+        B=self.info["bones"][0]["matrix_local"]
+        expected=[sum(B[j][i]*source[j] for j in range(3))
+                  for i in range(3)]
+        actual=pose_local["position_tracks"][rid][1]
+        for a,b in zip(expected,actual):
+            self.assertAlmostEqual(a,b,places=5)
+        self.assertNotEqual(raw["position_tracks"][rid][1],actual)
+        self.assertEqual(raw["position_tracks"][rid][1],source)
+        self.assertEqual(pose_local["root_motion"]["root_position_space"],
+                         "pelvis_local")
+        self.assertEqual(raw["root_motion"]["root_position_space"],"armature")
+        self.assertEqual(raw["tracks"],pose_local["tracks"])
+        validate_motion(pose_local,self.target)
+
+    def test_rejects_root_space_without_full_motion(self):
+        with self.assertRaises(ContractError):
+            make_preview(self.source(),self.target,self.info,bones="all",
+                         basis="rest",root_mode="none",
+                         root_position_space="pelvis_local")
+        with self.assertRaises(ContractError):
+            make_preview(self.source(),self.target,self.info,bones="all",
+                         basis="rest",root_mode="rotation",
+                         root_position_space="pelvis_local")
+        with self.assertRaises(ContractError):
+            make_preview(self.source(),self.target,self.info,bones="all",
+                         basis="rest",root_mode="full",
+                         root_position_scale=1.,root_position_space="bad")
+
     def test_rejects_invalid_root_samples_and_metadata(self):
         source=self.source()
         source["root_quat"]=source["root_quat"][:2]

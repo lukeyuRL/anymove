@@ -46,7 +46,8 @@ def _bone_selection(bones, allowed):
 
 
 def make_preview(motion, target, source_info, bones=DEFAULT_BONES,
-                 basis="raw", root_mode="none", root_position_scale=None):
+                 basis="raw", root_mode="none", root_position_scale=None,
+                 root_position_space="armature"):
     """Return a test-only FK JSON, optionally trying relative-rest conjugation.
 
     basis="raw" is the historical direct-Euler experiment;
@@ -58,6 +59,10 @@ def make_preview(motion, target, source_info, bones=DEFAULT_BONES,
         raise ContractError("basis must be raw or rest")
     if root_mode not in ("none","rotation","full"):
         raise ContractError("root_mode must be none, rotation or full")
+    if root_position_space not in ("armature","pelvis_local"):
+        raise ContractError("root_position_space must be armature or pelvis_local")
+    if root_mode!="full" and root_position_space!="armature":
+        raise ContractError("root_position_space only valid with --root-mode full")
     if root_mode!="none" and basis!="rest":
         raise ContractError("experimental pelvis root currently requires --basis rest")
     if root_mode=="none" and root_position_scale is not None:
@@ -142,7 +147,8 @@ def make_preview(motion, target, source_info, bones=DEFAULT_BONES,
         root_id=candidates[0]["id"]
         root_rotation,root_position,root_metadata=convert_pelvis_root(
             motion,source_info,root_id,
-            mode=root_mode,position_scale=root_position_scale)
+            mode=root_mode,position_scale=root_position_scale,
+            position_space=root_position_space)
         tracks[root_id]=root_rotation
     result = {
         "schema_version": MOTION_VERSION,
@@ -216,6 +222,10 @@ def main():
     parser.add_argument("--root-position-scale",type=float,default=None,
                         help="REQUIRED with --root-mode full; unverified Blender-to-iClone "
                              "pelvis Layer Position unit multiplier")
+    parser.add_argument("--root-position-space",
+                        choices=("armature","pelvis_local"),default="armature",
+                        help="EXPERIMENT with full root: armature (old raw trans) or "
+                             "pelvis_local (B_rest^T @ trans, like Blender Pose Bone)")
     args = parser.parse_args()
     def read(path):
         with open(path,"r",encoding="utf-8") as f:
@@ -223,12 +233,16 @@ def main():
     out = make_preview(read(args.motion_json), read(args.skeleton_json),
                        read(args.source_rig), bones=args.bones,
                        basis=args.basis,root_mode=args.root_mode,
-                       root_position_scale=args.root_position_scale)
+                       root_position_scale=args.root_position_scale,
+                       root_position_space=args.root_position_space)
     with open(args.output_json,"w",encoding="utf-8") as f:
         json.dump(out,f,ensure_ascii=False,indent=2)
     print("EXPERIMENTAL / FK AXES UNVERIFIED; root motion excluded")
     print("Basis conversion:", out["rotation_basis_mode"])
     print("Root motion:",args.root_mode,"(EXPERIMENTAL; units not calibrated)")
+    if args.root_mode=="full":
+        print("Root position space:",args.root_position_space,
+              "Position multiplier:",args.root_position_scale)
     print("Wrote:",args.output_json)
     print("FPS:",out["fps"],"Frames:",out["frame_count"],
           "Mapped Bones:",len(out["tracks"]),
