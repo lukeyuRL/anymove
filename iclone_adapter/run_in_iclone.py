@@ -13,6 +13,7 @@ from .runtime_controller_audit import audit_full_controller_frames
 from .subframe_interpolation_audit import survey_subframe_controllers
 from .import_pipeline import verify_fk_manifest_for_writer
 from .direct_import import prepare_direct_import, execute_direct_import
+from .video_import_ui import VideoCaptureCoordinator
 from . import __version__
 from .rlpy_reader import capability_report, export_selected, selected_object
 
@@ -21,7 +22,7 @@ _WINDOW = None
 
 def show():
     import RLPy
-    from PySide2 import QtWidgets
+    from PySide2 import QtWidgets, QtCore
 
     class Panel(QtWidgets.QDialog):
         def __init__(self):
@@ -30,14 +31,18 @@ def show():
             self.resize(660, 520)
             layout = QtWidgets.QVBoxLayout(self)
             layout.addWidget(QtWidgets.QLabel(
-                "Dragon 42-Bone same-rig profile: import ORIGINAL AnyMove motion.json.\n"
-                "24 FPS, full per-frame FK / Pelvis Root Motion; native iProject save.\n"
-                "Use a clean unposed Dragon scene. Advanced diagnostics below."))
+                "Dragon 42-Bone same-rig: capture existing TWO-CAMERA MP4 or det.npz.\n"
+                "External Python 3.11 does detection + solve; iClone writes every frame.\n"
+                "24 FPS, clean Dragon FBX, no existing Motion Clip required."))
             self.root_translation_samples = {}
+            self.video_capture = VideoCaptureCoordinator(
+                self,QtWidgets,QtCore,RLPy)
             self.out = QtWidgets.QPlainTextEdit()
             self.out.setReadOnly(True)
             layout.addWidget(self.out)
             for label, callback in [
+                ("CAPTURE Dragon MP4 / det.npz -> motion.json -> iClone + iProject",
+                 self.video_capture.start),
                 ("IMPORT AnyMove motion.json -> iClone + iProject (42-Bone Dragon)",
                  self.import_original_anymove),
                 ("Inspect selected skeleton", self.inspect),
@@ -149,6 +154,16 @@ def show():
                     "Direct AnyMove import FAILED: "+message)
                 QtWidgets.QMessageBox.critical(
                     self,"Direct AnyMove Import Failed",message)
+
+        def closeEvent(self,event):
+            if self.video_capture.running():
+                QtWidgets.QMessageBox.warning(
+                    self,"Dragon capture running",
+                    "The external Python 3.11 capture is still running. "
+                    "The panel must remain open until it completes.")
+                event.ignore()
+                return
+            super(Panel,self).closeEvent(event)
 
         def report(self, callback):
             try:

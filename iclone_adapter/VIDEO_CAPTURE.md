@@ -58,3 +58,42 @@ This is one part of the existing AnyMove pipeline. Model generation,
 rig preparation and Reader training are separate ONE-TIME tasks.
 Prompt -> AI video generation is provided by mocap.generate / fal
 but may incur remote API charges and is never silently launched.
+
+
+## v0.6.0 — iClone UI end-to-end from MP4 / det.npz
+
+The FIRST button of the panel is now:
+
+CAPTURE Dragon MP4 / det.npz -> motion.json -> iClone + iProject
+
+On click, it:
+1. Verifies a clean selected original Dragon FBX at 24 FPS and Frame 0,
+   before running expensive inference. Unknown rigs and already-keyed
+   Dragon projects are rejected without modification.
+2. Lets the user pick an already existing two-camera Dragon MP4 (front
+   left and side right) or a detection NPZ.
+3. For MP4, resolves the Dragon-trained reader.pt and ref.png (prompts
+   for file paths if absent); for NPZ, reader and reference are not used.
+4. Finds the repo external .venv/Scripts/python.exe or asks for an
+   installed Python 3.11 executable. NEVER runs Torch inside iClone.
+5. Chooses an existing output parent and creates a unique capture
+   folder without overwriting. Starts a Qt QProcess in external Python
+   3.11: mocap.detect (MP4), then mocap.solve, with stdout streamed
+   to the iClone diagnostics panel. The iClone UI remains responsive.
+6. If the Motion Solver fails or quality gates are not met, stops the
+   import; preserves capture_receipt.json, det.npz, overlay.mp4 if
+   available, and motion.json if generated.
+7. Rechecks the iClone scene when Motion is ready; asks for another
+   explicit confirmation before writing. On consent, calls the already
+   tested direct_import pipeline: bone validation, per-frame Key write,
+   all-frame controller readback, SHA-256 receipt and iProject SaveProject.
+
+The button does NOT call fal.ai or charge for generating video, nor does
+it retrain the Dragon DINOv2 Reader. Video source and trained Reader are
+user-provided prerequisites; one-time Rig and Reader preparation are
+documented in docs/PIPELINE.md.
+
+Check the latest tool version v0.6.0 in the iClone window. This new
+QProcess/UI orchestration has offline mock tests, but its GPU inference
+and in-app Qt event integration still require one actual Windows/iClone
+8 run before claiming operational acceptance.
