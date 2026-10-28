@@ -55,8 +55,9 @@ class DragonPromptCaptureTests(unittest.TestCase):
                     "Two-camera Dragon; action: "+self.action,
                     encoding="utf-8")
             elif len(cmd)>=3 and cmd[2]=="mocap.generate":
-                pathlib.Path(cmd[6]).mkdir(exist_ok=True)
-                (pathlib.Path(cmd[6])/"h3max.mp4").write_bytes(b"fake mp4")
+                # CLI: python -m mocap.generate REF PROMPT OUT MODEL SECONDS SEED
+                pathlib.Path(cmd[5]).mkdir(exist_ok=True)
+                (pathlib.Path(cmd[5])/"h3max.mp4").write_bytes(b"fake mp4")
         local={"status":"motion_json_ready",
                "motion_file":str(self.root/"motion.json"),
                "source_motion_sha256":"sha123"}
