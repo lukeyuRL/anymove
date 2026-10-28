@@ -5,6 +5,7 @@ from .motion_contract import make_sine_test
 from .motion_writer import write_selected
 from .p1_inspector import inspect_selected_animation
 from .fk_pose_validator import validate_live_fk_pose
+from .animation_bone_audit import audit_animation_bones
 from .diagnostics import save_failure_report, raw_skeleton_report
 from . import __version__
 from .rlpy_reader import capability_report, export_selected, selected_object
@@ -37,6 +38,7 @@ def show():
                 ("Create visible 48-frame FK motion (30 deg)", self.synthetic),
                 ("Write FK motion to selected avatar (modifies scene)", self.import_motion),
                 ("Validate Dragon FK animation vs preview (read-only)", self.validate_dragon),
+                ("Audit Skin vs Motion Bones / FK keys (read-only)", self.audit_motion_bones),
             ]:
                 button = QtWidgets.QPushButton(label)
                 button.clicked.connect(callback)
@@ -177,6 +179,54 @@ def show():
                 message = "%s: %s" % (type(exc).__name__, exc)
                 self.out.appendPlainText(message)
                 QtWidgets.QMessageBox.warning(self,"Dragon FK validation failed",message)
+
+        def audit_motion_bones(self):
+            file_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+                self, "Select Dragon FK preview JSON already written to this scene",
+                "", "JSON (*.json)")
+            if not file_path:
+                return
+            try:
+                with open(file_path,"r",encoding="utf-8") as f:
+                    motion=json.load(f)
+                obj=selected_object(RLPy)
+                count=int(obj.GetSkeletonComponent().GetClipCount())
+                if not count:
+                    raise ValueError("selected Dragon has no Motion Clips")
+                index, ok=QtWidgets.QInputDialog.getInt(
+                    self, "Select Clip", "Motion Clip index:",count-1,0,count-1)
+                if not ok:
+                    return
+                report=audit_animation_bones(motion,index,rlpy=RLPy)
+                path, _=QtWidgets.QFileDialog.getSaveFileName(
+                    self,"Save read-only Bone / FK diagnostic",
+                    "dragon_bone_channel_audit.json","JSON (*.json)")
+                if path:
+                    with open(path,"w",encoding="utf-8") as f:
+                        json.dump(report,f,ensure_ascii=False,indent=2)
+                summary={"saved_report":path or None,"clip_index":index,
+                         "source_motion_frame_count":motion["frame_count"]}
+                for key,info in report["node_sets"].items():
+                    summary[key]={
+                        "available":info.get("available"),
+                        "sdk_method":info.get("method"),
+                        "node_count":info.get("node_count"),
+                        "matching_target_names":info.get("matching_target_names"),
+                        "target_bones_with_any_fk_key":
+                            info.get("target_bones_with_any_fk_key"),
+                        "target_bones_readback_matches_1e3":
+                            info.get("target_bones_readback_matches_1e3"),
+                        "error":info.get("error")}
+                summary["different_id_counts"]={
+                    key:len(val) for key,val in
+                    report["same_name_identity_differences"].items()}
+                self.out.appendPlainText(json.dumps(
+                    summary,ensure_ascii=False,indent=2))
+            except Exception as exc:
+                message="%s: %s"%(type(exc).__name__,exc)
+                self.out.appendPlainText(message)
+                QtWidgets.QMessageBox.warning(
+                    self,"Bone / Motion Clip diagnostic failed",message)
 
         def import_motion(self):
             path, _ = QtWidgets.QFileDialog.getOpenFileName(
