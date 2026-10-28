@@ -9,6 +9,8 @@ from .animation_bone_audit import audit_animation_bones
 from .diagnostics import save_failure_report, raw_skeleton_report
 from .bone_registry import build_bone_registry
 from .root_translation_sampler import capture_root_sample, save_samples
+from .runtime_controller_audit import audit_full_controller_frames
+from .import_pipeline import verify_fk_manifest_for_writer
 from . import __version__
 from .rlpy_reader import capability_report, export_selected, selected_object
 
@@ -43,6 +45,7 @@ def show():
                 ("Validate Dragon FK animation vs preview (read-only)", self.validate_dragon),
                 ("Audit iClone 8 FK Bone IDs / Keys (read-only)", self.audit_motion_bones),
                 ("Inspect Pelvis FK Root Position controls (read-only)", self.inspect_root),
+                ("Audit ALL FK and Root Position frames (read-only)", self.audit_all_import_frames),
                 ("Capture Pelvis position at CURRENT frame (read-only)", self.capture_root),
                 ("Save collected Pelvis positions for numeric comparison", self.save_root),
             ]:
@@ -235,6 +238,56 @@ def show():
                 QtWidgets.QMessageBox.warning(
                     self,"Bone / Motion Clip diagnostic failed",message)
 
+        def audit_all_import_frames(self):
+            path,_=QtWidgets.QFileDialog.getOpenFileName(
+                self,"Select exact FK JSON written into the selected Dragon",
+                "","JSON (*.json)")
+            if not path:
+                return
+            try:
+                with open(path,"r",encoding="utf-8") as f:
+                    fk=json.load(f)
+                checked=verify_fk_manifest_for_writer(path,fk)
+                obj=selected_object(RLPy)
+                count=int(obj.GetSkeletonComponent().GetClipCount())
+                if not count:
+                    raise ValueError("No Motion Clip available for readback")
+                clip_index,ok=QtWidgets.QInputDialog.getInt(
+                    self,"Clip index to inspect (read-only)",
+                    "Motion Clip index:",count-1,0,count-1)
+                if not ok:
+                    return
+                audit=audit_full_controller_frames(
+                    fk,clip_index=clip_index,rlpy=RLPy)
+                audit["bundle_manifest_check"]=checked
+                save_path,_=QtWidgets.QFileDialog.getSaveFileName(
+                    self,"Save all-frame Controller verification",
+                    "runtime_controller_audit.json","JSON (*.json)")
+                if save_path:
+                    with open(save_path,"w",encoding="utf-8") as output:
+                        json.dump(audit,output,ensure_ascii=False,indent=2)
+                self.out.appendPlainText(json.dumps({
+                    "report_saved":save_path or None,
+                    "status":audit["status"],
+                    "frames":audit["frame_count"],
+                    "verified_scalar_samples":audit["verified_scalar_samples"],
+                    "expected_scalar_samples":audit["expected_scalar_samples"],
+                    "mismatched_scalar_samples":audit["mismatched_scalar_samples"],
+                    "channels_with_wrong_key_count":
+                        audit["channels_with_wrong_key_count"],
+                    "maximum_abs_error":audit[
+                        "maximum_abs_error_in_channel_units"],
+                    "first_failures":audit["first_failures"],
+                    "note":"ALL original FK keys were checked, not evaluated skin pose."
+                },ensure_ascii=False,indent=2))
+            except Exception as exc:
+                self.out.appendPlainText(
+                    "All-frame Controller audit failed: "+
+                    type(exc).__name__+": "+str(exc))
+                QtWidgets.QMessageBox.warning(
+                    self,"All-frame Controller audit failed",
+                    type(exc).__name__+": "+str(exc))
+
         def inspect_root(self):
             try:
                 obj=selected_object(RLPy)
@@ -330,6 +383,15 @@ def show():
             except Exception as exc:
                 self.out.appendPlainText(str(exc))
                 return
+            try:
+                bundle_check=verify_fk_manifest_for_writer(path,motion)
+            except Exception as exc:
+                QtWidgets.QMessageBox.critical(
+                    self,"FK import bundle integrity failed",
+                    type(exc).__name__+": "+str(exc))
+                self.out.appendPlainText("Import blocked before write: "+
+                                         type(exc).__name__+": "+str(exc))
+                return
             preview_notice = ""
             if str(motion.get("calibration_status","")).startswith("unverified_"):
                 preview_notice = (
@@ -358,7 +420,9 @@ def show():
                 "preview over previous clips.\n"
                 "The playhead moves to the peak test pose."
             )
-            message += preview_notice + "\nContinue?"
+            message += preview_notice + (
+                "\nBundle integrity check: %s\nContinue?" %
+                bundle_check["status"])
             answer = QtWidgets.QMessageBox.warning(
                 self, "Experimental FK clip write", message,
                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,

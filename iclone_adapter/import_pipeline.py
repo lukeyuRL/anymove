@@ -314,6 +314,61 @@ def build_bundle(source_motion,target_skeleton,source_rig_info,
     return prepared,audit,manifest
 
 
+def verify_fk_manifest_for_writer(motion_path,motion=None):
+    """Check selected bundled FK JSON against adjacent manifest *before write*.
+
+    This proves that the selected imported FK file is exactly the package
+    payload prepared by the offline converter. The independent verify CLI
+    additionally compares against the original motion and skeleton files.
+    Original legacy experimental FK previews (no pipeline field) are not
+    subject to the bundle sidecar and still run under the scene guard.
+    """
+    path=pathlib.Path(motion_path)
+    current=_json(path) if motion is None else motion
+    meta=current.get("pipeline")
+    if meta is None:
+        return {"status":"legacy_FK_json_no_bundle_manifest",
+                "note":"Use import_pipeline prepare for source provenance."}
+    if not isinstance(meta,dict) or meta.get("schema_version")!=BUNDLE_VERSION:
+        raise ContractError("unknown embedded FK import pipeline metadata")
+    if path.name!=OUTPUT_MOTION:
+        raise ContractError(
+            "bundled FK file must keep its original filename "+OUTPUT_MOTION)
+    manifest_path=path.parent/OUTPUT_MANIFEST
+    if not manifest_path.is_file():
+        raise ContractError(
+            "bundled FK JSON requires adjacent import_manifest.json")
+    manifest=_json(manifest_path)
+    if (manifest.get("schema_version")!=BUNDLE_VERSION or
+        manifest.get("profile_id")!=PROFILE_ID or
+        meta.get("profile_id")!=PROFILE_ID):
+        raise ContractError("FK payload has foreign or mismatched profile")
+    if _digest(current)!=manifest.get("files",{}).get(OUTPUT_MOTION):
+        raise ContractError("FK payload differs from import_manifest.json SHA-256")
+    if (meta.get("source_motion_sha256")!=manifest.get("source",{}).get(
+            "motion_canonical_sha256") or
+        meta.get("source_dragon_bones_sha256")!=manifest.get("source",{}).get(
+            "rig_bones_canonical_sha256") or
+        meta.get("target_skeleton_hash")!=manifest.get("target",{}).get(
+            "hierarchy_sha256") or
+        meta.get("target_unposed_world_sha256")!=manifest.get("target",{}).get(
+            "unposed_world_matrices_sha256")):
+        raise ContractError("embedded FK metadata differs from bundle manifest")
+    if (current.get("calibration_status")!=
+            "unverified_rest_basis_conjugation_preview" or
+        current.get("root_motion",{}).get("root_position_space")!="pelvis_local" or
+        current.get("root_motion",{}).get("root_position_scale")!=1.0):
+        raise ContractError("bundled FK payload differs from Dragon reference profile")
+    return {
+        "status":"fk_payload_matches_adjacent_manifest",
+        "profile_id":PROFILE_ID,
+        "motion_canonical_sha256":_digest(current),
+        "source_motion_sha256":meta["source_motion_sha256"],
+        "note":"Package hash checked. Original source still requires external "
+               "import_pipeline verify. iClone pose still requires SDK testing."
+    }
+
+
 def save_bundle(output_dir,source,target,source_info,reference_source,
                 overwrite=False):
     """Write 3 mutually consistent files; refuse accidental overwrites."""

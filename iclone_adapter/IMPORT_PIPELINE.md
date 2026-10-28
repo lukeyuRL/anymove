@@ -95,3 +95,41 @@ initialization keys or manually Reset Pose to bypass the guard.
 3. Validate at least one additional Dragon clip on the same imported rig.
 4. Create a distinct calibration profile for any other rig; do not relax
    the current Dragon reference gate to silently support it.
+
+
+## v0.4.1 — In-app full-frame FK + Root Position controller readback
+
+The import package now includes a pre-write SHA-256 sidecar check when
+opening the generated FK in iClone. The panel blocks a modified/moved
+bundled FK file if its adjacent import_manifest.json is missing or
+does not match. The CLI verify command still separately rechecks the
+original source motion and unposed skeleton against the bundle.
+
+After writing the package on a fresh Dragon project, use the button:
+
+Audit ALL FK and Root Position frames (read-only)
+
+Select the exact same imported iclone_fk_full.json, choose Clip index 0
+(unless you explicitly used another), and save runtime_controller_audit.json.
+
+For the 124-frame reference clip, the audit checks all 42 Rotation XYZ
+controllers and 1 Pelvis Position XYZ controller:
+
+    124 * (42 + 1) * 3 = 15,996 scalar values.
+
+It requires each axis to contain exactly 124 keys, uses GetValue at
+every integer-frame Clip-local time, compares against the JSON with
+tolerance 1e-4, and never moves the iClone playhead or writes data.
+
+Expected result:
+
+    status = all_frame_controller_values_match
+    verified_scalar_samples = 15996
+    mismatched_scalar_samples = 0
+    channels_with_wrong_key_count = 0
+
+Any error is reported by Bone, Position/Rotation and first failed frame.
+This tests complete **Controller key data** and is distinct from the
+offline mathematical fidelity audit. It still cannot prove rendered
+pose, IK override or subframe interpolation. Do not call this result
+a fully certified animation retarget.
