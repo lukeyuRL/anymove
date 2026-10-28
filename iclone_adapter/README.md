@@ -157,3 +157,23 @@ This revision also fixes a potential false positive in the SWIG
 `GetParent()` lineage cycle check by retaining proxy references while
 walking the chain. It remains essential to preserve the actual error
 message for any new failure; CI mocks cannot perfectly model iClone.
+
+## P0 empirical diagnosis: duplicate GetSkinBones records (2026-10-28)
+
+A real `Casual_F_0058` debug report showed **103 raw rows but 102 unique
+native IDs**. Indices `0` and `4` are *both* `RL_BoneRoot`, with identical
+native ID `6351195944448` and parent `Casual_F_0058`. This was the sole
+duplicate-ID and duplicate-name group. The old hierarchy resolver therefore
+raised `ambiguous duplicate parent bone 'RL_BoneRoot'`.
+
+Before reconstructing parent links, the registry now coalesces duplicate
+records **only if** native ID, name, immediate parent ID/name and local/world
+transform fingerprints match (or the Python wrapper is literally the same).
+Native ID collisions involving different names, parents or transforms are
+still treated as distinct entries. The export includes both
+`raw_skin_bone_count` and `canonical_bone_count`, plus audit metadata
+`coalesced_duplicates` with original row indices.
+
+**Expected result for this specific actor:** 102 canonical Bone records from
+103 raw `GetSkinBones()` entries. This is a deduplicated record count,
+not proof that the character's true Skin Bind Pose has been recovered.

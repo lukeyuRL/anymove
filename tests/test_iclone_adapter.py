@@ -282,6 +282,40 @@ class RLPyTests(unittest.TestCase):
         self.assertEqual(report["bones"][1]["parent_name"], "Bone1")
         self.assertEqual(report["failure"], "fixture")
 
+    def test_repeated_root_node_is_coalesced_from_getskinbones(self):
+        # The real 103-row CC test contains RL_BoneRoot twice: indices 0 and 4,
+        # same GetID/name/parent. It represents 102 distinct skin records.
+        avatar = Avatar()
+        root, arm = avatar.skeleton.bones
+        alias = Bone(root.key)
+        avatar.skeleton.bones = [root, arm, alias]
+        r = RLPyMock(avatar)
+        data = snapshot(avatar, rlpy=r)
+        self.assertEqual(len(data["bones"]), 2)
+        stats = data["identity_diagnostics"]
+        self.assertEqual(stats["raw_skin_bone_count"], 3)
+        self.assertEqual(stats["canonical_bone_count"], 2)
+        self.assertEqual(stats["coalesced_duplicate_count"], 1)
+        self.assertEqual(stats["coalesced_duplicates"][0]["duplicate_raw_index"], 2)
+        parent = next(b for b in data["bones"] if b["name"] == "Bone1")
+        child = next(b for b in data["bones"] if b["name"] == "Bone2")
+        self.assertEqual(child["parent_id"], parent["id"])
+        # P1 must use the same canonical hierarchy and be able to resolve it.
+        m = make_sine_test(data, child["id"], frames=4)
+        out = write_selected(m, rlpy=r, fps_confirmed=True)
+        self.assertEqual(out["frame_count"], 4)
+
+    def test_same_id_name_parent_but_different_pose_keeps_distinct(self):
+        # A shared ID alone must not hide real siblings with different poses.
+        a, b = Bone(9), Bone(9)
+        b.LocalTransform = lambda: Transform([
+            1,0,0,0, 0,1,0,0, 0,0,1,0, 42,0,0,1
+        ])
+        nodes, stats = build_bone_registry([a, b])
+        self.assertEqual(len(nodes), 2)
+        self.assertEqual(len({node["path"] for node in nodes}), 2)
+        self.assertEqual(stats["coalesced_duplicate_count"], 0)
+
     def test_duplicate_scene_ids_preserve_hierarchy(self):
         avatar = Avatar()
         r = RLPyMock(avatar)

@@ -1,16 +1,72 @@
-"""Resolve generic Skin Bone identities without assuming RINode.GetID() is unique.
+"""Build a unique Skeleton registry from iClone Skin Bones.
 
-In iClone, GetSkinBones() can contain multiple bones sharing a scene GetID().
-The stable-ish export key is a hierarchy path, not the raw scene identifier.
-For duplicate bone names, parent chain disambiguates the path; duplicate
-siblings are numbered in the order returned by GetSkinBones(). If the SDK
-does not provide enough information to identify a parent uniquely, fail
-rather than silently constructing an incorrect rig.
+In observed iClone 8 output, GetSkinBones() can repeat the SAME root record
+twice (same ID, name, parent AND transforms). Coalesce only indistinguishable
+records BEFORE hierarchy inference. Distinct nodes that share a native ID
+remain separate. Paths, not the native GetID(), are the contract keys.
 """
 from collections import Counter, defaultdict
 from urllib.parse import quote
 
 from .schema import ContractError
+
+
+def _pose_signature(node):
+    """Read-only fingerprint; uses GetRow(), not SWIG RMatrix4.M().
+
+    A collision of native IDs is not enough to drop a node. We additionally
+    require matching immediate parent, name and local/world matrices.
+    If transforms are unavailable, keep both entries rather than guessing.
+    """
+    try:
+        values = []
+        for getter in (node.LocalTransform, node.WorldTransform):
+            matrix = getter().Matrix()
+            for row in range(4):
+                vector = matrix.GetRow(row)
+                values.extend(round(float(vector[col]), 6) for col in range(4))
+        return tuple(values)
+    except (AttributeError, TypeError, ValueError, RuntimeError):
+        return None
+
+
+def _collapse_indistinguishable_bones(raw_nodes):
+    nodes, raw_indices, fingerprints, buckets, collapsed = [], [], [], {}, []
+    for raw_index, node in enumerate(raw_nodes):
+        parent = node.GetParent()
+        key = (
+            str(node.GetID()), str(node.GetName()),
+            str(parent.GetID()) if parent is not None else None,
+            str(parent.GetName()) if parent is not None else None,
+        )
+        fingerprint = _pose_signature(node)
+        existing = None
+        for index in buckets.get(key, ()):
+            # Same SWIG wrapper, or indistinguishable native identity + pose.
+            # These duplicate GetSkinBones records must not masquerade as
+            # separate sibling bones (e.g. two RL_BoneRoot nodes).
+            if node is nodes[index] or (
+                fingerprint is not None and fingerprint == fingerprints[index]
+            ):
+                existing = index
+                break
+        if existing is None:
+            index = len(nodes)
+            nodes.append(node)
+            raw_indices.append([raw_index])
+            fingerprints.append(fingerprint)
+            buckets.setdefault(key, []).append(index)
+        else:
+            raw_indices[existing].append(raw_index)
+            collapsed.append({
+                "canonical_index": existing,
+                "duplicate_raw_index": raw_index,
+                "name": key[1],
+                "native_scene_id": key[0],
+                "evidence": "same_proxy" if node is nodes[existing]
+                            else "same_id_name_parent_and_pose",
+            })
+    return nodes, raw_indices, collapsed
 
 
 def _lineage(node):
@@ -33,9 +89,11 @@ def _lineage(node):
 
 
 def build_bone_registry(nodes):
-    nodes = list(nodes)
-    if not nodes:
+    raw_nodes = list(nodes)
+    if not raw_nodes:
         raise ContractError("no accessible Skin Bones")
+    raw_ids = Counter(str(node.GetID()) for node in raw_nodes)
+    nodes, raw_indices, collapsed = _collapse_indistinguishable_bones(raw_nodes)
     names = [str(b.GetName()) for b in nodes]
     scene_ids = [str(b.GetID()) for b in nodes]
     if any(not n for n in names):
@@ -155,14 +213,21 @@ def build_bone_registry(nodes):
             "native_scene_id": scene_ids[i],
             "node": node,
             "index": i,
+            "source_indices": raw_indices[i],
         })
     stats = {
+        "raw_skin_bone_count": len(raw_nodes),
+        "canonical_bone_count": len(nodes),
+        "coalesced_duplicate_count": len(collapsed),
+        "coalesced_duplicates": collapsed,
+        "raw_native_id_duplicate_groups": sum(v > 1 for v in raw_ids.values()),
+        "raw_native_id_duplicate_nodes": sum(v for v in raw_ids.values() if v > 1),
         "native_id_unique_count": len(scene_id_to_index),
         "native_id_duplicate_groups": sum(len(v) > 1 for v in scene_id_to_index.values()),
         "native_id_duplicate_nodes": sum(len(v) for v in scene_id_to_index.values() if len(v) > 1),
         "duplicate_name_groups": sum(len(v) > 1 for v in names_to_index.values()),
         "skipped_non_skin_ancestors": skipped_helpers,
         "identity_strategy": "hierarchy_path",
-        "note": "GetID is diagnostic only; identical sibling names use skin list order.",
+        "note": "Exact duplicate Skin Bone records coalesced; native IDs are diagnostic only.",
     }
     return registry, stats
