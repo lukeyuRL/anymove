@@ -177,3 +177,14 @@ still treated as distinct entries. The export includes both
 **Expected result for this specific actor:** 102 canonical Bone records from
 103 raw `GetSkinBones()` entries. This is a deduplicated record count,
 not proof that the character's true Skin Bind Pose has been recovered.
+
+## 2026-10-28 P1: keys written but no animation visible
+
+See [P1_VALIDATION.md](P1_VALIDATION.md). Before modifying a scene,
+use the new **Inspect existing motion clips / FK key counts** button:
+`GetClipCount` alone does not prove a clip has FK keys. The write path now
+performs `GetKeyCount` and `GetValue` readback, sets the playhead to the
+peak diagnostic pose and calls `Update`. The synthetic test defaults to
+`CC_Base_L_Forearm` where present and uses 30 degrees to make motion
+easy to see. IK can still override FK, and automatic FK-to-IK baking remains
+intentionally out of scope for P1.

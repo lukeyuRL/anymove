@@ -3,6 +3,7 @@ import json
 
 from .motion_contract import make_sine_test
 from .motion_writer import write_selected
+from .p1_inspector import inspect_selected_animation
 from .diagnostics import save_failure_report, raw_skeleton_report
 from . import __version__
 from .rlpy_reader import capability_report, export_selected, selected_object
@@ -31,7 +32,8 @@ def show():
                 ("Inspect selected skeleton", self.inspect),
                 ("Export current-pose skeleton snapshot", self.export),
                 ("Save raw Skin Bone diagnostics (no export)", self.debug_bones),
-                ("Create 48-frame diagnostic FK motion", self.synthetic),
+                ("Inspect existing motion clips / FK key counts", self.inspect_clips),
+                ("Create visible 48-frame FK motion (30 deg)", self.synthetic),
                 ("Write FK motion to selected avatar (modifies scene)", self.import_motion),
             ]:
                 button = QtWidgets.QPushButton(label)
@@ -84,6 +86,9 @@ def show():
             return {"written": path, "skin_bones": report.get("skin_bone_count"),
                     "issues": report.get("issues", [])}
 
+        def inspect_clips(self):
+            self.report(lambda: inspect_selected_animation(RLPy))
+
         def synthetic(self):
             path, _ = QtWidgets.QFileDialog.getOpenFileName(
                 self, "Choose exported skeleton JSON", "", "JSON (*.json)")
@@ -93,18 +98,30 @@ def show():
                 with open(path, "r", encoding="utf-8") as f:
                     skeleton = json.load(f)
                 names = ["%s : %s" % (b["id"], b["path"]) for b in skeleton["bones"]]
+                preferred = ("CC_Base_L_Forearm", "CC_Base_L_Upperarm",
+                             "CC_Base_R_Forearm", "CC_Base_Head")
+                default = 0
+                for wanted in preferred:
+                    match = next((i for i, b in enumerate(skeleton["bones"])
+                                  if b["name"] == wanted), None)
+                    if match is not None:
+                        default = match
+                        break
                 choice, ok = QtWidgets.QInputDialog.getItem(
-                    self, "Diagnostic bone", "Choose one Bone", names, 0, False)
+                    self, "Diagnostic bone", "Choose a visible deforming Bone", names,
+                    default, False)
                 if not ok:
                     return
                 bone_id = choice.split(" : ", 1)[0]
                 target, _ = QtWidgets.QFileDialog.getSaveFileName(
                     self, "Save diagnostic", "test_fk.json", "JSON (*.json)")
                 if target:
-                    motion = make_sine_test(skeleton, bone_id)
+                    motion = make_sine_test(skeleton, bone_id,
+                                            amplitude_deg=30.0)
                     with open(target, "w", encoding="utf-8") as f:
                         json.dump(motion, f, indent=2)
-                    self.out.appendPlainText("Wrote 24fps 48-frame FK diagnostic: " + target)
+                    self.out.appendPlainText(
+                        "Wrote 24fps 48-frame 30-degree FK diagnostic: " + target)
             except Exception as exc:
                 self.out.appendPlainText(type(exc).__name__ + ": " + str(exc))
 
@@ -128,7 +145,20 @@ def show():
                 QtWidgets.QMessageBox.No)
             if answer != QtWidgets.QMessageBox.Yes:
                 return
-            self.report(lambda: write_selected(motion, fps_confirmed=True, rlpy=RLPy))
+            try:
+                result = write_selected(motion, fps_confirmed=True, rlpy=RLPy)
+                self.out.appendPlainText(json.dumps(result, ensure_ascii=False, indent=2))
+                if result.get("status") != "fk_keys_verified_pose_changed":
+                    QtWidgets.QMessageBox.warning(
+                        self, "FK keys exist - visual result not confirmed",
+                        "FK keyframe data was written, but the chosen bone's "
+                        "world pose did not visibly change or could not be checked. "
+                        "Use Inspect existing motion clips and review the output. "
+                        "Active IK may override FK.")
+            except Exception as exc:
+                message = "%s: %s" % (type(exc).__name__, exc)
+                self.out.appendPlainText(message)
+                QtWidgets.QMessageBox.critical(self, "FK Motion write failed", message)
 
     global _WINDOW
     if _WINDOW is not None:
