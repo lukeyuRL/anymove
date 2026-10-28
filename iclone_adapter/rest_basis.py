@@ -64,3 +64,14 @@ def relative_rest_basis(info, bone_name):
     return _quat_from_rest_matrix(relative(parent,current))
 
 
+
+def root_rest_basis(info, name="pelvis"):
+    """Root rest Bone quaternion relative to its armature object (no parent Bone)."""
+    bones=info.get("bones")
+    if not isinstance(bones,list):
+        raise ContractError("invalid source root info")
+    matches=[b for b in bones if b.get("name")==name]
+    if len(matches)!=1 or matches[0].get("parent")!=-1:
+        raise ContractError("cannot find unique top-level Blender root Bone "+name)
+    return _quat_from_rest_matrix(
+        matrix([x for row in matches[0]["matrix_local"] for x in row]))

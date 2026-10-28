@@ -33,6 +33,40 @@ def validate_motion(motion, skeleton):
                 raise ContractError("invalid rotation channel")
     if motion.get("space") != "iclone_fk_layer_xyz_radians":
         raise ContractError("requires explicit iClone FK layer channel space")
+
+    # The only permitted experimental extension is a Pelvis root motion
+    # component, with mandatory root-specific metadata and an existing XYZ
+    # rotation track. No arbitrary bone positions or opaque transforms.
+    positions=motion.get("position_tracks")
+    root=motion.get("root_motion")
+    if (positions is not None or root is not None):
+        if not isinstance(root,dict) or root.get("mode")!="pelvis_layer":
+            raise ContractError("position/root track requires explicit pelvis_layer metadata")
+        rid=root.get("target_bone_id")
+        if rid not in tracks or rid not in known or root.get("source_root")!="pelvis":
+            raise ContractError("root Pelvis rotation track/identity missing")
+        if root.get("calibrated") is not False:
+            raise ContractError("experimental root must remain calibrated=false")
+        components=root.get("components")
+        if components not in ("rotation_only","rotation_and_translation"):
+            raise ContractError("invalid experimental root components")
+        if components=="rotation_and_translation":
+            scale=root.get("root_position_scale")
+            if (type(scale) not in (int,float) or not math.isfinite(scale) or
+                    scale<=0 or scale>10000):
+                raise ContractError("root Position scale must be explicit and positive")
+            if not isinstance(positions,dict) or set(positions)!={rid}:
+                raise ContractError("root Position track must target only pelvis")
+            values=positions[rid]
+            if not isinstance(values,list) or len(values)!=count:
+                raise ContractError("root Position frame count mismatch")
+            for row in values:
+                if (not isinstance(row,list) or len(row)!=3 or
+                    not all(type(x) in (int,float) and math.isfinite(x)
+                            and abs(x)<1000000 for x in row)):
+                    raise ContractError("invalid root Position sample")
+        elif positions is not None:
+            raise ContractError("rotation-only root cannot include Position tracks")
     return True
 
 

@@ -20,6 +20,7 @@ import math
 from .anymove_bridge import (from_euler_xyz, qmul, qinverse_unit,
                              to_euler_xyz)
 from .rest_basis import relative_rest_basis
+from .root_motion import convert_pelvis_root
 from .motion_contract import MOTION_VERSION, validate_motion
 from .schema import ContractError, skeleton_hash, validate_skeleton
 from .verify_import import DEFAULT_SOURCE, audit_rig, create_mapping
@@ -45,7 +46,7 @@ def _bone_selection(bones, allowed):
 
 
 def make_preview(motion, target, source_info, bones=DEFAULT_BONES,
-                 basis="raw"):
+                 basis="raw", root_mode="none", root_position_scale=None):
     """Return a test-only FK JSON, optionally trying relative-rest conjugation.
 
     basis="raw" is the historical direct-Euler experiment;
@@ -55,6 +56,14 @@ def make_preview(motion, target, source_info, bones=DEFAULT_BONES,
     """
     if basis not in ("raw", "rest"):
         raise ContractError("basis must be raw or rest")
+    if root_mode not in ("none","rotation","full"):
+        raise ContractError("root_mode must be none, rotation or full")
+    if root_mode!="none" and basis!="rest":
+        raise ContractError("experimental pelvis root currently requires --basis rest")
+    if root_mode=="none" and root_position_scale is not None:
+        raise ContractError("root_position_scale only valid with --root-mode full")
+    if root_mode=="rotation" and root_position_scale is not None:
+        raise ContractError("rotation-only root does not take position_scale")
     validate_skeleton(target)
     report = audit_rig(source_info, target)
     if report["result"] != "compatible_static_rest_snapshot":
@@ -121,6 +130,20 @@ def make_preview(motion, target, source_info, bones=DEFAULT_BONES,
     if not movement:
         raise ContractError(
             "selected Bone tracks are static across all frames; choose bones with visible motion")
+    root_metadata=None
+    root_position=None
+    if root_mode!="none":
+        source_root=src_names[0]
+        if source_root!="pelvis":
+            raise ContractError("root source must be pelvis")
+        candidates=[b for b in target["bones"] if b["name"]=="pelvis"]
+        if len(candidates)!=1:
+            raise ContractError("exactly one iClone Pelvis required for root motion")
+        root_id=candidates[0]["id"]
+        root_rotation,root_position,root_metadata=convert_pelvis_root(
+            motion,source_info,root_id,
+            mode=root_mode,position_scale=root_position_scale)
+        tracks[root_id]=root_rotation
     result = {
         "schema_version": MOTION_VERSION,
         "space": "iclone_fk_layer_xyz_radians",
@@ -159,6 +182,19 @@ def make_preview(motion, target, source_info, bones=DEFAULT_BONES,
             "root rotation/translation are omitted."
         ),
     }
+    if root_metadata is not None:
+        result["root_motion"]=root_metadata
+        if root_position is not None:
+            result["position_tracks"]={root_id:root_position}
+        result["limitations"]=[
+            x for x in result["limitations"] if x not in
+            ("root_translation_skipped","root_rotation_skipped")
+        ]
+        if root_position is None:
+            result["limitations"].append("root_translation_skipped")
+        result["limitations"].append("root_layer_units_and_axes_unverified")
+        result["warning"]+=(" Root motion is an UNCALIBRATED experiment; "
+                            "pelvis Root Position scale requires iClone testing.")
     validate_motion(result, target)
     return result
 
@@ -175,17 +211,24 @@ def main():
     parser.add_argument("--basis", choices=("raw","rest"), default="raw",
                         help="raw: original Euler; rest: experimentally conjugate each "
                              "Bone by its parent-relative rest quaternion (NOT calibrated)")
+    parser.add_argument("--root-mode",choices=("none","rotation","full"),default="none",
+                        help="EXPERIMENT: none (default), rotation-only, or full Pelvis root")
+    parser.add_argument("--root-position-scale",type=float,default=None,
+                        help="REQUIRED with --root-mode full; unverified Blender-to-iClone "
+                             "pelvis Layer Position unit multiplier")
     args = parser.parse_args()
     def read(path):
         with open(path,"r",encoding="utf-8") as f:
             return json.load(f)
     out = make_preview(read(args.motion_json), read(args.skeleton_json),
                        read(args.source_rig), bones=args.bones,
-                       basis=args.basis)
+                       basis=args.basis,root_mode=args.root_mode,
+                       root_position_scale=args.root_position_scale)
     with open(args.output_json,"w",encoding="utf-8") as f:
         json.dump(out,f,ensure_ascii=False,indent=2)
     print("EXPERIMENTAL / FK AXES UNVERIFIED; root motion excluded")
     print("Basis conversion:", out["rotation_basis_mode"])
+    print("Root motion:",args.root_mode,"(EXPERIMENTAL; units not calibrated)")
     print("Wrote:",args.output_json)
     print("FPS:",out["fps"],"Frames:",out["frame_count"],
           "Mapped Bones:",len(out["tracks"]),
