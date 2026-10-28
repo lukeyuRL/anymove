@@ -267,6 +267,9 @@ class RLPyTests(unittest.TestCase):
         r = RLPyMock(avatar)
         m = make_sine_test(snapshot(avatar, rlpy=r), "2", frames=3)
         class BrokenClip:
+            def SetLength(self, length):
+                return True
+
             def GetControl(self, *args):
                 return None
         def bad_add(time):
@@ -308,7 +311,7 @@ class RLPyTests(unittest.TestCase):
     def test_writer_rejects_mismatched_skeleton(self):
         avatar = Avatar()
         r = RLPyMock(avatar)
-        m = make_sine_test(snapshot(avatar), "2")
+        m = make_sine_test(snapshot(avatar, rlpy=r), "2")
         m["skeleton_hash"] = "invalid"
         with self.assertRaises(ContractError):
             write_selected(m, rlpy=r, fps_confirmed=True)
