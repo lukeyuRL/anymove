@@ -174,3 +174,63 @@ The official iClone 8 SDK requires `RLPy.RTime.FromValue(ticks)` and provides `R
 Source: https://wiki.reallusion.com/IC_8_Python_API:Dealing_With_Custom_FPS
 
 In the same already-keyed Dragon project, reload the v0.4.3 panel, select `Survey all FK/Root half-frame interpolations (read-only)`, choose the same `dragon_roar_import/iclone_fk_full.json` and Clip 0, then export `subframe_interpolation_audit.json`. No animation must be rewritten; the survey does not mutate keys or Timeline.
+
+
+## v0.5.0 — END-TO-END iClone UI (original Dragon only, per-frame keys)
+
+The user confirmed the full reference Dragon 42-Bone Controller import in
+iClone 8: 124 Frames, 15,996 / 15,996 scalar values, 0 mismatches,
+maximum error 5.92e-8. The half-frame native interpolation experiment also
+read all 15,867 values, but the project has deliberately chosen per-frame
+keying. Subframe interpolation is **not** an acceptance requirement and
+the diagnostics button is no longer in the primary UI.
+
+The existing validated conversion is unchanged:
+- Nonroot FK: parent-relative Blender Rest Basis conjugation
+- Pelvis rotation: Pelvis Rest Basis Quaternion conjugation
+- Pelvis translation: transpose(Pelvis Rest Basis) times source trans,
+  explicitly configured multiplier 1.0, within the known 100x FBX scene
+- 24 FPS, one Rotation XYZ key per Bone per Frame and a Pelvis Position XYZ
+  key per Frame
+
+### Direct in-app import
+
+1. Open iClone 8 with a **fresh, unposed original Dragon FBX** at Frame 0,
+   set the scene to 24 FPS, select Dragon. Start the plugin from iClone's
+   Script > Load Python using F:\anymove\launch_iclone.py.
+2. Click the FIRST button, "IMPORT AnyMove motion.json -> iClone +
+   iProject (42-Bone Dragon)".
+3. Choose the original solved AnyMove motion.json, e.g.
+   F:\anymove\runs\dragon\clips\roar\motion.json. **Do not select
+   iclone_fk_full.json**; conversion now happens automatically in-app.
+4. Choose an existing parent output folder, e.g. F:\anymove_test.
+   The tool creates a unique SHA-named subfolder without overwriting.
+5. Review the source, Bone count, frame count, and new-scene warning,
+   then confirm. The tool checks the LIVE target skeleton and original
+   Dragon reference Rest Pose **before any animation is written**.
+6. The tool builds and verifies a signed-by-SHA-256 JSON import bundle,
+   writes the exact full-frame iClone FK and Pelvis Position controllers,
+   and rereads ALL 15,996 integer-frame channel values.
+7. Only after SDK Controller verification succeeds does the tool call
+   RLPy.RFileIO.SaveProject to save the animated iClone scene as
+   AnyMove_Dragon.iProject in the new folder.
+
+The output contains:
+- AnyMove_Dragon.iProject — **native iClone project** if SaveProject succeeds
+- import_receipt.json — explicit status and source/provenance/SDK results
+- runtime_controller_audit.json — all-frame Controller readback details
+- iclone_fk_full.json, offline_frame_audit.json, import_manifest.json —
+  automatic diagnostics; no manual intermediate conversion needed
+
+If writing fails or SDK project saving is unsupported, the receipt has
+a NON-success status and explains whether the iClone scene may already
+contain keys; do not retry without a clean scene. The native iProject
+file is never overwritten. If SDK project saving is unavailable, use
+iClone File > Save As to save the already-verified animated project.
+
+This direct import completes the **known Dragon same-rig reference
+pipeline** from solved motion.json to native iClone Motion and iProject,
+subject to one actual iClone 8 in-app smoke test of this single-button
+orchestration. It does not yet support arbitrary avatars or solve raw
+detection data inside the iClone 3.8 host; AnyMove's heavy solver remains
+in its external Python process.

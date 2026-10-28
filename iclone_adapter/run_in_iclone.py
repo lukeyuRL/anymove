@@ -12,6 +12,7 @@ from .root_translation_sampler import capture_root_sample, save_samples
 from .runtime_controller_audit import audit_full_controller_frames
 from .subframe_interpolation_audit import survey_subframe_controllers
 from .import_pipeline import verify_fk_manifest_for_writer
+from .direct_import import prepare_direct_import, execute_direct_import
 from . import __version__
 from .rlpy_reader import capability_report, export_selected, selected_object
 
@@ -25,18 +26,20 @@ def show():
     class Panel(QtWidgets.QDialog):
         def __init__(self):
             super(Panel, self).__init__()
-            self.setWindowTitle("AnyMove for iClone - P0/P1/P2 Diagnostics v" + __version__)
-            self.resize(620, 420)
+            self.setWindowTitle("AnyMove for iClone - Dragon Motion Import v" + __version__)
+            self.resize(660, 520)
             layout = QtWidgets.QVBoxLayout(self)
             layout.addWidget(QtWidgets.QLabel(
-                "P0: read existing Skin Bones. P1: direct FK channel diagnostics ONLY.\n"
-                "Test on an expendable scene; one default Motion Clip is OK.\n"
-                "Use converted FK preview JSON, NOT raw Blender motion.json."))
+                "Dragon 42-Bone same-rig profile: import ORIGINAL AnyMove motion.json.\n"
+                "24 FPS, full per-frame FK / Pelvis Root Motion; native iProject save.\n"
+                "Use a clean unposed Dragon scene. Advanced diagnostics below."))
             self.root_translation_samples = {}
             self.out = QtWidgets.QPlainTextEdit()
             self.out.setReadOnly(True)
             layout.addWidget(self.out)
             for label, callback in [
+                ("IMPORT AnyMove motion.json -> iClone + iProject (42-Bone Dragon)",
+                 self.import_original_anymove),
                 ("Inspect selected skeleton", self.inspect),
                 ("Export current-pose skeleton snapshot", self.export),
                 ("Save raw Skin Bone diagnostics (no export)", self.debug_bones),
@@ -47,13 +50,105 @@ def show():
                 ("Audit iClone 8 FK Bone IDs / Keys (read-only)", self.audit_motion_bones),
                 ("Inspect Pelvis FK Root Position controls (read-only)", self.inspect_root),
                 ("Audit ALL FK and Root Position frames (read-only)", self.audit_all_import_frames),
-                ("Survey all FK/Root half-frame interpolations (read-only)", self.survey_half_frames),
                 ("Capture Pelvis position at CURRENT frame (read-only)", self.capture_root),
                 ("Save collected Pelvis positions for numeric comparison", self.save_root),
             ]:
                 button = QtWidgets.QPushButton(label)
                 button.clicked.connect(callback)
                 layout.addWidget(button)
+
+
+        def import_original_anymove(self):
+            """Direct source AnyMove motion.json -> iClone Clip -> iProject."""
+            import pathlib
+            source,_=QtWidgets.QFileDialog.getOpenFileName(
+                self,"Select ORIGINAL AnyMove Dragon motion.json","",
+                "AnyMove motion.json (*.json)")
+            if not source:
+                return
+            try:
+                plan=prepare_direct_import(source,rlpy=RLPy)
+            except Exception as exc:
+                message=type(exc).__name__+": "+str(exc)
+                self.out.appendPlainText(
+                    "Direct AnyMove preflight FAILED (nothing written): "+message)
+                QtWidgets.QMessageBox.warning(
+                    self,"Direct import preflight failed",message)
+                return
+            output=QtWidgets.QFileDialog.getExistingDirectory(
+                self,"Choose a folder for new iProject and audit package",
+                str(pathlib.Path(source).parent))
+            if not output:
+                return
+            question=(
+                "DIRECT ANYMOVE -> iCLONE DRAGON IMPORT\n\n"
+                "Source: %s\n"
+                "Frames: %d at 24 FPS\n"
+                "Rotation Bones: %d (including Pelvis)\n"
+                "Root Position Bones: %d\n"
+                "Total scalar values to verify: %d\n\n"
+                "The selected Dragon MUST be the original unposed "
+                "42-Bone / 100x FBX version.\n"
+                "This operation writes a new 24-FPS iClone Motion Clip, "
+                "reads back ALL integer-frame Rotation/Position keys, "
+                "and saves a new native AnyMove_Dragon.iProject "
+                "plus an import receipt under:\n%s\n\n"
+                "No Subframe interpolation is checked or changed.\n"
+                "Proceed with writing the selected iClone scene?"%
+                (source,plan["frames"],plan["rotation_bones"],
+                 plan["position_bones"],plan["expected_scalar_samples"],
+                 output)
+            )
+            choice=QtWidgets.QMessageBox.question(
+                self,"Import original AnyMove Dragon Motion",question,
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No)
+            if choice!=QtWidgets.QMessageBox.Yes:
+                return
+            try:
+                outcome=execute_direct_import(
+                    plan,output,rlpy=RLPy,save_project=True)
+                summary={
+                    "status":outcome["status"],
+                    "frame_count":outcome["frame_count"],
+                    "rotation_bones":outcome["rotation_bones"],
+                    "position_bones":outcome["position_bones"],
+                    "expected_scalar_samples":
+                        outcome["expected_scalar_samples"],
+                    "verified_scalar_samples":
+                        outcome.get("verified_scalar_samples"),
+                    "max_controller_abs_error":
+                        outcome.get("maximum_controller_abs_error"),
+                    "iProject_saved":outcome["iProject_saved"],
+                    "iProject_path":outcome["iProject_path"],
+                    "audit_directory":outcome["output_directory"],
+                    "warnings":outcome.get("warnings",[])
+                }
+                self.out.appendPlainText(
+                    json.dumps(summary,ensure_ascii=False,indent=2))
+                if outcome["status"]==(
+                        "completed_full_frame_verified_project_saved"):
+                    QtWidgets.QMessageBox.information(
+                        self,"AnyMove Dragon Import Complete",
+                        "All %d controller values verified.\n"
+                        "Native iClone project saved:\n%s\n\n"
+                        "Audit and receipt:\n%s" %
+                        (outcome["verified_scalar_samples"],
+                         outcome["iProject_path"],
+                         outcome["output_directory"]))
+                else:
+                    QtWidgets.QMessageBox.warning(
+                        self,"Animation written: check import receipt",
+                        "Import did NOT reach fully saved status.\n"
+                        "%s\n\nReceipt folder:\n%s\n\n"
+                        "Do NOT import again into this scene."%
+                        (outcome["status"],outcome["output_directory"]))
+            except Exception as exc:
+                message=type(exc).__name__+": "+str(exc)
+                self.out.appendPlainText(
+                    "Direct AnyMove import FAILED: "+message)
+                QtWidgets.QMessageBox.critical(
+                    self,"Direct AnyMove Import Failed",message)
 
         def report(self, callback):
             try:
