@@ -163,3 +163,14 @@ GetValue returns subframe_readback_incomplete.
 Nothing modifies the Timeline, skeleton or keys. All-frame controller
 integrity was previously verified; this survey is a distinct SDK-time
 interpolation test, NOT proof of on-screen evaluated bone motion.
+
+
+## v0.4.3: fix iClone 8 subframe RTime constructor compatibility
+
+The real iClone 8 v0.4.2 survey failed with `TypeError: __init__() takes 1 positional argument but 2 were given` because it called the legacy `RLPy.RTime(ticks)` constructor. This does not invalidate the prior 15,996 / 15,996 integer-frame FK/Position controller readback.
+
+The official iClone 8 SDK requires `RLPy.RTime.FromValue(ticks)` and provides `RTime.ToInt()` for native 6000-ticks-per-second time. v0.4.3 uses the factory exclusively and checks that it returns exactly the requested midpoint tick; it refuses unsupported or inconsistent factories. Tests use a mock iClone 8 class that rejects positional construction, so this regression cannot silently pass again.
+
+Source: https://wiki.reallusion.com/IC_8_Python_API:Dealing_With_Custom_FPS
+
+In the same already-keyed Dragon project, reload the v0.4.3 panel, select `Survey all FK/Root half-frame interpolations (read-only)`, choose the same `dragon_roar_import/iclone_fk_full.json` and Clip 0, then export `subframe_interpolation_audit.json`. No animation must be rewritten; the survey does not mutate keys or Timeline.

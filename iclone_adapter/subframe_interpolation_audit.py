@@ -17,11 +17,13 @@ VERSION = "anymove.iclone.subframe_controller_survey/1"
 
 
 def _ticks(value):
-    get = getattr(value, "GetValue", None)
+    # iClone 8 RTime uses 6000 ticks per second and exposes ToInt().
+    # Prefer ToInt to the legacy GetValue time-unit convention.
+    get = getattr(value, "ToInt", None)
     if callable(get):
         raw = get()
     else:
-        get = getattr(value, "ToInt", None)
+        get = getattr(value, "GetValue", None)
         raw = get() if callable(get) else value
     if type(raw) not in (int,float) or not math.isfinite(raw):
         raise ContractError("invalid SDK RTime tick")
@@ -32,9 +34,12 @@ def _ticks(value):
 
 
 def _midpoints(rlpy,fps,count):
-    constructor = getattr(rlpy,"RTime",None)
-    if not callable(constructor):
-        raise ContractError("RLPy.RTime unavailable for midpoint sampling")
+    time_class = getattr(rlpy, "RTime", None)
+    from_value = getattr(time_class, "FromValue", None)
+    if not callable(from_value):
+        raise ContractError(
+            "iClone 8 RLPy.RTime.FromValue unavailable for midpoint sampling; "
+            "RTime(tick) is NOT supported")
     anchors = [_ticks(rlpy.IndexedFrameTime(i,fps)) for i in range(count)]
     samples=[]
     for i in range(count-1):
@@ -44,9 +49,16 @@ def _midpoints(rlpy,fps,count):
         tick=(a+b)//2
         if not a<tick<b:
             raise ContractError("invalid subframe time at frame %d"%i)
-        instant=constructor(tick)
-        if _ticks(instant)!=tick:
-            raise ContractError("RTime constructor changed midpoint tick")
+        # iClone 8 requires the static factory FromValue(ticks).
+        # RTime(ticks) raises TypeError in real iClone Python 3.8.
+        try:
+            instant=from_value(tick)
+        except Exception as exc:
+            raise ContractError(
+                "RTime.FromValue(%d) failed: %s: %s" %
+                (tick, type(exc).__name__, exc))
+        if instant is None or _ticks(instant)!=tick:
+            raise ContractError("RTime.FromValue returned a different tick")
         samples.append((i,instant,float(tick-a)/(b-a),tick))
     return samples
 
