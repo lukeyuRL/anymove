@@ -65,7 +65,10 @@ class VideoImportUITests(unittest.TestCase):
     def test_preflight_rejects_other_rig_and_nonzero_frame(self):
         sdk=direct_mock.SDK()
         target=self.dragon.make_target()
-        target["bones"][1]["name"]="unexpected"
+        # Changing a helper display name alone does not invalidate the
+        # same Skin-Bone hierarchy. Modify actual Head Rest position.
+        next(b for b in target["bones"] if b["name"]=="head")[
+            "snapshot_world_matrix"][3]+=25.0
         with mock.patch.object(video_ui,"snapshot",return_value=target):
             with self.assertRaises(ContractError):
                 video_ui.preflight_video_target(sdk)
