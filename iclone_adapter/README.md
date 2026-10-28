@@ -188,3 +188,28 @@ peak diagnostic pose and calls `Update`. The synthetic test defaults to
 `CC_Base_L_Forearm` where present and uses 30 degrees to make motion
 easy to see. IK can still override FK, and automatic FK-to-IK baking remains
 intentionally out of scope for P1.
+
+## v0.1.7: default Motion Clip is now supported
+
+The previous gate `GetClipCount()==0` was incorrect for iClone avatars.
+The official Reallusion guide writes Motion Layer keys into
+`GetClip(0)`. The updated writer chooses:
+
+- **reuse_default**: if one Clip starts at Frame 0 and mapped FK
+  channels have no keys, write into that existing Clip. Expect
+  `clip_count_before: 1` and `clip_count_after: 1`.
+- **append_new**: if a Clip has pre-existing FK keys (or there are
+  multiple Clips), append at least one frame beyond the last effective
+  Clip end, without overwriting the existing clips. P1 moves the
+  playhead to the appended animation's peak frame.
+- **create_new**: only when GetClipCount()==0, create at Frame 0.
+
+Use a disposable iClone scene. The write is to FK Layer data, not a
+general AnyMove/Blender retarget. The writer attempts to undo its own
+newly inserted keys if reusing a clip fails. The returned JSON now shows
+`clip_strategy`, `clip_count_before`, `clip_count_after`,
+`clip_start_ticks`, and whether the Timeline end was extended.
+An unchanged WorldTransform despite FK keys is a separate FK/IK
+evaluation issue, not a Clip count error.
+
+Reference: https://wiki.reallusion.com/IC_Python_API:Animating_A_Character

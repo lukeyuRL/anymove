@@ -146,6 +146,10 @@ class Ctrl:
         matches = [value for stamp, value in self.values if stamp == time]
         return (True, matches[-1] if matches else 0.0)
 
+    def RemoveKey(self, time):
+        self.values = [(t, v) for t, v in self.values if t != time]
+        return True
+
 
 class DataBlock:
     def __init__(self):
@@ -165,13 +169,20 @@ class Layer:
 
 
 class Clip:
-    def __init__(self):
+    def __init__(self, start=0):
         self.layers = {}
         self.length = None
+        self.start = start
 
     def SetLength(self, length):
         self.length = length
         return True
+
+    def ClipTimeToSceneTime(self, local_time):
+        return self.start + local_time
+
+    def GetClipLength(self):
+        return self.length or 0
 
     def GetLength(self):
         return self.length or 0
@@ -211,7 +222,7 @@ class Skeleton:
         return self.clips[index]
 
     def AddClip(self, time):
-        clip = Clip()
+        clip = Clip(time)
         self.clips.append(clip)
         return clip
 
@@ -264,6 +275,13 @@ class Global:
 
     def GetFps(self):
         return self.fps
+
+    def GetEndTime(self):
+        return getattr(self, "end_time", 48)
+
+    def SetEndTime(self, end):
+        self.end_time = end
+        return True
 
 
 class RLPyMock:
@@ -409,6 +427,60 @@ class RLPyTests(unittest.TestCase):
             "Rotation/RotationX"].values), 6)
         with self.assertRaises(ContractError):
             write_selected(m, rlpy=r, fps_confirmed=True)
+
+    def test_one_default_clip_is_reused_not_rejected(self):
+        avatar = Avatar()
+        rlpy = RLPyMock(avatar)
+        avatar.skeleton.AddClip(0)  # A normal initial clip, no FK layer keys.
+        sk = snapshot(avatar, rlpy=rlpy)
+        bone = next(b["id"] for b in sk["bones"] if b["name"] == "Bone2")
+        motion = make_sine_test(sk, bone, frames=8)
+        result = write_selected(motion, fps_confirmed=True, rlpy=rlpy)
+        self.assertEqual(result["clip_strategy"], "reuse_default")
+        self.assertEqual(result["clip_count_before"], 1)
+        self.assertEqual(result["clip_count_after"], 1)
+        self.assertEqual(avatar.skeleton.GetClipCount(), 1)
+        self.assertEqual(avatar.skeleton.GetClip(0).start, 0)
+
+    def test_prekeyed_default_clip_is_preserved_and_motion_appended(self):
+        avatar = Avatar()
+        rlpy = RLPyMock(avatar)
+        old = avatar.skeleton.AddClip(0)
+        old.SetLength(24)
+        old_ctrl = old.GetControl("Layer", avatar.skeleton.bones[1]).GetDataBlock().GetControl("Rotation/RotationX")
+        old_ctrl.SetValue(0, 0.23)
+        sk = snapshot(avatar, rlpy=rlpy)
+        bone = next(b["id"] for b in sk["bones"] if b["name"] == "Bone2")
+        motion = make_sine_test(sk, bone, frames=8)
+        result = write_selected(motion, fps_confirmed=True, rlpy=rlpy)
+        self.assertEqual(result["clip_strategy"], "append_new")
+        self.assertEqual(result["clip_count_before"], 1)
+        self.assertEqual(result["clip_count_after"], 2)
+        self.assertEqual(result["clip_start_ticks"], 25)
+        self.assertEqual(old_ctrl.GetKeyCount(), 1)
+        self.assertEqual(old_ctrl.GetValue(0, 0.)[1], 0.23)
+        self.assertEqual(avatar.skeleton.GetClip(1).start, 25)
+        self.assertEqual(rlpy.RGlobal.GetTime(), 25 + result["peak_frame"])
+
+    def test_reused_clip_error_rolls_back_only_new_keys(self):
+        avatar = Avatar()
+        rlpy = RLPyMock(avatar)
+        clip = avatar.skeleton.AddClip(0)
+        sk = snapshot(avatar, rlpy=rlpy)
+        bone = next(b["id"] for b in sk["bones"] if b["name"] == "Bone2")
+        motion = make_sine_test(sk, bone, frames=6)
+        ctrl = clip.GetControl("Layer", avatar.skeleton.bones[1]).GetDataBlock().GetControl("Rotation/RotationX")
+        original_set = ctrl.SetValue
+        def fails_after_two(time, value):
+            if time == 2:
+                return False
+            return original_set(time, value)
+        ctrl.SetValue = fails_after_two
+        with self.assertRaises(ContractError):
+            write_selected(motion, fps_confirmed=True, rlpy=rlpy)
+        self.assertEqual(avatar.skeleton.GetClipCount(), 1)
+        self.assertEqual(ctrl.GetKeyCount(), 0)
+        self.assertEqual(clip.GetLength(), 0)
 
     def test_existing_clip_inspector_reports_key_counts(self):
         avatar = Avatar()

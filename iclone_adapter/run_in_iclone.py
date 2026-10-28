@@ -23,7 +23,7 @@ def show():
             layout = QtWidgets.QVBoxLayout(self)
             layout.addWidget(QtWidgets.QLabel(
                 "P0: read existing Skin Bones. P1: direct FK channel diagnostics ONLY.\n"
-                "Test on an expendable scene with no existing motion clips.\n"
+                "Test on an expendable scene; one default Motion Clip is OK.\n"
                 "Blender motion.json is NOT supported by this experimental writer."))
             self.out = QtWidgets.QPlainTextEdit()
             self.out.setReadOnly(True)
@@ -139,8 +139,10 @@ def show():
             answer = QtWidgets.QMessageBox.warning(
                 self, "Experimental P1 clip write",
                 "Confirm project FPS is %s and timeline is at frame 0.\n"
-                "This must be a NEW scene with no existing motion clips.\n"
-                "Writes a new clip to your selected avatar. Continue?" % motion.get("fps"),
+                "Use a disposable TEST project only.\n"
+                "If one Clip exists and target FK channels are empty, P1 uses it.\n"
+                "Otherwise it appends a new Clip after existing motion.\n"
+                "The playhead moves to the peak test pose. Continue?" % motion.get("fps"),
                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
                 QtWidgets.QMessageBox.No)
             if answer != QtWidgets.QMessageBox.Yes:
