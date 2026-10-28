@@ -24,7 +24,7 @@ show()
 ```
 
 1. **Inspect selected skeleton**: check `GetSkinBones`, `GetClipCount`, `AddClip`, `DeleteClip`, and other API capabilities, without modifying the scene.
-2. **Export current-pose skeleton snapshot**: write `skeleton.json`. The reference is **current_snapshot**, not verified bind pose. RLPy matrix translation layout is first probed using a synthetic nonzero RMatrix4 translation; the resulting canonical matrices retain **unverified native units**. No scene changes.
+2. **Export current-pose skeleton snapshot**: write `skeleton.json`. The reference is **current_snapshot**, not verified bind pose. RLPy matrix translation layout is first probed using a synthetic nonzero RMatrix4 translation. The reader uses `GetRow()[index]` rather than `M(row,col)`, since the latter can return an opaque `SwigPyObject`; the resulting canonical matrices retain **unverified native units**. No scene changes.
 3. **Create 48-frame diagnostic FK motion**: choose a skin bone; save `test_fk.json` with an X-channel sine curve, 24 fps. This is an *iClone channel-space* diagnostic, NOT AnyMove capture.
 4. Open an expendable iClone scene with the **same selected avatar**, **zero existing motion clips**, **project 24 FPS**, **timeline at frame 0**. Use **Write FK motion**. The dialog explicitly requires acknowledgment of the scene mutation.
 5. Inspect the result manually. A successful tool return is marked `keys_written_unverified`, not proven correct. Verify that the bone rotates around the intended X channel, moves over 48 frames, and the last frame returns to zero.
@@ -55,7 +55,7 @@ Python 3.8 and 3.11 are targeted. Tests use mock RLPy to cover hierarchy, row-ve
 - https://wiki.reallusion.com/IC_8_Python_API:Dealing_With_Custom_FPS
 - https://wiki.reallusion.com/IC_Python_API:RLPy_RTransform
 
-The attached **OpenPlugin_IC8** SDK reference bundle was reviewed on 2026-10-28. Its legacy binding documents `RMatrix4.M(row,col)`, `MakeIdentity`, `SetTranslate`, `RFps.ToDouble`, `RIClip.SetLength(RTime)` and `RStatus.IsError()`. These declarations are static evidence, not an iClone runtime pass. The source bundle is not copied into this repository.
+The attached **OpenPlugin_IC8** SDK reference bundle was reviewed on 2026-10-28. Its legacy binding documents `RMatrix4.GetRow(row) -> RVector4` and `RVector4.__getitem__(index) -> float`, plus `MakeIdentity`, `SetTranslate`, `RFps.ToDouble`, `RIClip.SetLength(RTime)` and `RStatus.IsError()`. These declarations are static evidence, not an iClone runtime pass. The source bundle is not copied into this repository.
 
 ## Next engineering blockers
 
@@ -100,3 +100,19 @@ does not compensate for different bone lengths. This is a per-bone rotation
 test, **not a finished retarget**. It requires a rig with known correspondence
 and verified per-bone axes. To test arbitrary iClone skeletons, first run the
 synthetic FK channel diagnostic and confirm axes in the actual iClone UI.
+
+## Fix for iClone matrix export `SwigPyObject` failure
+
+Previously the export operation threw:
+
+```
+ContractError: RLPy matrix layout probe failed:
+float() argument must be a string or a number, not 'SwigPyObject'
+```
+
+The Legacy RLPy `RMatrix4.M(row,col)` may select the SWIG `float&`
+overload. This has been replaced in both probe and bone reading paths with
+`RMatrix4.GetRow(row)[col]`, which is documented as returning a Python
+`float`. Re-run with **the latest iClone branch and reload the Python
+plugin/script**. Export a new `skeleton.json`; do not reuse a partial
+earlier file.

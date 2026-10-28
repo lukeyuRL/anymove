@@ -48,8 +48,14 @@ def show():
             path, _ = QtWidgets.QFileDialog.getSaveFileName(
                 self, "Export skeleton snapshot", "skeleton.json", "JSON (*.json)")
             if path:
-                self.report(lambda: {"written": path,
-                                     "bones": len(export_selected(path, RLPy)["bones"])})
+                try:
+                    data = export_selected(path, RLPy)
+                    self.out.appendPlainText("Saved skeleton.json: %s (%d bones)" %
+                                             (path, len(data["bones"])))
+                except Exception as exc:
+                    message = type(exc).__name__ + ": " + str(exc)
+                    self.out.appendPlainText("Export failed: " + message)
+                    QtWidgets.QMessageBox.critical(self, "Skeleton export failed", message)
 
         def synthetic(self):
             path, _ = QtWidgets.QFileDialog.getOpenFileName(

@@ -26,18 +26,29 @@ def selected_object(rlpy):
     return selection[0]
 
 
+def _read_matrix_rows(mat):
+    """Read RMatrix4 through RVector4.__getitem__ (returns float).
+
+    Legacy RMatrix4.M(row, col) has a SWIG float& overload and may return
+    SwigPyObject rather than a Python number. GetRow()->RVector4[i] has the
+    explicitly documented float return type and avoids raw pointers.
+    """
+    return [[float(mat.GetRow(row)[col]) for col in range(4)]
+            for row in range(4)]
+
+
 def probe_matrix_layout(rlpy):
     """Measure whether RMatrix4 stores translation in row 3 or column 3.
 
-    The provided Legacy RLPy wrapper documents M(row,col), MakeIdentity,
-    SetTranslate and RVector3, but does not specify storage convention. Probe
+    The provided Legacy RLPy wrapper documents GetRow()->RVector4[i],
+    MakeIdentity, SetTranslate and RVector3. Probe
     with a non-zero synthetic translation rather than trusting a guess.
     """
     try:
         mat = rlpy.RMatrix4()
         mat.MakeIdentity()
         mat.SetTranslate(rlpy.RVector3(13.0, 17.0, 19.0))
-        vals = [float(mat.M(r, c)) for r in range(4) for c in range(4)]
+        vals = [x for row in _read_matrix_rows(mat) for x in row]
     except Exception as exc:
         raise ContractError("RLPy matrix layout probe failed: %s" % exc)
     expected = (13.0, 17.0, 19.0)
@@ -55,7 +66,8 @@ def _native_matrix(transform, layout):
     if layout not in ("transpose", "direct"):
         raise ContractError("unverified native matrix layout")
     mat = transform.Matrix()
-    return [float(mat.M(c, r) if layout == "transpose" else mat.M(r, c))
+    rows = _read_matrix_rows(mat)
+    return [rows[c][r] if layout == "transpose" else rows[r][c]
             for r in range(4) for c in range(4)]
 
 

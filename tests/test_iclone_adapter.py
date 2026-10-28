@@ -8,7 +8,7 @@ from iclone_adapter.schema import (
     skeleton_hash, validate_skeleton, world_matrices,
 )
 from iclone_adapter.motion_contract import make_sine_test, validate_motion
-from iclone_adapter.rlpy_reader import snapshot
+from iclone_adapter.rlpy_reader import snapshot, probe_matrix_layout
 from iclone_adapter.motion_writer import write_selected
 
 
@@ -77,13 +77,23 @@ class Matrix:
         self.raw = list(raw) if raw is not None else list(IDENTITY)
 
     def M(self, row, col):
-        return self.raw[4*row+col]
+        # Emulates the Legacy SWIG float& overload that failed in iClone 8.
+        return object()
+
+    def GetRow(self, row):
+        # RVector4.__getitem__ returns a Python float.
+        return tuple(self.raw[4*row:4*row+4])
 
     def MakeIdentity(self):
         self.raw = list(IDENTITY)
 
     def SetTranslate(self, vec):
         self.raw[12:15] = list(vec)
+
+
+class ColumnMatrix(Matrix):
+    def SetTranslate(self, vec):
+        self.raw[3], self.raw[7], self.raw[11] = vec
 
 
 class Transform:
@@ -242,6 +252,13 @@ class RLPyMock:
 
 
 class RLPyTests(unittest.TestCase):
+    def test_matrix_layout_probe_both_conventions(self):
+        avatar = Avatar()
+        rlpy = RLPyMock(avatar)
+        self.assertEqual(probe_matrix_layout(rlpy), "transpose")
+        rlpy.RMatrix4 = ColumnMatrix
+        self.assertEqual(probe_matrix_layout(rlpy), "direct")
+
     def test_snapshot_and_writer(self):
         avatar = Avatar()
         r = RLPyMock(avatar)
