@@ -10,7 +10,8 @@ from iclone_adapter.schema import (
 from iclone_adapter.motion_contract import make_sine_test, validate_motion
 from iclone_adapter.rlpy_reader import snapshot, probe_matrix_layout
 from iclone_adapter.motion_writer import write_selected
-from iclone_adapter.bone_registry import build_bone_registry
+from iclone_adapter.bone_registry import build_bone_registry, _lineage
+from iclone_adapter.diagnostics import raw_skeleton_report, save_failure_report
 
 
 def sample_skeleton():
@@ -259,6 +260,27 @@ class RLPyTests(unittest.TestCase):
         self.assertEqual(probe_matrix_layout(rlpy), "transpose")
         rlpy.RMatrix4 = ColumnMatrix
         self.assertEqual(probe_matrix_layout(rlpy), "direct")
+
+    def test_lineage_repeated_swig_wrapper_ids_not_reused(self):
+        class DisposableWrapper:
+            def __init__(self, depth):
+                self.depth = depth
+            def GetName(self):
+                return "node_%s" % self.depth
+            def GetParent(self):
+                return DisposableWrapper(self.depth - 1) if self.depth else None
+        self.assertEqual(len(_lineage(DisposableWrapper(15))), 16)
+
+    def test_raw_diagnostic_can_run_with_duplicate_native_ids(self):
+        avatar = Avatar()
+        rlpy = RLPyMock(avatar)
+        avatar.skeleton.bones[0].GetID = lambda: 0
+        avatar.skeleton.bones[1].GetID = lambda: 0
+        report = raw_skeleton_report(rlpy, failure="fixture")
+        self.assertEqual(report["skin_bone_count"], 2)
+        self.assertEqual(report["bones"][0]["native_scene_id"], "0")
+        self.assertEqual(report["bones"][1]["parent_name"], "Bone1")
+        self.assertEqual(report["failure"], "fixture")
 
     def test_duplicate_scene_ids_preserve_hierarchy(self):
         avatar = Avatar()

@@ -15,18 +15,19 @@ from .schema import ContractError
 
 def _lineage(node):
     """Name chain from scene root to node, including non-skin helper nodes."""
-    names, seen = [], set()
+    names, seen_ids, retained_proxies = [], set(), []
     for _ in range(512):
         if node is None:
             return tuple(reversed(names))
         name = str(node.GetName())
         names.append(name)
-        # Python SWIG proxy references are not guaranteed to have unique GetID.
-        # Detect accidental ancestry loops using the Python proxy identity only.
+        # Retain each proxy: otherwise CPython may reuse an id() of a
+        # freshly returned transient SWIG wrapper, yielding a FALSE cycle.
         proxy_id = id(node)
-        if proxy_id in seen:
+        if proxy_id in seen_ids:
             raise ContractError("cycle while traversing RINode parents")
-        seen.add(proxy_id)
+        seen_ids.add(proxy_id)
+        retained_proxies.append(node)
         node = node.GetParent()
     raise ContractError("bone ancestry exceeds 512 nodes")
 

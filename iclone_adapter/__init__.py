@@ -1,3 +1,3 @@
 """AnyMove iClone integration. Pure-Python contracts remain importable without RLPy."""
 
-__version__ = "0.1.0"
+__version__ = "0.1.4"

@@ -136,3 +136,24 @@ inventing connections. Export now includes `identity_diagnostics`:
 **Note:** Your screenshot also reports `existing_clip_count: 1`. The
 experimental P1 writer still intentionally requires zero existing
 motion clips, so use a separate empty-motion test scene for P1.
+
+## If iClone export still fails (v0.1.4)
+
+The Diagnostics window now shows its loaded build version and module path,
+allowing you to tell an older cached script from the updated one. Export
+failures write a read-only report at `<requested filename>.debug.json` (or
+the system temp folder if that location cannot be written), with:
+
+- The complete Python traceback
+- The module file paths loaded in the iClone process
+- One record per Skin Bone: index, name, raw GetID, parent name/GetID
+- Per-bone SDK errors, captured without aborting the entire report
+
+You can also press **Save raw Skin Bone diagnostics (no export)** to gather
+the same bone facts before retrying export. A CC character with duplicate
+native GetID values is expected to be supported, not treated as invalid.
+
+This revision also fixes a potential false positive in the SWIG
+`GetParent()` lineage cycle check by retaining proxy references while
+walking the chain. It remains essential to preserve the actual error
+message for any new failure; CI mocks cannot perfectly model iClone.

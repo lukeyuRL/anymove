@@ -3,6 +3,8 @@ import json
 
 from .motion_contract import make_sine_test
 from .motion_writer import write_selected
+from .diagnostics import save_failure_report, raw_skeleton_report
+from . import __version__
 from .rlpy_reader import capability_report, export_selected, selected_object
 
 _WINDOW = None
@@ -15,7 +17,7 @@ def show():
     class Panel(QtWidgets.QDialog):
         def __init__(self):
             super(Panel, self).__init__()
-            self.setWindowTitle("AnyMove for iClone - P0/P1 Diagnostics")
+            self.setWindowTitle("AnyMove for iClone - P0/P1 Diagnostics v" + __version__)
             self.resize(620, 420)
             layout = QtWidgets.QVBoxLayout(self)
             layout.addWidget(QtWidgets.QLabel(
@@ -28,6 +30,7 @@ def show():
             for label, callback in [
                 ("Inspect selected skeleton", self.inspect),
                 ("Export current-pose skeleton snapshot", self.export),
+                ("Save raw Skin Bone diagnostics (no export)", self.debug_bones),
                 ("Create 48-frame diagnostic FK motion", self.synthetic),
                 ("Write FK motion to selected avatar (modifies scene)", self.import_motion),
             ]:
@@ -42,7 +45,11 @@ def show():
                 self.out.appendPlainText(type(exc).__name__ + ": " + str(exc))
 
         def inspect(self):
-            self.report(lambda: capability_report(selected_object(RLPy)))
+            self.report(lambda: {
+                "build": __version__,
+                "panel_module": __file__,
+                "capability": capability_report(selected_object(RLPy))
+            })
 
         def export(self):
             path, _ = QtWidgets.QFileDialog.getSaveFileName(
@@ -54,8 +61,28 @@ def show():
                                              (path, len(data["bones"])))
                 except Exception as exc:
                     message = type(exc).__name__ + ": " + str(exc)
-                    self.out.appendPlainText("Export failed: " + message)
-                    QtWidgets.QMessageBox.critical(self, "Skeleton export failed", message)
+                    try:
+                        debug_path = save_failure_report(path, RLPy, exc)
+                    except Exception as debug_exc:
+                        debug_path = "Debug report also failed: " + repr(debug_exc)
+                    self.out.appendPlainText("Export failed: " + message +
+                                             "\\nDiagnostic report: " + debug_path)
+                    QtWidgets.QMessageBox.critical(
+                        self, "Skeleton export failed",
+                        message + "\\n\\nDiagnostic report: " + debug_path)
+
+        def debug_bones(self):
+            path, _ = QtWidgets.QFileDialog.getSaveFileName(
+                self, "Save raw skeleton diagnostics", "skeleton_debug.json", "JSON (*.json)")
+            if path:
+                self.report(lambda: self._save_debug(path))
+
+        def _save_debug(self, path):
+            report = raw_skeleton_report(RLPy)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(report, f, ensure_ascii=False, indent=2)
+            return {"written": path, "skin_bones": report.get("skin_bone_count"),
+                    "issues": report.get("issues", [])}
 
         def synthetic(self):
             path, _ = QtWidgets.QFileDialog.getOpenFileName(
