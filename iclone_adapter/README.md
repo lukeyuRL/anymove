@@ -213,3 +213,12 @@ An unchanged WorldTransform despite FK keys is a separate FK/IK
 evaluation issue, not a Clip count error.
 
 Reference: https://wiki.reallusion.com/IC_Python_API:Animating_A_Character
+
+## P2 same-rig Dragon Roar preview (v0.1.8)
+
+See [DRAGON_PREVIEW.md](DRAGON_PREVIEW.md) for a **test-only** command
+that converts the Solver's original `motion.json` into an explicit
+uncalibrated iClone FK preview after validating the original 42-bone rest
+alignment. No PyTorch is needed for this conversion. The generated JSON
+retains a warning; root motion and automatic FK-axis calibration remain
+unsupported. Never pass raw AnyMove `motion.json` to the P1 Motion Writer.
