@@ -168,6 +168,9 @@ def show():
                     "result":report["result"],
                     "meaningful_motion_bone_count":report["meaningful_motion_bone_count"],
                     "consistent_bone_count":report["consistent_bone_count"],
+                    "axis_testable_bone_count":report["axis_testable_bone_count"],
+                    "static_node_bone_count":report["static_node_bone_count"],
+                    "validity_warning":report["validity_warning"],
                     "worst_bones":report["by_bone"][:10],
                 },ensure_ascii=False,indent=2))
             except Exception as exc:

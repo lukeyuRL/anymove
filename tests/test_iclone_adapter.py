@@ -495,8 +495,12 @@ class RLPyTests(unittest.TestCase):
         keys_before=avatar.skeleton.GetClip(0).layers["Bone2"].block.ctrls[
             "Rotation/RotationX"].GetKeyCount()
         report=validate_live_fk_pose(rest,motion,rlpy=rlpy)
-        self.assertEqual(report["result"],"fk_axis_or_evaluation_mismatch")
-        self.assertIn("Bone2",report["over_10deg_bones"])
+        self.assertEqual(report["result"],"bone_transform_static_axis_unverifiable")
+        self.assertIn("Bone2",report["static_node_bones"])
+        self.assertEqual(report["static_node_bone_count"],1)
+        self.assertEqual(report["axis_testable_bone_count"],0)
+        self.assertIsNone(report["consistent_bone_count"])
+        self.assertEqual(report["over_10deg_bones"],[])
         self.assertEqual(rlpy.RGlobal.GetTime(),time_before)
         self.assertEqual(avatar.skeleton.GetClipCount(),1)
         self.assertEqual(avatar.skeleton.GetClip(0).layers["Bone2"].block.ctrls[
@@ -525,6 +529,7 @@ class RLPyTests(unittest.TestCase):
         report=validate_live_fk_pose(rest,motion,rlpy=rlpy)
         self.assertEqual(report["result"],"consistent_in_sampled_fk_axes")
         self.assertEqual(report["consistent_bone_count"],1)
+        self.assertGreater(report["by_bone"][0]["observed_temporal_rotation_deg"],20.)
         self.assertLess(report["by_bone"][0]["max_post_rest_error_deg"],0.01)
         self.assertGreater(report["by_bone"][0]["max_requested_angle_deg"],20.)
 

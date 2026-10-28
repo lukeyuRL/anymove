@@ -177,6 +177,10 @@ def validate_live_fk_pose(reference, motion, clip_index=None, rlpy=None):
     original_time=rlpy.RGlobal.GetTime()
     sample_data={}
     bone_errors={key:[] for key in motion["tracks"]}
+    # Live RINode transforms may expose a static Skin Bone node while iClone's
+    # animated Motion Bone drives the visible mesh. Never assign a FK axis
+    # accuracy verdict until temporal bone pose changes are observed.
+    live_relative_rotations={key:[] for key in motion["tracks"]}
     bone_issues={}
     try:
         for frame in frames:
@@ -217,6 +221,9 @@ def validate_live_fk_pose(reference, motion, clip_index=None, rlpy=None):
                     local_err["pre_rest_error_deg"])
                 err["requested_delta_deg"]=local_err["requested_delta_deg"]
                 err["name"]=names[key]
+                live_relative_rotations[key].append(_matmul(
+                    _transpose(_rotation(current_parent)),
+                    _rotation(current_child)))
                 item["bones"][key]=err
                 bone_errors[key].append(err)
             sample_data[frame]=item
@@ -234,6 +241,9 @@ def validate_live_fk_pose(reference, motion, clip_index=None, rlpy=None):
         pre=[e["pre_rest_error_deg"] for e in errors]
         requested=[e["requested_delta_deg"] for e in errors]
         observed=[e["actual_delta_deg"] for e in errors]
+        orientations=live_relative_rotations[key]
+        temporal_deg=max((_angle_deg(orientations[0], mat)
+                          for mat in orientations[1:]), default=0.)
         # Less than 1 degree of intended movement does not validate axes.
         meaningful=max(requested)>=1.0
         results.append({
@@ -242,17 +252,29 @@ def validate_live_fk_pose(reference, motion, clip_index=None, rlpy=None):
             "meaningful_motion":meaningful,
             "max_requested_angle_deg":max(requested),
             "max_observed_angle_deg":max(observed),
+            "observed_temporal_rotation_deg":temporal_deg,
+            "bone_transform_dynamic":temporal_deg>0.05,
+            "pose_error_usable":temporal_deg>0.05,
             "mean_post_rest_error_deg":sum(post)/len(post),
             "max_post_rest_error_deg":max(post),
             "mean_pre_rest_error_deg":sum(pre)/len(pre),
             "max_pre_rest_error_deg":max(pre),
         })
     usable=[r for r in results if r["meaningful_motion"]]
-    unmatched=[r for r in usable if r["max_post_rest_error_deg"]>10.]
-    coherent=[r for r in usable if r["max_post_rest_error_deg"]<=5.]
-    verdict=("insufficient_moving_bones" if not usable else
-             "consistent_in_sampled_fk_axes" if len(coherent)==len(usable) else
-             "fk_axis_or_evaluation_mismatch")
+    dynamic=[r for r in usable if r["bone_transform_dynamic"]]
+    static=[r for r in usable if not r["bone_transform_dynamic"]]
+    unmatched=[r for r in dynamic if r["max_post_rest_error_deg"]>10.]
+    coherent=[r for r in dynamic if r["max_post_rest_error_deg"]<=5.]
+    if not usable:
+        verdict="insufficient_source_motion"
+    elif not dynamic:
+        verdict="bone_transform_static_axis_unverifiable"
+    elif static:
+        verdict="partial_bone_transform_static_axis_unverifiable"
+    else:
+        verdict=("consistent_in_sampled_fk_axes"
+                 if len(coherent)==len(dynamic)
+                 else "fk_axis_or_evaluation_mismatch")
     return {
         "result":verdict,
         "clip_index":clip_index,
@@ -260,11 +282,21 @@ def validate_live_fk_pose(reference, motion, clip_index=None, rlpy=None):
         "sampled_frames":frames,
         "sampled_bone_count":len(results),
         "meaningful_motion_bone_count":len(usable),
-        "consistent_bone_count":len(coherent),
+        "consistent_bone_count":(len(coherent) if not static else None),
+        "axis_testable_bone_count":len(dynamic),
+        "static_node_bone_count":len(static),
+        "static_node_bones":[r["name"] for r in static],
         "over_10deg_bones":[r["name"] for r in unmatched],
         "by_bone":sorted(results,key=lambda r:r["max_post_rest_error_deg"],reverse=True),
         "sample_details":list(sample_data.values()),
         "issues":bone_issues,
+        "validity_warning": (
+            "RINode LocalTransform/WorldTransform did not change across "
+            "sampled scene times for some or all expected-to-move Skin Bones. "
+            "Static offsets from the snapshot are NOT temporal animation. "
+            "Do not classify Euler/axis quality from those node matrices. "
+            "Inspect SDK Motion Bones and their FK controller tracks."
+            if static else None),
         "threshold_note":"<=5 deg max from parent-relative evaluated WorldTransform is a strict engineering diagnostic threshold, NOT a certified motion-quality standard.",
         "measurement":"evaluated parent-relative WorldTransform; LocalTransform also sampled for diagnosis",
         "limitations":[
