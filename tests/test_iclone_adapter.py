@@ -207,6 +207,9 @@ class Skeleton:
     def GetClipCount(self):
         return len(self.clips)
 
+    def GetClip(self, index):
+        return self.clips[index]
+
     def AddClip(self, time):
         clip = Clip()
         self.clips.append(clip)
