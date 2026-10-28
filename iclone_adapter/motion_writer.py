@@ -34,7 +34,8 @@ def preflight(obj, motion, rlpy):
     # Normal iClone characters can have one default Motion Clip.
     # Reuse one unkeyed clip, or append after the current clips.
     entries, _ = build_bone_registry(skel.GetSkinBones() or [])
-    nodes = {entry["id"]: entry["node"] for entry in entries}
+    nodes = {entry["id"]: entry["node"] for entry in entries
+             if entry["id"] in motion["tracks"]}
     names = {entry["id"]: entry["name"] for entry in entries}
     for bone_id in motion["tracks"]:
         if bone_id not in nodes:
@@ -220,7 +221,7 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
         clip, channels, strategy, created, previous_count = _choose_clip(
             skel, nodes, names, project_fps, rlpy)
         length = rlpy.IndexedFrameTime(motion["frame_count"], project_fps)
-        old_length = clip.GetLength()
+        old_length = clip.GetLength() if not created else None
         if created or max(_ticks(old_length), _ticks(clip.GetClipLength())) < _ticks(length):
             _require_sdk_ok(clip.SetLength(length), "SetLength")
             length_extended = True
