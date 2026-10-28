@@ -2,7 +2,9 @@
 import math
 import unittest
 
-from iclone_adapter.fk_pose_validator import compare_fk_local_pose, _sample_frames, _from_quat
+from iclone_adapter.fk_pose_validator import (
+    compare_fk_local_pose, compare_fk_world_relative, _sample_frames, _from_quat
+)
 from iclone_adapter.anymove_bridge import from_euler_xyz
 
 IDENT=[1.,0.,0.,0., 0.,1.,0.,0., 0.,0.,1.,0., 0.,0.,0.,1.]
@@ -50,6 +52,18 @@ class PoseValidatorTests(unittest.TestCase):
         good=compare_fk_local_pose(a,b,move)
         self.assertLess(good["post_rest_error_deg"],1e-4)
         self.assertGreater(good["pre_rest_error_deg"],1.)
+
+    def test_world_relative_removes_animated_parent_rotation(self):
+        parent_rest=_from_quat(from_euler_xyz([.2,-.1,.1]))
+        child_rest=_from_quat(from_euler_xyz([.4,.2,-.3]))
+        expected_delta=_from_quat(from_euler_xyz([.25,.12,-.13]))
+        parent_animated=mul(parent_rest,_from_quat(from_euler_xyz([.7,0.,0.])))
+        relative_rest=mul(transpose(parent_rest),child_rest)
+        child_animated=mul(parent_animated,mul(relative_rest,expected_delta))
+        obs=compare_fk_world_relative(
+            flat(parent_rest),flat(child_rest),
+            flat(parent_animated),flat(child_animated),[.25,.12,-.13])
+        self.assertLess(obs["post_rest_error_deg"],1e-4)
 
     def test_sampling_includes_final_and_peak(self):
         m={"frame_count":100,"tracks":{

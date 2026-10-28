@@ -93,6 +93,29 @@ def compare_fk_local_pose(rest_matrix, current_matrix, source_xyz):
             "requested_delta_deg": _angle_deg([[1.,0.,0.],[0.,1.,0.],[0.,0.,1.]], desired)}
 
 
+
+def compare_fk_world_relative(rest_parent, rest_child,
+                              current_parent, current_child, source_xyz):
+    """Strip parent rotation from both scene-world rotations to get Bone delta.
+
+    WorldTransform usually reflects evaluated iClone animation and may be more
+    reliable than RINode.LocalTransform for some custom/imported Bone types.
+    Uniform FBX scene scale is removed by orthonormalizing 3x3 matrices.
+    """
+    p0 = _rotation(rest_parent)
+    b0 = _rotation(rest_child)
+    p1 = _rotation(current_parent)
+    b1 = _rotation(current_child)
+    r0 = _matmul(_transpose(p0), b0)
+    r1 = _matmul(_transpose(p1), b1)
+    observed = _matmul(_transpose(r0),r1)
+    desired = _from_quat(from_euler_xyz(source_xyz))
+    pre_observed = _matmul(r1,_transpose(r0))
+    return {"post_rest_error_deg": _angle_deg(observed,desired),
+            "pre_rest_error_deg": _angle_deg(pre_observed,desired),
+            "actual_delta_deg": _angle_deg(r0,r1)}
+
+
 def _ticks(t):
     return int(t) if isinstance(t,int) else int(t.ToInt())
 
@@ -171,9 +194,28 @@ def validate_live_fk_pose(reference, motion, clip_index=None, rlpy=None):
                 update=getattr(node,"Update",None)
                 if callable(update):
                     update()
-                actual=_native_matrix(node.LocalTransform(),layout)
-                err=compare_fk_local_pose(ref[key]["snapshot_local_matrix"],
-                                          actual,track[frame])
+                local_matrix=_native_matrix(node.LocalTransform(),layout)
+                local_err=compare_fk_local_pose(ref[key]["snapshot_local_matrix"],
+                                               local_matrix,track[frame])
+                parent_id=ref[key].get("parent_id")
+                if parent_id not in nodes or parent_id not in ref:
+                    raise ContractError("missing parent for relative WorldTransform: "+
+                                        str(parent_id))
+                parent=nodes[parent_id]
+                parent_update=getattr(parent,"Update",None)
+                if callable(parent_update):
+                    parent_update()
+                current_parent=_native_matrix(parent.WorldTransform(),layout)
+                current_child=_native_matrix(node.WorldTransform(),layout)
+                err=compare_fk_world_relative(
+                    ref[parent_id]["snapshot_world_matrix"],
+                    ref[key]["snapshot_world_matrix"],
+                    current_parent,current_child,track[frame])
+                err["local_transform_post_rest_error_deg"]=(
+                    local_err["post_rest_error_deg"])
+                err["local_transform_pre_rest_error_deg"]=(
+                    local_err["pre_rest_error_deg"])
+                err["requested_delta_deg"]=local_err["requested_delta_deg"]
                 err["name"]=names[key]
                 item["bones"][key]=err
                 bone_errors[key].append(err)
@@ -223,7 +265,8 @@ def validate_live_fk_pose(reference, motion, clip_index=None, rlpy=None):
         "by_bone":sorted(results,key=lambda r:r["max_post_rest_error_deg"],reverse=True),
         "sample_details":list(sample_data.values()),
         "issues":bone_issues,
-        "threshold_note":"<=5 deg max is a strict engineering diagnostic threshold, NOT a certified motion-quality standard.",
+        "threshold_note":"<=5 deg max from parent-relative evaluated WorldTransform is a strict engineering diagnostic threshold, NOT a certified motion-quality standard.",
+        "measurement":"evaluated parent-relative WorldTransform; LocalTransform also sampled for diagnosis",
         "limitations":[
             "Only non-root FK bones present in the selected preview are measured",
             "Pelvis root quaternion/translation from AnyMove are intentionally omitted",
