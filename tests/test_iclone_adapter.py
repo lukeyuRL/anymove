@@ -10,6 +10,7 @@ from iclone_adapter.schema import (
 from iclone_adapter.motion_contract import make_sine_test, validate_motion
 from iclone_adapter.rlpy_reader import snapshot, probe_matrix_layout
 from iclone_adapter.motion_writer import write_selected
+from iclone_adapter.p1_inspector import inspect_selected_animation, read_float_value
 from iclone_adapter.bone_registry import build_bone_registry, _lineage
 from iclone_adapter.diagnostics import raw_skeleton_report, save_failure_report
 
@@ -126,6 +127,9 @@ class Bone:
     def WorldTransform(self):
         return self.LocalTransform()
 
+    def Update(self):
+        return None
+
 
 class Ctrl:
     def __init__(self):
@@ -134,6 +138,13 @@ class Ctrl:
     def SetValue(self, time, val):
         self.values.append((time, val))
         return True
+
+    def GetKeyCount(self):
+        return len(self.values)
+
+    def GetValue(self, time, output):
+        matches = [value for stamp, value in self.values if stamp == time]
+        return (True, matches[-1] if matches else 0.0)
 
 
 class DataBlock:
@@ -161,6 +172,18 @@ class Clip:
     def SetLength(self, length):
         self.length = length
         return True
+
+    def GetLength(self):
+        return self.length or 0
+
+    def GetClipLength(self):
+        return self.length or 0
+
+    def GetLastKeyTime(self):
+        return max(0, (self.length or 0) - 1)
+
+    def GetStartOffset(self):
+        return 0
 
     def GetControl(self, name, bone):
         if name != "Layer":
@@ -208,6 +231,9 @@ class Avatar:
     def GetSkeletonComponent(self):
         return self.skeleton
 
+    def Update(self):
+        return None
+
 
 class Scene:
     def __init__(self, avatar):
@@ -227,7 +253,11 @@ class Global:
         self.fps = Fps()
 
     def GetTime(self):
-        return 0
+        return getattr(self, "time", 0)
+
+    def SetTime(self, time):
+        self.time = time
+        return True
 
     def GetFps(self):
         return self.fps
@@ -366,12 +396,52 @@ class RLPyTests(unittest.TestCase):
             write_selected(m, rlpy=r)
         result = write_selected(m, rlpy=r, fps_confirmed=True)
         self.assertEqual(result["frame_count"], 6)
+        self.assertEqual(result["status"], "fk_keys_verified_pose_unchanged")
+        self.assertEqual(result["target_bone_name"], "Bone2")
+        self.assertTrue(result["fk_readback"][bone["id"]]["xyz_key_counts"][0] >= 2)
+        self.assertEqual(r.RGlobal.GetTime(), result["peak_frame"])
         self.assertEqual(avatar.skeleton.clips[0].length, 6)
         self.assertEqual(len(avatar.skeleton.clips), 1)
         self.assertEqual(len(avatar.skeleton.clips[0].layers["Bone2"].block.ctrls[
             "Rotation/RotationX"].values), 6)
         with self.assertRaises(ContractError):
             write_selected(m, rlpy=r, fps_confirmed=True)
+
+    def test_existing_clip_inspector_reports_key_counts(self):
+        avatar = Avatar()
+        rlpy = RLPyMock(avatar)
+        sk = snapshot(avatar, rlpy=rlpy)
+        b = next(entry["id"] for entry in sk["bones"]
+                 if entry["name"] == "Bone2")
+        motion = make_sine_test(sk, b, frames=6)
+        result = write_selected(motion, rlpy=rlpy, fps_confirmed=True)
+        report = inspect_selected_animation(rlpy)
+        self.assertEqual(report["clip_count"], 1)
+        self.assertTrue(report["clips"][0]["fk_keys_present"])
+        self.assertEqual(report["clips"][0]["total_fk_keys"], 18)
+        self.assertEqual(report["clips"][0]["keyed_bones"], 1)
+
+    def test_nonconstant_track_without_keys_rolls_back(self):
+        avatar = Avatar()
+        rlpy = RLPyMock(avatar)
+        sk = snapshot(avatar, rlpy=rlpy)
+        b = next(entry["id"] for entry in sk["bones"]
+                 if entry["name"] == "Bone2")
+        motion = make_sine_test(sk, b, frames=6)
+        orig_add = avatar.skeleton.AddClip
+        def add_missing_keys(t):
+            clip = orig_add(t)
+            class NotStored(Ctrl):
+                def GetKeyCount(self):
+                    return 0
+            bone_ctrl = clip.GetControl("Layer", avatar.skeleton.bones[1])
+            bone_ctrl.block.ctrls["Rotation/RotationX"] = NotStored()
+            return clip
+        avatar.skeleton.AddClip = add_missing_keys
+        with self.assertRaises(ContractError):
+            write_selected(motion, rlpy=rlpy, fps_confirmed=True)
+        self.assertEqual(avatar.skeleton.GetClipCount(), 0)
+        self.assertTrue(avatar.skeleton.rollback)
 
     def test_failed_clip_preflight_rolls_back(self):
         avatar = Avatar()
