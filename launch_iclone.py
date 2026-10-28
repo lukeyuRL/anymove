@@ -1,4 +1,4 @@
-"""Launch AnyMove -> iClone directly from iClone 8 Script > Load Python.
+r"""Launch AnyMove -> iClone directly from iClone 8 Script > Load Python.
 
 Choose F:\anymove\launch_iclone.py. Nothing is written until the user
 explicitly approves the in-app Import action. This is for the exact Dragon

@@ -139,8 +139,7 @@ def execute_direct_import(prepared,output_parent,rlpy=None,
         raise ContractError("invalid prepared Dragon import plan")
     if type(save_project) is not bool:
         raise ContractError("save_project must be bool")
-    obj,fps=_selected_and_fps(rlpy,prepared["frames"] and
-                             prepared["fk"]["fps"])
+    obj,fps=_selected_and_fps(rlpy,prepared["fk"]["fps"])
     # Read-only recheck after modal UI interaction: reject scene changes.
     guard=preflight_clean_dragon(
         obj,_get_skeleton(obj),prepared["fk"],rlpy)
