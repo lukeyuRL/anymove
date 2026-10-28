@@ -71,6 +71,160 @@ def check_unposed_pose(baseline,live,max_angle_deg=.5,max_distance=.25):
 _ALL_CHANNELS=tuple(kind+"/"+kind+axis for kind in ("Rotation","Position","Scale") for axis in "XYZ")
 
 
+def _key_time(control):
+    """Return RControl.MaxControlTime ticks, or None if unavailable."""
+    get_last = getattr(control, "MaxControlTime", None)
+    return _ticks(get_last()) if callable(get_last) else None
+
+
+def _xyz(v):
+    values = (float(v.x), float(v.y), float(v.z))
+    if not all(math.isfinite(x) for x in values):
+        raise ContractError("guard: nonfinite actor Transform xyz")
+    return values
+
+
+def _xyzw(v):
+    values = (float(v.x), float(v.y), float(v.z), float(v.w))
+    if not all(math.isfinite(x) for x in values):
+        raise ContractError("guard: nonfinite actor Transform quaternion")
+    size = math.sqrt(sum(x*x for x in values))
+    if size < 1e-8:
+        raise ContractError("guard: invalid actor Transform quaternion")
+    return tuple(x/size for x in values)
+
+
+def _actor_transform_values(transform):
+    """SDK RTransform components; absolute quaternion dot handles q / -q."""
+    return {
+        "position":_xyz(transform.T()),
+        "rotation_xyzw":_xyzw(transform.R()),
+        "scale":_xyz(transform.S()),
+    }
+
+
+def _actor_transform_distance(a,b):
+    distance = math.sqrt(sum((x-y)**2 for x,y in zip(a["position"],b["position"])))
+    scale_error = max(abs(x-y) for x,y in zip(a["scale"],b["scale"]))
+    rotation_dot=abs(sum(x*y for x,y in zip(a["rotation_xyzw"],b["rotation_xyzw"])))
+    angle=math.degrees(2*math.acos(max(-1.,min(1.,rotation_dot))))
+    return distance,scale_error,angle
+
+
+def _read_actor_transform_keys(control,count,rlpy):
+    """Use documented RTransformControl.GetTransformKeyAt(i, out_key).
+
+    Only needed when there is >1 actor Transform key. For a single key
+    at tick 0, MaxControlTime already proves no time-varying actor motion.
+    """
+    read = getattr(control,"GetTransformKeyAt",None)
+    make_key=getattr(rlpy,"RTransformKey",None)
+    if not callable(read) or not callable(make_key):
+        raise ContractError(
+            "guard: multiple actor Transform keys; SDK key readback is "
+            "unavailable. Use a fresh project.")
+    result=[]
+    for i in range(count):
+        key=make_key()
+        status=read(i,key)
+        if isinstance(status,(tuple,list)):
+            if len(status)>1 and callable(getattr(status[1],"GetTransform",None)):
+                key=status[1]
+            status=status[0] if status else None
+        failed=getattr(status,"IsError",None)
+        if (callable(failed) and failed()) or status is False:
+            raise ContractError("guard: could not read Actor Transform key %d"%i)
+        result.append((_ticks(key.GetTime()),_actor_transform_values(key.GetTransform())))
+    result.sort(key=lambda pair:pair[0])
+    return result
+
+
+def inspect_actor_transform(obj,rlpy):
+    """Allow static actor Transform keys; reject actual motion / ambiguous API.
+
+    Imported FBX normally may have a single initialization Transform key.
+    One key at tick 0 is a static pose, not an animated actor. Any extra
+    actor keys MUST have readable, identical T/R/S values. Independently
+    keyed actor position/rotation/scale channels at nonzero time are
+    conservatively refused, since they may override the group controller.
+    """
+    fn=getattr(obj,"GetControl",None)
+    if not callable(fn):
+        return {"status":"actor_transform_api_absent","key_count":None}
+    control=fn("Transform")
+    if control is None:
+        return {"status":"actor_transform_control_absent","key_count":0}
+    count=int(control.GetKeyCount())
+    if count<0:
+        raise ContractError("guard: invalid actor Transform key count")
+    last=_key_time(control) if count else None
+    result={"key_count":count,"last_key_ticks":last,"status":"no_transform_keys",
+            "baseline_key_preserved":bool(count)}
+    if count==1:
+        if last is None:
+            # A single key cannot be verified without its time.
+            entries=_read_actor_transform_keys(control,count,rlpy)
+            last=entries[0][0]
+            result["last_key_ticks"]=last
+        if last!=0:
+            raise ContractError(
+                "guard: lone actor Transform key is not at Frame 0 (%d ticks); "
+                "cannot prove unchanged initial actor Pose."%last)
+        result["status"]="single_static_frame0_transform_key"
+    elif count>1:
+        entries=_read_actor_transform_keys(control,count,rlpy)
+        if entries[0][0]!=0:
+            raise ContractError(
+                "guard: actor Transform keys do not start at Frame 0")
+        reference=entries[0][1]
+        for ticks,actual in entries[1:]:
+            pos,scale,angle=_actor_transform_distance(reference,actual)
+            if pos>1e-4 or scale>1e-5 or angle>0.02:
+                raise ContractError(
+                    "guard: actor Transform is ANIMATED: key at %d ticks "
+                    "differs (position %.6g, scale %.6g, angle %.5f deg)."%
+                    (ticks,pos,scale,angle))
+        result["status"]="multiple_constant_transform_keys"
+        result["checked_key_count"]=len(entries)
+
+    # Object Transform DataBlock sometimes holds independently keyed
+    # per-axis controls. Never discard their motion merely because the
+    # parent Transform key count says 1.
+    get_block=getattr(control,"GetDataBlock",None)
+    if callable(get_block):
+        block=get_block()
+        get_axis=getattr(block,"GetControl",None)
+        if callable(get_axis):
+            nonzero=[]
+            for path in _ALL_CHANNELS:
+                axis=get_axis(path)
+                if axis is None:
+                    continue
+                keys=int(axis.GetKeyCount())
+                if keys<0:
+                    raise ContractError("guard: invalid actor channel count on "+path)
+                if keys:
+                    last_axis=_key_time(axis)
+                    if last_axis is None:
+                        raise ContractError(
+                            "guard: actor Transform %s keys cannot be time-audited"%path)
+                    if last_axis!=0:
+                        nonzero.append((path,keys,last_axis))
+            if nonzero:
+                name,keys,ticks=nonzero[0]
+                raise ContractError(
+                    "guard: actor Transform channel may animate: %s has %d "
+                    "key(s), last at %d ticks. Use a fresh project."%
+                    (name,keys,ticks))
+            result["separate_axis_channels"]="none_after_frame0"
+        else:
+            result["separate_axis_channels"]="not_exposed"
+    else:
+        result["separate_axis_channels"]="not_exposed"
+    return result
+
+
+
 def check_clean_clip(skel,obj,rlpy):
     count=int(skel.GetClipCount())
     if count>1 or count<0:
@@ -104,13 +258,10 @@ def check_clean_clip(skel,obj,rlpy):
                 keys=int(axis.GetKeyCount())
                 if keys!=0:
                     raise ContractError("guard: existing FK/Position/Scale keys on %s %s: %d. Use a NEW Dragon project."%(entry["name"],path,keys))
-    get_control=getattr(obj,"GetControl",None)
-    if callable(get_control):
-        control=get_control("Transform")
-        if control is not None and int(control.GetKeyCount())>0:
-            raise ContractError("guard: actor already has Transform keys")
+    actor_transform=inspect_actor_transform(obj,rlpy)
     return {"existing_clip_count":count,"bones_inspected":inspected,
             "exposed_motion_empty":True,
+            "actor_transform":actor_transform,
             "warning":"Unexposed IK constraints or imported base motion cannot be certified."}
 
 

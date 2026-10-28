@@ -260,3 +260,24 @@ to check if your Dragon exposes `Position/PositionXYZ` before experimenting.
 Root rotation-only allows Blender `--no-root-translation --save-blend`
 for a matched reference; the original `--no-root-motion` reference
 continues to be correct when no iClone root motion is written.
+
+## v0.3.2 iClone actor Transform default key false-positive correction
+
+A freshly imported Dragon was blocked in v0.3.1 by
+`guard: actor already has Transform keys` because the guard incorrectly
+assumed *any* Transform key means animation. This is not reliable in iClone:
+the imported actor can have an initial Transform key without temporal motion.
+
+The Writer now uses the **documented iClone RControl APIs**:
+`GetKeyCount`, `MaxControlTime`, and (if there are multiple keys)
+`RTransformControl.GetTransformKeyAt`. One frame-zero key is allowed,
+preserved and reported as `single_static_frame0_transform_key`.
+Multiple keys are allowed only if all audited XYZ position, quaternion
+orientation (accounting for q/-q), and scale remain effectively identical;
+unknown/unreadable multiple keys are rejected. Actor Transform DataBlock
+Position/Rotation/Scale channels are checked for additional keys beyond
+frame zero when exposed. No preexisting Key is removed or reset.
+
+The 57-Bone unposed reference check and all-bone FK/Position/Scale Clip
+preflight remain enabled; never reuse an old animated Dragon project.
+This is a narrow compatibility fix, not a relaxation of pose safety.
