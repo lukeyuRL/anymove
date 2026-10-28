@@ -11,6 +11,7 @@ from iclone_adapter.motion_contract import make_sine_test, validate_motion
 from iclone_adapter.rlpy_reader import snapshot, probe_matrix_layout
 from iclone_adapter.motion_writer import write_selected
 from iclone_adapter.p1_inspector import inspect_selected_animation, read_float_value
+from iclone_adapter.fk_pose_validator import validate_live_fk_pose
 from iclone_adapter.bone_registry import build_bone_registry, _lineage
 from iclone_adapter.diagnostics import raw_skeleton_report, save_failure_report
 
@@ -481,6 +482,51 @@ class RLPyTests(unittest.TestCase):
         self.assertEqual(avatar.skeleton.GetClipCount(), 1)
         self.assertEqual(ctrl.GetKeyCount(), 0)
         self.assertEqual(clip.GetLength(), 0)
+
+    def test_preview_validator_detects_static_bone_evaluation(self):
+        avatar=Avatar()
+        rlpy=RLPyMock(avatar)
+        rest=snapshot(avatar,rlpy=rlpy)
+        bone=next(b["id"] for b in rest["bones"] if b["name"]=="Bone2")
+        motion=make_sine_test(rest,bone,frames=12,amplitude_deg=30.)
+        motion["calibration_status"]="unverified_identity_same_rig_preview"
+        written=write_selected(motion,rlpy=rlpy,fps_confirmed=True)
+        time_before=rlpy.RGlobal.GetTime()
+        keys_before=avatar.skeleton.GetClip(0).layers["Bone2"].block.ctrls[
+            "Rotation/RotationX"].GetKeyCount()
+        report=validate_live_fk_pose(rest,motion,rlpy=rlpy)
+        self.assertEqual(report["result"],"fk_axis_or_evaluation_mismatch")
+        self.assertIn("Bone2",report["over_10deg_bones"])
+        self.assertEqual(rlpy.RGlobal.GetTime(),time_before)
+        self.assertEqual(avatar.skeleton.GetClipCount(),1)
+        self.assertEqual(avatar.skeleton.GetClip(0).layers["Bone2"].block.ctrls[
+            "Rotation/RotationX"].GetKeyCount(),keys_before)
+
+    def test_preview_validator_accepts_matching_local_and_world_poses(self):
+        avatar=Avatar()
+        rlpy=RLPyMock(avatar)
+        rest=snapshot(avatar,rlpy=rlpy)
+        child=avatar.skeleton.bones[1]
+        bone=next(b["id"] for b in rest["bones"] if b["name"]=="Bone2")
+        motion=make_sine_test(rest,bone,frames=12,amplitude_deg=30.)
+        motion["calibration_status"]="unverified_identity_same_rig_preview"
+        written=write_selected(motion,rlpy=rlpy,fps_confirmed=True)
+        import math
+        def animated_transform():
+            index=min(int(rlpy.RGlobal.GetTime()),motion["frame_count"]-1)
+            x=motion["tracks"][bone][index][0]
+            c,si=math.cos(x),math.sin(x)
+            # RLPy mock storage uses row vectors; canonical rotation transposes it.
+            raw=[1,0,0,0, 0,c,si,0, 0,-si,c,0,
+                 child.key,0,0,1]
+            return Transform(raw)
+        child.LocalTransform=animated_transform
+        child.WorldTransform=animated_transform
+        report=validate_live_fk_pose(rest,motion,rlpy=rlpy)
+        self.assertEqual(report["result"],"consistent_in_sampled_fk_axes")
+        self.assertEqual(report["consistent_bone_count"],1)
+        self.assertLess(report["by_bone"][0]["max_post_rest_error_deg"],0.01)
+        self.assertGreater(report["by_bone"][0]["max_requested_angle_deg"],20.)
 
     def test_existing_clip_inspector_reports_key_counts(self):
         avatar = Avatar()
