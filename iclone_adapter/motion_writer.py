@@ -10,6 +10,7 @@ from .rlpy_reader import _get_skeleton, selected_object, snapshot, _read_matrix_
 from .bone_registry import build_bone_registry
 from .p1_inspector import read_float_value
 from .schema import ContractError
+from .scene_guard import preflight_clean_dragon
 
 
 def _require_sdk_ok(status, operation):
@@ -120,7 +121,7 @@ def _channels_for_clip(clip, nodes, names):
     return channels
 
 
-def _choose_clip(skel, nodes, names, fps, rlpy):
+def _choose_clip(skel, nodes, names, fps, rlpy, strict_clean=False):
     """Prefer a default unkeyed clip; otherwise create non-overlapping motion."""
     count = int(skel.GetClipCount())
     zero = rlpy.IndexedFrameTime(0, fps)
@@ -138,6 +139,8 @@ def _choose_clip(skel, nodes, names, fps, rlpy):
                     return existing, ctrls, "reuse_default", False, count
         except (AttributeError, TypeError, RuntimeError, ContractError):
             pass
+    if strict_clean:
+        raise ContractError("guard: cannot append experimental Dragon animation to old Motion; use NEW project")
     # No overlap: append AFTER the rightmost existing Clip, not at scene frame 0.
     latest = zero
     for existing in clips:
@@ -210,6 +213,8 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
         raise ContractError("RFps.ToDouble unavailable; refusing unverified FPS")
     if abs(float(project_fps.ToDouble()) - float(motion["fps"])) > 1e-5:
         raise ContractError("project FPS differs from motion FPS")
+    guarded = str(motion.get("calibration_status","")).startswith("unverified_")
+    clean_guard = preflight_clean_dragon(obj,skel,motion,rlpy) if guarded else None
     clip = None
     created = False
     strategy = None
@@ -219,7 +224,7 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
     inserted_keys = []
     try:
         clip, channels, strategy, created, previous_count = _choose_clip(
-            skel, nodes, names, project_fps, rlpy)
+            skel, nodes, names, project_fps, rlpy, strict_clean=guarded)
         length = rlpy.IndexedFrameTime(motion["frame_count"], project_fps)
         old_length = clip.GetLength() if not created else None
         if created or max(_ticks(old_length), _ticks(clip.GetClipLength())) < _ticks(length):
@@ -263,6 +268,7 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
                             timeline.get("error", "unknown"))
         return {
             "status": status,
+            "scene_guard":clean_guard,
             "clip_strategy": strategy,
             "clip_count_before": previous_count,
             "clip_start_ticks": _ticks(_scene_time(

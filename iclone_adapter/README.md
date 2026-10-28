@@ -222,3 +222,16 @@ uncalibrated iClone FK preview after validating the original 42-bone rest
 alignment. No PyTorch is needed for this conversion. The generated JSON
 retains a warning; root motion and automatic FK-axis calibration remain
 unsupported. Never pass raw AnyMove `motion.json` to the P1 Motion Writer.
+
+## v0.3.0: guarded experimental Dragon Writer
+
+Every newly generated Dragon FK preview includes the original **unposed**
+57-node world-matrix baseline. The Writer checks that the current pose
+matches this saved baseline before writing. For unverified Blender previews
+it also disallows appending over old clips; one existing default clip is
+permitted only if it has no length and no recognized FK/Position/Scale keys
+on ANY bone. Actor Transform keys block writing too. This targets a real
+Dragon failure caused by reusing an animated project with static Head/Tail
+offsets. Checks are not a comprehensive IK/constraint certification;
+continue using **fresh test projects**. Regenerate the experimental FK JSON
+with this version; old JSON has no baseline and will be rejected.

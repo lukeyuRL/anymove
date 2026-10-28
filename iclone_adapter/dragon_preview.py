@@ -135,6 +135,9 @@ def make_preview(motion, target, source_info, bones=DEFAULT_BONES,
         "rotation_basis_mode": basis,
         "experimental_rest_quaternion_wxyz": rest_quaternions,
         "preview_source_bones": selected,
+        "expected_unposed_world_matrices": {
+            b["id"]: list(b["snapshot_world_matrix"]) for b in target["bones"]
+        },
         "preview_bones_with_rotation_change": movement,
         "import_validation": {
             "result": report["result"],
