@@ -144,3 +144,55 @@ This visual comparison will help diagnose FK axis conventions but is not
 an automated bone-pose numerical proof; the current iClone RINode
 LocalTransform/WorldTransform reads did not reflect animated FK channels
 during validation.
+
+
+## 2026-10-28: full 41-bone relative-rest experimental preview
+
+In a controlled two-bone A/B test with `wing_arm_L` / `wing_fore_L`,
+the user reported **candidate B (`probe_fk_rest_conjugate.json`) visually
+matches Blender** better than raw direct Euler. This is evidence
+for the parent-relative Rest Basis hypothesis for **that tested wing pair**;
+it does NOT certify all 41 bones, nor imply all bone axes are correct.
+
+The same exact conversion formula is now optional in
+`iclone_adapter.dragon_preview`:
+
+```
+Q_rest = rotation(inverse(B_parent) @ B_bone)
+Q_target = Q_rest * from_blender_euler_xyz(x, y, z) * inverse(Q_rest)
+target_euler_xyz = to_euler_xyz(Q_target)
+```
+
+The default stays `--basis raw`; **`--basis rest` is explicitly
+experimental** and emits `calibration_status:
+unverified_rest_basis_conjugation_preview`, so the existing iClone UI
+shows a test-only warning. The production mapping keeps
+`calibrated:false` and root motion is still excluded.
+
+**Generate full experimental Dragon Roar** with Python 3.14.3:
+
+```powershell
+cd F:\anymove
+git pull --ff-only origin iClone
+py -3.14 -m iclone_adapter.dragon_preview `
+  F:\anymove\runs\dragon\clips\roar\motion.json `
+  F:\anymove_test\skeleton.json `
+  F:\anymove_test\dragon_roar_fk_rest_all.json `
+  --bones all --basis rest
+```
+
+In a **new clean 24fps iClone Dragon TEST project**, load
+`launch_iclone.py`, select imported Dragon at Frame 0, then choose
+**Write FK motion to selected avatar** and use
+`dragon_roar_fk_rest_all.json`. Do NOT layer this on the earlier raw
+Euler clip. Compare identical frames `0, 26, 31, 62, 93, 123` with
+`fk_reference/animation.blend`, which was generated using
+`--no-root-motion`.
+
+If neck/tail still differ, run the controlled
+`parent_child_probe --parent neck1 --child neck2` and
+`--parent tail2 --child tail3`. A successful wing-pair result alone
+cannot establish the correct convention across the creature.
+
+Tests guard shared quaternion extraction, unknown basis rejection,
+raw mode backwards compatibility and full-41 rest quaternion composition.
