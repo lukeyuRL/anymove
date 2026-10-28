@@ -60,3 +60,24 @@ In iClone:
   the proper independent ground-truth reference for comparing pose.
 - The existing approved conversion path through `anymove_bridge.convert`
   still requires `calibrated:true` for **every** mapped bone.
+
+## v0.1.9: measurable iClone FK pose comparison
+
+After writing a Dragon preview to a disposable iClone scene, use the new
+**Validate Dragon FK animation vs preview (read-only)** button. Select the
+original **unposed** Dragon `skeleton.json`, then the same FK preview JSON
+that was actually written, and choose the Motion Clip index (last by default).
+The tool samples several scene frames including high-rotation frames, restores
+the original playhead, and reports each Bone's evaluated LocalTransform error
+against the Blender Euler rotation in the preview. The comparison removes
+rest local rotation and global FBX scale before computing angular error.
+
+A `consistent_in_sampled_fk_axes` result means the FK Layer evaluation is
+consistent with Blender for **sampled non-root Bones only** (max 5-degree
+error for each meaningfully moving Bone). It is not proof of correct mesh
+Skinning, interpolated motion, or missing Root Motion.
+
+A `fk_axis_or_evaluation_mismatch` result identifies the worst Bones and
+measured errors. Upload `dragon_fk_validation.json` for diagnosis. Use an
+unposed skeleton snapshot and the actual matching Motion Clip; otherwise
+errors may reflect a wrong baseline or clip rather than wrong FK axes.
