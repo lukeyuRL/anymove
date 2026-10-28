@@ -6,6 +6,9 @@ blender -b -P blender/apply_motion.py -- rigged.blend rig_info.json motion.json 
   --paint                    keep the leg paint (the exam needs it; the showcase does not)
   --blur                     motion blur from the keyframes, like a video model's fast limbs
   --glb                      export out_dir/animation.glb
+  --save-blend               save a Blender animation project at out_dir/animation.blend
+  --no-root-motion           keep pelvis root rotation identity and translation zero
+                             (compare local FK poses fairly with iClone P2)
   --frames 10,40,80          render only these frames (stills), for quick comparisons
   --springs fur.json         simulate the fur bones (blender/add_fur_bones.py) as damped springs
   --scale 0.75               render at this fraction of the layout size
@@ -53,8 +56,15 @@ for pb in rig.pose.bones:
 rig.pose.bones[root].rotation_mode = "QUATERNION"
 for t in range(T):
     pr = rig.pose.bones[root]
-    pr.rotation_quaternion = Quaternion(motion["root_quat"][t])
-    pr.location = B.transposed() @ Vector(motion["trans"][t])
+    if "--no-root-motion" in opts:
+        # The current iClone P2 writer deliberately omits pelvis root motion.
+        # Strip BOTH root quaternion and translation from Blender for an
+        # apples-to-apples same-frame FK-only pose comparison.
+        pr.rotation_quaternion = Quaternion((1.0, 0.0, 0.0, 0.0))
+        pr.location = Vector((0.0, 0.0, 0.0))
+    else:
+        pr.rotation_quaternion = Quaternion(motion["root_quat"][t])
+        pr.location = B.transposed() @ Vector(motion["trans"][t])
     pr.keyframe_insert("rotation_quaternion", frame=t)
     pr.keyframe_insert("location", frame=t)
     for i, n in enumerate(names[1:], 1):
@@ -128,6 +138,16 @@ for t in range(T):
     joints.append(row)
 json.dump({"names": [k["name"] for k in info["keypoints"]], "joints": joints, "fps": fps}, open(out / "joints.json", "w"))
 print("joints written", T, "frames")
+
+if "--save-blend" in opts:
+    # Save the ACTUAL keyed scene, not the static rigged.blend input. Restore
+    # Frame 0 so opening this reference in the Blender GUI displays the same
+    # animation frame the user sees in iClone.
+    scene.frame_set(0)
+    save_path = out / "animation.blend"
+    bpy.ops.wm.save_as_mainfile(filepath=str(save_path))
+    print("animated blend saved", save_path, "root_motion",
+          "disabled" if "--no-root-motion" in opts else "included")
 
 views = [v for v in opt("--views", "").split(",") if v]
 if views:

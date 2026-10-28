@@ -90,3 +90,57 @@ axis and samples at 0/62/123 match the source to better than 5e-8 rad.
 Do not apply legacy iClone 7 `GetMotionBones()` retarget assumptions.
 See [MOTION_BONE_AUDIT.md](MOTION_BONE_AUDIT.md) for the detailed
 source-based findings and Blender visual comparison instructions.
+
+
+## 2026-10-28: comparing the same frame in Blender and iClone
+
+A side-by-side screenshot showed iClone **Frame 0** but Blender **Frame -25**
+(top-left Blender viewport overlay). Moreover opening the original
+`rigged.blend` in Blender does NOT load the solver's `motion.json`.
+The old `blender/apply_motion.py` rendered motion images or wrote an animated
+GLB but did not save the keyed Blender scene. This made the comparison look
+like a neck/tail retargeting error even if the FK axes were fine.
+
+**New optional Blender flags**:
+- `--save-blend`: writes `out_dir/animation.blend`, with all keyframes
+  applied and the scene at Frame 0.
+- `--no-root-motion`: disables only the solver's pelvis root quaternion and
+  world translation. The 41 non-root Euler XYZ tracks are unchanged. This
+  matches the current iClone FK-only preview's missing root motion.
+
+From **PowerShell**, create the reference:
+
+```powershell
+cd F:\anymove
+git pull --ff-only origin iClone
+
+$blender = "C:\Program Files\Blender Foundation\Blender 5.0\blender.exe"
+& $blender -b --python-exit-code 1 -P blender/apply_motion.py -- `
+  assets/dragon/rigged/rigged.blend `
+  assets/dragon/rigged/rig_info.json `
+  runs/dragon/clips/roar/motion.json `
+  runs/dragon/clips/roar/fk_reference `
+  --no-root-motion --save-blend
+```
+
+Open **`F:\anymove\runs\dragon\clips\roar\fk_reference\animation.blend`**
+in Blender (NOT the original `rigged.blend`). Blender Timeline should be
+Frame 0 with animation frames 0..123; compare at 0, 31, 62, 93, 123
+against the same iClone Clip at the same frames and similar side-view
+camera angles. Confirm the project/clip start first (previous iClone Dragon
+Clip index 0 was at time zero). If iClone project FPS differs from the
+source FPS, use the actual time equivalents.
+
+**Frame 0 is NOT necessarily rest pose**. The original Dragon motion has
+non-zero Euler values at time zero for the neck and tail, and several
+successive curved tail sections accumulate visible displacement. Do not
+compare iClone Frame 0 to Blender Rest Pose or Frame -25.
+
+To compare the **full** Blender motion with root separately, run the same
+command with another output directory and omit `--no-root-motion`. Do not
+interpret missing iClone pelvis motion as a bone retargeting error.
+
+This visual comparison will help diagnose FK axis conventions but is not
+an automated bone-pose numerical proof; the current iClone RINode
+LocalTransform/WorldTransform reads did not reflect animated FK channels
+during validation.
