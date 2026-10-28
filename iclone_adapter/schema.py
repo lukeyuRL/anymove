@@ -118,14 +118,12 @@ def validate_skeleton(data):
 
 
 def skeleton_hash(data):
-    """Hash the hierarchy and reference matrices; rejects mismatched motion inputs."""
+    """Hash only in-scene hierarchy identity; unchanged when a pose is animated."""
     validate_skeleton(data)
     payload = {
-        "reference": data["reference"],
-        "bones": [{
-            "id": b["id"], "path": b["path"], "parent_id": b.get("parent_id"),
-            "matrix": b.get("rest_local_matrix") or b["snapshot_local_matrix"],
-        } for b in sorted(data["bones"], key=lambda b: b["path"])],
+        "bones": [{"id": b["id"], "path": b["path"],
+                   "parent_id": b.get("parent_id")}
+                  for b in sorted(data["bones"], key=lambda b: b["path"])],
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
