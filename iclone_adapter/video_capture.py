@@ -66,11 +66,11 @@ def _required_file(value,label,suffix):
 def _input_plan(input_path,reader_path=None,ref_path=None,
                 output_dir=None,require_python311=True):
     if require_python311 and not(
-            sys.version_info.major==3 and sys.version_info.minor==11):
+            sys.version_info[0]==3 and sys.version_info[1]==11):
         raise ContractError(
             "AnyMove detection/solver requires external Python 3.11; "
             "current worker is %d.%d"%
-            (sys.version_info.major,sys.version_info.minor))
+            (sys.version_info[0],sys.version_info[1]))
     original=_required_file(input_path,"source clip/detections",
                             (".mp4",".npz"))
     mode="video" if original.suffix.lower()==".mp4" else "detections"
