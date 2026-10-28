@@ -10,6 +10,7 @@ from .diagnostics import save_failure_report, raw_skeleton_report
 from .bone_registry import build_bone_registry
 from .root_translation_sampler import capture_root_sample, save_samples
 from .runtime_controller_audit import audit_full_controller_frames
+from .subframe_interpolation_audit import survey_subframe_controllers
 from .import_pipeline import verify_fk_manifest_for_writer
 from . import __version__
 from .rlpy_reader import capability_report, export_selected, selected_object
@@ -46,6 +47,7 @@ def show():
                 ("Audit iClone 8 FK Bone IDs / Keys (read-only)", self.audit_motion_bones),
                 ("Inspect Pelvis FK Root Position controls (read-only)", self.inspect_root),
                 ("Audit ALL FK and Root Position frames (read-only)", self.audit_all_import_frames),
+                ("Survey all FK/Root half-frame interpolations (read-only)", self.survey_half_frames),
                 ("Capture Pelvis position at CURRENT frame (read-only)", self.capture_root),
                 ("Save collected Pelvis positions for numeric comparison", self.save_root),
             ]:
@@ -287,6 +289,55 @@ def show():
                 QtWidgets.QMessageBox.warning(
                     self,"All-frame Controller audit failed",
                     type(exc).__name__+": "+str(exc))
+
+        def survey_half_frames(self):
+            path,_=QtWidgets.QFileDialog.getOpenFileName(
+                self,"Select FK JSON already imported into Dragon",
+                "","JSON (*.json)")
+            if not path:
+                return
+            try:
+                with open(path,encoding="utf-8") as f:
+                    motion=json.load(f)
+                bundle=verify_fk_manifest_for_writer(path,motion)
+                obj=selected_object(RLPy)
+                clips=int(obj.GetSkeletonComponent().GetClipCount())
+                if not clips:
+                    raise ValueError("No Motion Clip in selected Dragon")
+                index,ok=QtWidgets.QInputDialog.getInt(
+                    self,"Select Motion Clip (read-only)",
+                    "Clip index:",clips-1,0,clips-1)
+                if not ok:
+                    return
+                result=survey_subframe_controllers(
+                    motion,clip_index=index,rlpy=RLPy)
+                result["bundle_manifest_check"]=bundle
+                save,_=QtWidgets.QFileDialog.getSaveFileName(
+                    self,"Save subframe interpolation audit",
+                    "subframe_interpolation_audit.json","JSON (*.json)")
+                if save:
+                    with open(save,"w",encoding="utf-8") as f:
+                        json.dump(result,f,ensure_ascii=False,indent=2)
+                self.out.appendPlainText(json.dumps({
+                    "saved_report":save or None,
+                    "status":result["status"],
+                    "expected":result["expected_scalar_samples"],
+                    "read":result["read_scalar_samples"],
+                    "nonlinear":result["nonlinear_vs_linear_scalar_samples"],
+                    "overshoot":result["overshooting_scalar_samples"],
+                    "maximum_deviation":
+                        result["max_abs_deviation_from_linear_by_kind"],
+                    "largest_deviations":result["largest_deviations"][:6],
+                    "first_failures":result["first_failures"],
+                    "timeline_unchanged":result["timeline_unchanged"],
+                    "warning":"Native iClone interpolation only; Blender "
+                              "half-frame curves and evaluated pose not yet compared."
+                },ensure_ascii=False,indent=2))
+            except Exception as exc:
+                msg=type(exc).__name__+": "+str(exc)
+                self.out.appendPlainText("Subframe survey failed: "+msg)
+                QtWidgets.QMessageBox.warning(
+                    self,"Subframe survey failed",msg)
 
         def inspect_root(self):
             try:

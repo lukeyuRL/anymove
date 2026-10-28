@@ -133,3 +133,33 @@ This tests complete **Controller key data** and is distinct from the
 offline mathematical fidelity audit. It still cannot prove rendered
 pose, IK override or subframe interpolation. Do not call this result
 a fully certified animation retarget.
+
+
+## v0.4.2: Native iClone subframe interpolation survey
+
+The uploaded iClone full-frame report verifies all **15,996 / 15,996**
+stored FK and Pelvis Position scalar samples across 124 frames (42
+Rotation Bones plus one Pelvis Position). This is the baseline for the
+next acceptance gate.
+
+An added, read-only panel button inspects every native iClone curve
+at the midpoint of all 123 consecutive frame intervals:
+
+    Survey all FK/Root half-frame interpolations (read-only)
+
+Use the exact same bundled iclone_fk_full.json and Clip 0, then
+save subframe_interpolation_audit.json. For a 124-frame clip the
+tool reads 123*(42+1)*3 = **15,867 scalar midpoint samples**.
+
+Each RFloatControl.GetValue at a true intermediate RTime tick is compared
+with linear interpolation between the bounding integer-frame FK values.
+Nonlinearity and overshoot are reported with Bone, channel, axis and
+frame pair. Native interpolation differs from linear is NOT automatically
+incorrect: Blender's F-Curves can use Bezier or other transition types.
+The audit must next be compared with Blender subframes or evaluated Bone
+poses before a production interpolation policy is fixed. A failed
+GetValue returns subframe_readback_incomplete.
+
+Nothing modifies the Timeline, skeleton or keys. All-frame controller
+integrity was previously verified; this survey is a distinct SDK-time
+interpolation test, NOT proof of on-screen evaluated bone motion.
