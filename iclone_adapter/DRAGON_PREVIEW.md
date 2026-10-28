@@ -298,3 +298,60 @@ semantics instead of adding arbitrary permanent offsets.
 
 This is an experimental B/A validation tool; unit conversion and rendered
 motion have NOT been validated in iClone yet.
+
+## v0.3.4 — quantitative Pelvis Root Translation comparison
+
+User reported Root Rotation visually agrees with Blender, but Root
+Translation travel is hard to judge across different camera views.
+
+Use the new **read-only manual-frame Pelvis sampler** in the iClone panel.
+It samples the selected frame **without calling SetTime**, because a prior
+SDK validator obtained stale RINode transforms while sampling in a tight
+script loop. Confirm the iClone panel displays v0.3.4. Select Dragon in
+the **already written, full Root Translation test scene** and capture
+frames **0, 31, 62, 93, 123**, moving the iClone Timeline manually
+before each button click. Do not click Write FK Motion again.
+
+Buttons:
+- `Capture Pelvis position at CURRENT frame (read-only)`
+- `Save collected Pelvis positions for numeric comparison`
+
+Save `F:\anymove_test\dragon_root_translation_samples.json`. The
+file contains evaluated Original Bone Axis pelvis translation, node-local
+and world translation, and optionally stored Pelvis Layer Position XYZ.
+The original-axis-local pelvis translation is the comparison measurement;
+stored FK controller values alone do NOT prove evaluated body movement.
+
+Blender's existing full reference `joints.json` contains `hips` position
+per frame (from `blender/apply_motion.py --save-blend`). Compare:
+
+```powershell
+cd F:\anymove
+py -3.14 -m iclone_adapter.root_translation_compare `
+  runs\dragon\clips\roar\full_root_reference\joints.json `
+  F:\anymove_test\dragon_root_translation_samples.json `
+  --expected-scale 100 `
+  --report-out F:\anymove_test\dragon_root_translation_comparison.json
+```
+
+`--expected-scale 100` is a hypothesis from the known 100× iClone
+scene-scaled pelvis rest translation; it is NOT a verified Position Layer
+units calibration. The tool reports:
+
+- Best-fit iClone native per Blender distance unit factor
+- Root travel **direction angle** and **path-shape RMS error** after fit
+- RMS error at a separately specified expected scale
+- Suggested correction multiplier (`expected-scale / fitted-scale`)
+- Explicitly notes that magnitude fitting can hide wrong units.
+
+For equivalent scenes, direction/path error under 5% with max
+direction difference under 5° is a useful preliminary engineering
+diagnostic (not a certified retarget standard). If path is wrong,
+check `armature` versus `pelvis_local` before changing scale. If the
+observed iClone pelvis is static, investigate its Layer Position control,
+not visual calibration.
+
+The comparison assumes sampled iClone Original Bone Axis pelvis-local
+translation and Blender hips world joint positions share aligned
+source axes, as suggested by previous Dragon FBX import metadata.
+Compare with caution if actor orientation or rig parent transforms differ.

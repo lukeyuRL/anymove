@@ -8,6 +8,7 @@ from .fk_pose_validator import validate_live_fk_pose
 from .animation_bone_audit import audit_animation_bones
 from .diagnostics import save_failure_report, raw_skeleton_report
 from .bone_registry import build_bone_registry
+from .root_translation_sampler import capture_root_sample, save_samples
 from . import __version__
 from .rlpy_reader import capability_report, export_selected, selected_object
 
@@ -28,6 +29,7 @@ def show():
                 "P0: read existing Skin Bones. P1: direct FK channel diagnostics ONLY.\n"
                 "Test on an expendable scene; one default Motion Clip is OK.\n"
                 "Use converted FK preview JSON, NOT raw Blender motion.json."))
+            self.root_translation_samples = {}
             self.out = QtWidgets.QPlainTextEdit()
             self.out.setReadOnly(True)
             layout.addWidget(self.out)
@@ -41,6 +43,8 @@ def show():
                 ("Validate Dragon FK animation vs preview (read-only)", self.validate_dragon),
                 ("Audit iClone 8 FK Bone IDs / Keys (read-only)", self.audit_motion_bones),
                 ("Inspect Pelvis FK Root Position controls (read-only)", self.inspect_root),
+                ("Capture Pelvis position at CURRENT frame (read-only)", self.capture_root),
+                ("Save collected Pelvis positions for numeric comparison", self.save_root),
             ]:
                 button = QtWidgets.QPushButton(label)
                 button.clicked.connect(callback)
@@ -266,6 +270,54 @@ def show():
             except Exception as exc:
                 self.out.appendPlainText("Root channel inspection failed: "+
                                          type(exc).__name__+": "+str(exc))
+
+        def capture_root(self):
+            try:
+                record=capture_root_sample(RLPy)
+                if self.root_translation_samples:
+                    first=next(iter(self.root_translation_samples.values()))
+                    if (record["object_name"]!=first["object_name"] or
+                        record["fps"]!=first["fps"]):
+                        raise ValueError(
+                            "Different selected Dragon / FPS; close/reload "
+                            "the panel to clear captured samples.")
+                frame=record["sample"]["frame"]
+                self.root_translation_samples[frame]=record
+                self.out.appendPlainText(json.dumps({
+                    "captured_frame":frame,
+                    "pelvis_original_axis_local_xyz":
+                        record["sample"]["original_axis_local_xyz"],
+                    "stored_pelvis_position_xyz":
+                        record["sample"]["stored_pelvis_position_xyz"],
+                    "samples_captured":sorted(self.root_translation_samples),
+                    "note":"Capture is read-only and does NOT move timeline."
+                },ensure_ascii=False,indent=2))
+            except Exception as exc:
+                self.out.appendPlainText("Pelvis capture failed: "+
+                                         type(exc).__name__+": "+str(exc))
+
+        def save_root(self):
+            if not self.root_translation_samples:
+                QtWidgets.QMessageBox.warning(
+                    self,"Root sampling", "Capture Frame 0 and at least two other frames first.")
+                return
+            target,_=QtWidgets.QFileDialog.getSaveFileName(
+                self,"Export current Pelvis position samples",
+                "dragon_root_translation_samples.json","JSON (*.json)")
+            if not target:
+                return
+            try:
+                result=save_samples(target,self.root_translation_samples)
+                self.out.appendPlainText(json.dumps({
+                    "saved":target,
+                    "frame_count":len(result["samples"]),
+                    "frames":[s["frame"] for s in result["samples"]]
+                },ensure_ascii=False,indent=2))
+            except Exception as exc:
+                self.out.appendPlainText("Root sample export failed: "+
+                                         type(exc).__name__+": "+str(exc))
+                QtWidgets.QMessageBox.warning(
+                    self,"Root sampling",type(exc).__name__+": "+str(exc))
 
         def import_motion(self):
             path, _ = QtWidgets.QFileDialog.getOpenFileName(
