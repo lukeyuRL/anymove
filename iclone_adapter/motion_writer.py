@@ -139,7 +139,7 @@ def _choose_clip(skel, nodes, names, fps, rlpy, strict_clean=False):
                     return existing, ctrls, "reuse_default", False, count
         except (AttributeError, TypeError, RuntimeError, ContractError):
             pass
-    if strict_clean:
+    if strict_clean and count > 0:
         raise ContractError("guard: cannot append experimental Dragon animation to old Motion; use NEW project")
     # No overlap: append AFTER the rightmost existing Clip, not at scene frame 0.
     latest = zero

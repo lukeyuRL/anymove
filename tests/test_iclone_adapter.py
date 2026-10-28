@@ -490,6 +490,8 @@ class RLPyTests(unittest.TestCase):
         bone=next(b["id"] for b in rest["bones"] if b["name"]=="Bone2")
         motion=make_sine_test(rest,bone,frames=12,amplitude_deg=30.)
         motion["calibration_status"]="unverified_identity_same_rig_preview"
+        motion["expected_unposed_world_matrices"]={
+            b["id"]:b["snapshot_world_matrix"] for b in rest["bones"]}
         written=write_selected(motion,rlpy=rlpy,fps_confirmed=True)
         time_before=rlpy.RGlobal.GetTime()
         keys_before=avatar.skeleton.GetClip(0).layers["Bone2"].block.ctrls[
@@ -514,6 +516,8 @@ class RLPyTests(unittest.TestCase):
         bone=next(b["id"] for b in rest["bones"] if b["name"]=="Bone2")
         motion=make_sine_test(rest,bone,frames=12,amplitude_deg=30.)
         motion["calibration_status"]="unverified_identity_same_rig_preview"
+        motion["expected_unposed_world_matrices"]={
+            b["id"]:b["snapshot_world_matrix"] for b in rest["bones"]}
         written=write_selected(motion,rlpy=rlpy,fps_confirmed=True)
         import math
         def animated_transform():
