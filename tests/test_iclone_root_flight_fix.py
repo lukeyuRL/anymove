@@ -12,9 +12,10 @@ from iclone_adapter.schema import ContractError
 
 
 class Time:
+    """iClone 8 RTime mock: ToInt only, deliberately NO GetValue."""
     def __init__(self,n):
         self.n=int(n)
-    def GetValue(self):
+    def ToInt(self):
         return self.n
 
 
@@ -39,12 +40,12 @@ class Axis:
     def GetKeyCount(self):
         return len(self.values)
     def GetValue(self,time,default):
-        return Status(),self.values[time.GetValue()]
+        return Status(),self.values[time.ToInt()]
     def SetValue(self,time,value):
-        self.events.append(("set",time.GetValue(),float(value)))
+        self.events.append(("set",time.ToInt(),float(value)))
         if self.fail:
             return Status(True)
-        self.values[time.GetValue()]=float(value)
+        self.values[time.ToInt()]=float(value)
         return Status()
 
 
@@ -180,6 +181,62 @@ class RootFlightFixTests(unittest.TestCase):
                     fix.rescale_root_position(
                         self.path,self.root,factor,rlpy=self.sdk)
         self.assertEqual(self.events,[])
+
+
+
+class RootFlightClipTimeTests(unittest.TestCase):
+    """Run the REAL _controls contract, not a patched-out shortcut."""
+
+    def _probe(self,scene_origin_tick=0,conversion=True,valid_time=True):
+        node=object()
+        fake_axes=[mock.Mock() for _ in "XYZ"]
+        block=mock.Mock()
+        block.GetControl.side_effect=lambda path: fake_axes[
+            "XYZ".index(path.rsplit("Position",1)[-1])]
+        layer=mock.Mock()
+        layer.GetDataBlock.return_value=block
+        clip=mock.Mock()
+        clip.GetControl.return_value=layer
+        if conversion:
+            clip.ClipTimeToSceneTime.side_effect=lambda zero: (
+                Time(scene_origin_tick) if valid_time else object())
+        else:
+            clip.ClipTimeToSceneTime=None
+        skel=mock.Mock()
+        skel.GetClipCount.return_value=1
+        skel.GetClip.return_value=clip
+        skel.GetSkinBones.return_value=[node]
+        sdk=mock.Mock()
+        sdk.RGlobal.GetFps.return_value=Fps()
+        sdk.IndexedFrameTime.side_effect=lambda frame,fps: Time(frame*250)
+        # Critically, Time above has no GetValue. iClone 8 RTime.ToInt works.
+        with mock.patch.object(fix,"selected_object",return_value=object()):
+            with mock.patch.object(fix,"_get_skeleton",return_value=skel):
+                with mock.patch.object(
+                    fix,"build_bone_registry",return_value=(
+                        [{"name":"pelvis","node":node}],{})):
+                    return fix._controls(sdk),clip,fake_axes
+
+    def test_iclone8_rtime_toint_only_zero_origin_is_accepted(self):
+        outcome,clip,axes=self._probe(scene_origin_tick=0)
+        self.assertEqual(outcome[-1],axes)
+        self.assertEqual(clip.ClipTimeToSceneTime.call_count,1)
+
+    def test_shifted_clip_start_is_still_rejected(self):
+        with self.assertRaisesRegex(
+                ContractError,"maps to scene tick 250"):
+            self._probe(scene_origin_tick=250)
+
+    def test_missing_clip_time_conversion_is_blocked(self):
+        with self.assertRaisesRegex(
+                ContractError,"ClipTimeToSceneTime unavailable"):
+            self._probe(conversion=False)
+
+    def test_unknown_time_type_is_blocked_without_writing(self):
+        with self.assertRaisesRegex(
+                ContractError,"RTime.ToInt ticks"):
+            self._probe(valid_time=False)
+
 
 
 if __name__=="__main__":
