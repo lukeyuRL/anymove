@@ -13,6 +13,7 @@ start_prompt action is explicitly billable and requires user approval.
 """
 import json
 import pathlib
+import subprocess
 
 from .direct_import import _selected_and_fps, prepare_direct_import, execute_direct_import
 from .rlpy_reader import selected_object, _get_skeleton, snapshot
@@ -62,6 +63,59 @@ def find_external_python(root):
     return None
 
 
+def preflight_external_python(python,required_modules=()):
+    """Verify an external interpreter before remote charges or GPU work.
+
+    Avoid importing heavy CUDA libraries or contacting fal.ai here.
+    This catches the common no-receipt failure: a wrong Python version
+    or a required package absent from the selected .venv.
+    """
+    code=(
+        "import importlib.util,json,sys;"
+        "print(json.dumps({'version':list(sys.version_info[:2]),"
+        "'executable':sys.executable,"
+        "'missing':[m for m in sys.argv[1:] "
+        "if importlib.util.find_spec(m) is None]}))"
+    )
+    try:
+        check=subprocess.run(
+            [str(python),"-c",code]+list(required_modules),
+            cwd=str(REPO),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+            timeout=20,encoding="utf-8",errors="replace",check=False)
+    except (OSError,subprocess.TimeoutExpired) as exc:
+        raise ContractError(
+            "Cannot start/check external Python: %s (%s). "
+            "Select a working Python 3.11 environment."%
+            (str(python),str(exc)))
+    output=(check.stdout or "").strip()
+    if check.returncode!=0:
+        raise ContractError(
+            "External Python failed to start (%s, exit code %s): %s"%
+            (str(python),check.returncode,output[-1200:] or "no output"))
+    try:
+        report=json.loads(output.splitlines()[-1])
+    except (ValueError,IndexError,TypeError):
+        raise ContractError(
+            "External Python produced no valid environment report (%s): %s"%
+            (str(python),output[-1200:]))
+    version=report.get("version")
+    if version!=[3,11]:
+        raise ContractError(
+            "Wrong external Python version: %s uses %s; AnyMove requires "
+            "Python 3.11. Recreate .venv using Python 3.11."%
+            (report.get("executable") or python,
+             ".".join(map(str,version)) if isinstance(version,list)
+             else str(version)))
+    missing=report.get("missing") or []
+    if missing:
+        raise ContractError(
+            "External Python 3.11 is missing packages: %s. "
+            "Install AnyMove requirements into %s before requesting "
+            "a paid fal.ai video."%
+            (", ".join(missing),report.get("executable") or python))
+    return report
+
+
 def unique_capture_folder(parent,source):
     folder=pathlib.Path(parent)
     if not folder.is_dir():
@@ -108,6 +162,7 @@ class VideoCaptureCoordinator:
         self.rlpy=rlpy
         self.process=None
         self.job=None
+        self._worker_log_tail=""
 
     def running(self):
         return self.process is not None and self.process.state()!=(
@@ -157,6 +212,11 @@ class VideoCaptureCoordinator:
                     str(REPO),"Python interpreter (python.exe python);;All files (*)")
                 if not python:
                     return
+            modules=("numpy",) if path.lower().endswith(".npz") else (
+                "numpy","cv2","torch","transformers","PIL")
+            python_info=preflight_external_python(python,modules)
+            self._log("External Python ready: "+python_info["executable"]+
+                      " (3.11, required packages installed)")
             parent=self.widgets.QFileDialog.getExistingDirectory(
                 self.panel,"Choose folder for new capture and native iProject",
                 str(REPO/"runs"))
@@ -236,6 +296,10 @@ class VideoCaptureCoordinator:
                     str(REPO),"Python executable (*.exe);;All files (*)")
                 if not python:
                     return
+            python_info=preflight_external_python(
+                python,("requests","numpy","cv2","torch","transformers","PIL"))
+            self._log("External Python ready: "+python_info["executable"]+
+                      " (3.11, required packages installed)")
             parent=self.widgets.QFileDialog.getExistingDirectory(
                 self.panel,"Choose parent folder for AI video + iProject",
                 str(REPO/"runs"))
@@ -286,6 +350,7 @@ class VideoCaptureCoordinator:
             self._warning("Prompt Capture blocked",error)
 
     def _launch_worker(self,python,arguments,job):
+        self._worker_log_tail=""
         self.job=job
         process=self.core.QProcess(self.panel)
         process.setProcessChannelMode(self.core.QProcess.MergedChannels)
@@ -305,7 +370,10 @@ class VideoCaptureCoordinator:
             return
         raw=bytes(self.process.readAllStandardOutput())
         if raw:
-            self._log(raw.decode("utf-8",errors="replace").rstrip("\r\n"))
+            message=raw.decode("utf-8",errors="replace").rstrip("\r\n")
+            self._worker_log_tail=(
+                self._worker_log_tail+"\n"+message)[-4000:]
+            self._log(message)
 
     def _process_error(self,error):
         # Process-start failure can occur with a wrong Python executable.
@@ -335,10 +403,23 @@ class VideoCaptureCoordinator:
             exit_status!=self.core.QProcess.NormalExit or
             not data or data.get("status")!="motion_json_ready"):
             status=data.get("status") if data else "no receipt"
-            reason=data.get("error") if data else "external worker exited"
+            if data:
+                reason=data.get("error") or (
+                    "Worker exited before producing a valid motion.json. "
+                    "Review the worker output in the panel.")
+            else:
+                reason=(
+                    "Worker exited BEFORE creating capture_receipt.json.\n"
+                    "External Python: %s\n"
+                    "Exit code: %s; process status: %s\n\n"
+                    "Worker output (last 1600 characters):\n%s\n\n"
+                    "If any generated MP4 already exists, inspect it "
+                    "before retrying a paid fal.ai request."%
+                    (job.get("python"),exit_code,exit_status,
+                     self._worker_log_tail[-1600:] or "(no worker output)"))
             msg=("Capture failed or needs quality review: %s\n%s\n\n"
                  "Partial results (including det.npz if created):\n%s\n\n"
-                 "No changes were made to the iClone scene." %
+                 "No changes were made to the iClone scene."%
                  (status,reason,str(capture)))
             self._log(msg)
             self._warning("Dragon Capture not imported",msg)
