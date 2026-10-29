@@ -2,7 +2,7 @@
 
 The iClone 8 Python 3.8 process remains RLPy/PySide2 ONLY.
 Expensive video decoding, DINOv2 CUDA inference and torch fitting execute
-in a separate Python 3.11 QProcess, with live progress and receipt files.
+in a separate Python 3.11 or 3.14 QProcess, with live progress and receipt files.
 Video generation and motion solving do not require a selected or clean
 iClone actor. Once motion.json is ready, direct_import validates the
 THEN-selected Dragon, with scene-write approval required.
@@ -20,7 +20,7 @@ from .rlpy_reader import selected_object, _get_skeleton, snapshot
 from .scene_guard import check_clean_clip
 from .schema import ContractError
 from .verify_import import DEFAULT_SOURCE, audit_rig
-from .video_capture import _input_plan, OUTPUT_MOTION, RECEIPT
+from .video_capture import _input_plan, OUTPUT_MOTION, RECEIPT, supports_external_python
 from .prompt_capture import _prompt_plan, _credential_available
 
 REPO=pathlib.Path(__file__).resolve().parents[1]
@@ -85,7 +85,7 @@ def preflight_external_python(python,required_modules=()):
     except (OSError,subprocess.TimeoutExpired) as exc:
         raise ContractError(
             "Cannot start/check external Python: %s (%s). "
-            "Select a working Python 3.11 environment."%
+            "Select a working Python 3.11 or 3.14 environment."%
             (str(python),str(exc)))
     output=(check.stdout or "").strip()
     if check.returncode!=0:
@@ -99,17 +99,17 @@ def preflight_external_python(python,required_modules=()):
             "External Python produced no valid environment report (%s): %s"%
             (str(python),output[-1200:]))
     version=report.get("version")
-    if version!=[3,11]:
+    if not supports_external_python(version):
         raise ContractError(
             "Wrong external Python version: %s uses %s; AnyMove requires "
-            "Python 3.11. Recreate .venv using Python 3.11."%
+            "Python 3.11 or 3.14. Recreate .venv using Python 3.11 or 3.14."%
             (report.get("executable") or python,
              ".".join(map(str,version)) if isinstance(version,list)
              else str(version)))
     missing=report.get("missing") or []
     if missing:
         raise ContractError(
-            "External Python 3.11 is missing packages: %s. "
+            "External Python 3.11 or 3.14 is missing packages: %s. "
             "Install AnyMove requirements into %s before requesting "
             "a paid fal.ai video."%
             (", ".join(missing),report.get("executable") or python))
@@ -207,7 +207,7 @@ class VideoCaptureCoordinator:
             python=find_external_python(REPO)
             if not python:
                 python,_=self.widgets.QFileDialog.getOpenFileName(
-                    self.panel,"Select EXTERNAL Python 3.11 executable "
+                    self.panel,"Select EXTERNAL Python 3.11 or 3.14 executable "
                                "(NOT iClone 3.8)",
                     str(REPO),"Python interpreter (python.exe python);;All files (*)")
                 if not python:
@@ -216,22 +216,23 @@ class VideoCaptureCoordinator:
                 "numpy","cv2","torch","transformers","PIL")
             python_info=preflight_external_python(python,modules)
             self._log("External Python ready: "+python_info["executable"]+
-                      " (3.11, required packages installed)")
+                      " (Python "+ ".".join(str(v) for v in python_info.get("version", []))+
+                      "; required package names found)")
             parent=self.widgets.QFileDialog.getExistingDirectory(
                 self.panel,"Choose folder for new capture and native iProject",
                 str(REPO/"runs"))
             if not parent:
                 return
             capture=unique_capture_folder(parent,path)
-            _input_plan(path,reader,reference,capture,require_python311=False)
+            _input_plan(path,reader,reference,capture,require_supported_python=False)
             arguments=worker_arguments(path,capture,reader,reference)
             text=(
                 "Dragon Motion Capture from an EXISTING two-camera source\n\n"
                 "Source: %s\n"
-                "Python: %s (must be 3.11)\n"
+                "Python: %s (must be 3.11 or 3.14)\n"
                 "Capture folder: %s\n\n"
                 "The worker runs original mocap.detect (for MP4), then "
-                "mocap.solve in an external Python 3.11 process.\n"
+                "mocap.solve in an external Python 3.11 or 3.14 process.\n"
                 "It reads GPU-trained Dragon DINOv2 Reader for MP4; "
                 "an existing det.npz skips Reader inference.\n"
                 "No fal.ai or paid video requests are made.\n"
@@ -292,14 +293,15 @@ class VideoCaptureCoordinator:
             python=find_external_python(REPO)
             if not python:
                 python,_=self.widgets.QFileDialog.getOpenFileName(
-                    self.panel,"Select EXTERNAL Python 3.11 (not iClone 3.8)",
+                    self.panel,"Select EXTERNAL Python 3.11 or 3.14 (not iClone 3.8)",
                     str(REPO),"Python executable (*.exe);;All files (*)")
                 if not python:
                     return
             python_info=preflight_external_python(
                 python,("requests","numpy","cv2","torch","transformers","PIL"))
             self._log("External Python ready: "+python_info["executable"]+
-                      " (3.11, required packages installed)")
+                      " (Python "+ ".".join(str(v) for v in python_info.get("version", []))+
+                      "; required package names found)")
             parent=self.widgets.QFileDialog.getExistingDirectory(
                 self.panel,"Choose parent folder for AI video + iProject",
                 str(REPO/"runs"))
@@ -311,7 +313,7 @@ class VideoCaptureCoordinator:
                     "FAL_KEY missing. Video generation is billable: set "
                     "FAL_KEY in the external environment or repo .env.")
             _prompt_plan(action,str(capture),reader,reference,
-                         require_credentials=False,require_python311=False)
+                         require_credentials=False,require_supported_python=False)
             arguments=prompt_worker_arguments(
                 action,capture,reader,reference)
             text=(
@@ -323,7 +325,7 @@ class VideoCaptureCoordinator:
                 "its CURRENT pricing. This is a BILLABLE external request; "
                 "model cost and availability may change.\n\n"
                 "If approved, generate the two-camera Dragon video, then "
-                "run DINOv2 + Motion Solver on external Python 3.11. "
+                "run DINOv2 + Motion Solver on external Python 3.11 or 3.14. "
                 "After a successful quality check the THEN-selected Dragon "
                 "will be verified; you will be asked AGAIN before the iClone "
                 "scene is modified. If the target is unsuitable, motion.json "
@@ -379,10 +381,10 @@ class VideoCaptureCoordinator:
         # Process-start failure can occur with a wrong Python executable.
         if self.process is not None and error==self.core.QProcess.FailedToStart:
             self._log("ERROR: external Python process could not start. "
-                      "Select a valid Python 3.11 environment.")
-            self._warning("Python 3.11 unavailable",
+                      "Select a valid Python 3.11 or 3.14 environment.")
+            self._warning("External Python unavailable",
                           "The external worker failed to start. Install "
-                          "Python 3.11 with PyTorch and requirements.txt.")
+                          "Python 3.11 or 3.14 with PyTorch and requirements.txt.")
 
     def _finished(self,exit_code,exit_status):
         self._flush()
