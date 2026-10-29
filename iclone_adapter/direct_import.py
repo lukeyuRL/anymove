@@ -32,6 +32,7 @@ from .schema import ContractError
 RECEIPT_NAME = "import_receipt.json"
 READBACK_NAME = "runtime_controller_audit.json"
 PROJECT_NAME = "AnyMove_Dragon.iProject"
+CLEAN_TEMPLATE_NAME = "AnyMove_Dragon_CLEAN_before_motion.iProject"
 DIRECT_VERSION = "anymove.iclone.direct_dragon_import/1"
 
 
@@ -124,7 +125,7 @@ def _reset_frame_zero(rlpy, fps):
 
 
 def execute_direct_import(prepared,output_parent,rlpy=None,
-                          save_project=True):
+                          save_project=True,preserve_clean_template=False):
     """Complete import after the user's explicit scene-write confirmation.
 
     Retains a receipt if the writer succeeds but controller audit or native
@@ -139,6 +140,11 @@ def execute_direct_import(prepared,output_parent,rlpy=None,
         raise ContractError("invalid prepared Dragon import plan")
     if type(save_project) is not bool:
         raise ContractError("save_project must be bool")
+    if type(preserve_clean_template) is not bool:
+        raise ContractError("preserve_clean_template must be bool")
+    if preserve_clean_template and not save_project:
+        raise ContractError(
+            "A reusable clean template requires native SaveProject")
     obj,fps=_selected_and_fps(rlpy,prepared["fk"]["fps"])
     # Read-only recheck after modal UI interaction: reject scene changes.
     guard=preflight_clean_dragon(
@@ -177,9 +183,33 @@ def execute_direct_import(prepared,output_parent,rlpy=None,
         "iProject_path":None,
         "iProject_saved":False,
         "playhead_restored_to_frame0":False,
+        "clean_template_iProject":None,
         "warnings":[]
     }
     _put_json(output/RECEIPT_NAME,receipt)
+    if preserve_clean_template:
+        # Save the verified UNPOSED scene as a reusable checkpoint. iClone
+        # does not restore its original pose merely by deleting Motion Clips.
+        template=output/CLEAN_TEMPLATE_NAME
+        saver=getattr(getattr(rlpy,"RFileIO",None),"SaveProject",None)
+        try:
+            if not callable(saver) or template.exists():
+                raise ContractError("Cannot save reusable clean Dragon template")
+            _require_sdk_ok(saver(str(template)),"save clean Dragon before animation")
+            if not template.is_file() or template.stat().st_size<=0:
+                raise ContractError(
+                    "Clean Dragon .iProject missing/empty after SaveProject")
+            obj,_=_selected_and_fps(rlpy,prepared["fk"]["fps"])
+            preflight_clean_dragon(obj,_get_skeleton(obj),prepared["fk"],rlpy)
+            receipt["clean_template_iProject"]=str(template)
+            _put_json(output/RECEIPT_NAME,receipt)
+        except Exception as exc:
+            receipt["status"]="clean_template_backup_failed_no_keys_written"
+            receipt["clean_template_backup_error"]=type(exc).__name__+": "+str(exc)
+            _put_json(output/RECEIPT_NAME,receipt)
+            raise ContractError(
+                "Clean Dragon snapshot could not be saved safely before "
+                "Motion write. NO animation keys written. %s"%exc)
     try:
         written=write_selected(package_fk,rlpy=rlpy,fps_confirmed=True)
     except Exception as exc:
