@@ -79,10 +79,70 @@ def show():
                 plan=prepare_direct_import(source,rlpy=RLPy)
             except Exception as exc:
                 message=type(exc).__name__+": "+str(exc)
-                self.out.appendPlainText(
-                    "Direct AnyMove preflight FAILED (nothing written): "+message)
-                QtWidgets.QMessageBox.warning(
-                    self,"Direct import preflight failed",message)
+                # A keyed Dragon is not in Rest Pose. Offer a full-scene
+                # backup + explicit replacement, not an unsafe bypass.
+                from .replace_motion import (
+                    inspect_replacement_eligibility,
+                    replace_dragon_motion_with_backup)
+                try:
+                    eligibility=inspect_replacement_eligibility(
+                        source,rlpy=RLPy)
+                except Exception as replacement_exc:
+                    self.out.appendPlainText(
+                        "Direct AnyMove preflight FAILED (nothing written): "+
+                        message+"\nReplacement unavailable: "+
+                        str(replacement_exc))
+                    QtWidgets.QMessageBox.warning(
+                        self,"Direct import preflight failed",
+                        message+"\n\nCannot safely offer automatic replacement: "+
+                        str(replacement_exc))
+                    return
+                parent=QtWidgets.QFileDialog.getExistingDirectory(
+                    self,"Choose folder for BACKUP before replacing Motion",
+                    str(pathlib.Path(source).parent))
+                if not parent:
+                    return
+                confirmation=(
+                    "The selected Dragon has %d existing Motion Clips.\n"
+                    "Rest Pose verification cannot pass while they animate "
+                    "the character.\n\n"
+                    "Would you like AnyMove to:\n"
+                    "1. Save a complete BACKUP .iProject to:\n%s\n"
+                    "2. Remove the old Motion Clips.\n"
+                    "3. Recheck the original Dragon Rest Pose and hierarchy.\n"
+                    "4. ONLY if verified, write the new Motion and save "
+                    "a separate iProject.\n\n"
+                    "If any step fails, load the saved original project. "
+                    "No automatic deletion occurs without this approval.\n"
+                    "A backup file will remain available afterwards.\n\n"
+                    "BACKUP AND REPLACE existing Motion?"%
+                    (eligibility["existing_clip_count"],parent))
+                answer=QtWidgets.QMessageBox.question(
+                    self,"Replace Dragon Motion (FULL PROJECT BACKUP)",
+                    confirmation,
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                    QtWidgets.QMessageBox.No)
+                if answer!=QtWidgets.QMessageBox.Yes:
+                    self.out.appendPlainText(
+                        "Existing Motion retained; replacement cancelled.")
+                    return
+                try:
+                    replaced=replace_dragon_motion_with_backup(
+                        source,parent,rlpy=RLPy)
+                    self.out.appendPlainText(json.dumps(
+                        {"motion_replacement":replaced},
+                        ensure_ascii=False,indent=2))
+                    QtWidgets.QMessageBox.information(
+                        self,"Dragon Motion replaced with backup",
+                        "New iProject:\n%s\n\nOriginal-scene backup:\n%s\n\n"
+                        "Root Position motion still requires visual "
+                        "flight-height calibration."%
+                        (replaced["new_iProject"],replaced["backup_iProject"]))
+                except Exception as replace_exc:
+                    err=type(replace_exc).__name__+": "+str(replace_exc)
+                    self.out.appendPlainText("Motion replace failed: "+err)
+                    QtWidgets.QMessageBox.warning(
+                        self,"Motion replacement blocked",err)
                 return
             output=QtWidgets.QFileDialog.getExistingDirectory(
                 self,"Choose a folder for new iProject and audit package",
