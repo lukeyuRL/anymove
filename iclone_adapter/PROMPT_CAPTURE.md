@@ -95,3 +95,24 @@ scene and run "IMPORT AnyMove motion.json -> iClone + iProject".
 Previously keyed scenes must not be reused for a second import. GitHub CI
 covers mock UI/contract tests; real iClone and paid fal.ai runs have not
 been performed as part of this patch.
+
+## v0.7.4 — Diagnose early external Python failures before a paid request
+
+The iClone UI performs a lightweight, non-billable external Python check
+before the fal.ai paid confirmation dialog or any local capture starts:
+- verifies the selected interpreter actually reports Python 3.11;
+- checks that the required top-level Python packages are installed;
+- identifies the exact executable and missing packages in the error.
+
+This catches a stale or incompatible `.venv` before a charge. The preflight
+does NOT confirm a functioning CUDA driver, import binary extensions,
+download model weights, or contact fal.ai. It is not a full runtime test.
+
+The UI now also retains a bounded tail of the worker's combined stdout/stderr.
+If the process exits before `capture_receipt.json` exists, the popup
+includes the exit code, Python interpreter path and recent worker output,
+rather than only "no receipt / external worker exited".
+
+**Avoid duplicate charges:** inspect an existing capture directory for
+`generated/h3max.mp4` and fal.ai request records before launching a new
+paid Prompt job. Never overwrite a previous capture folder.
