@@ -10,7 +10,7 @@ import math
 import pathlib
 
 from .bone_registry import build_bone_registry
-from .motion_writer import _require_sdk_ok
+from .motion_writer import _require_sdk_ok, _ticks
 from .p1_inspector import read_float_value
 from .rlpy_reader import _get_skeleton, selected_object
 from .root_motion import convert_pelvis_root
@@ -60,10 +60,25 @@ def _controls(rlpy):
         raise ContractError("iClone project must be 24 FPS")
     zero=rlpy.IndexedFrameTime(0,fps)
     converted=getattr(clip,"ClipTimeToSceneTime",None)
-    if not callable(converted) or not callable(getattr(zero,"GetValue",None)):
-        raise ContractError("Cannot verify Motion Clip origin at Frame 0")
-    if int(converted(zero).GetValue())!=int(zero.GetValue()):
-        raise ContractError("Motion Clip is not at Frame 0; root repair refused")
+    if not callable(converted):
+        raise ContractError(
+            "Cannot verify Motion Clip origin at Frame 0: "
+            "RIClip.ClipTimeToSceneTime unavailable")
+    try:
+        # iClone 8 RTime exposes ToInt() (6000 ticks/second), NOT the
+        # legacy GetValue() used in iClone 7 examples. Share the checked
+        # conversion with the normal FK writer and scene guard.
+        clip_zero_ticks=_ticks(zero)
+        scene_zero_ticks=_ticks(converted(zero))
+    except (AttributeError,TypeError,ValueError,OverflowError) as exc:
+        raise ContractError(
+            "Cannot read Motion Clip time as iClone 8 RTime.ToInt ticks: "
+            +str(exc)) from exc
+    if scene_zero_ticks!=clip_zero_ticks:
+        raise ContractError(
+            "Motion Clip is not at Frame 0: clip origin maps to "
+            "scene tick %d (expected %d); root repair refused"%
+            (scene_zero_ticks,clip_zero_ticks))
     node=next(r["node"] for r in registry if r["name"]=="pelvis")
     layer=clip.GetControl("Layer",node)
     block=layer.GetDataBlock() if layer is not None else None
