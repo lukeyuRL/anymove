@@ -48,16 +48,27 @@ class CaptureWorkerTests(unittest.TestCase):
             self.assertEqual(a["mode"],"video")
             b=capture._input_plan(self.det,output_dir=self.output)
             self.assertEqual(b["mode"],"detections")
-            self.assertEqual(a["required_python"],"3.11")
+            self.assertEqual(a["required_python"],"3.11 or 3.14")
             self.assertNotIn("reader.pt",str(b["input_path"]))
 
     def test_wrong_python_and_missing_reader_fail(self):
         with mock.patch.object(capture.sys,"version_info",(3,8,0)):
-            with self.assertRaisesRegex(ContractError,"Python 3.11"):
+            with self.assertRaisesRegex(ContractError,"Python 3.11 or 3.14"):
                 capture._input_plan(self.det,output_dir=self.output)
         with mock.patch.object(capture.sys,"version_info",(3,11,0)):
             with self.assertRaisesRegex(ContractError,"reader"):
                 capture._input_plan(self.video,output_dir=self.output)
+
+    def test_python_314_supported_and_313_rejected(self):
+        with mock.patch.object(capture.sys,"version_info",(3,14,0)):
+            self.assertTrue(capture.supports_external_python())
+            plan=capture._input_plan(self.video,self.reader,self.ref,self.output)
+            self.assertEqual(plan["mode"],"video")
+            self.assertEqual(plan["required_python"],"3.11 or 3.14")
+        with mock.patch.object(capture.sys,"version_info",(3,13,0)):
+            self.assertFalse(capture.supports_external_python())
+            with self.assertRaisesRegex(ContractError,"3.11 or 3.14"):
+                capture._input_plan(self.det,output_dir=self.output)
 
     def test_existing_output_directory_rejected_not_overwritten(self):
         self.output.mkdir()
