@@ -9,7 +9,7 @@ Target branch: `iClone`. The original Blender/AnyMove pipeline stays untouched.
 - **P1 SDK audit:** enforce project FPS via `RFps.ToDouble`, extend new clips with `RIClip.SetLength`, and handle all `RStatus.IsError()` outcomes. Matrix layout is runtime-probed rather than assumed.
 - **P1 built:** strictly typed in-scene FK **channel** motion, optional synthetic 48-frame sine test, safety preflight, new motion clip and attempted rollback.
 - **P1 NOT verified:** end-to-end real SDK write/readback, clip range, FK/IK interaction, arbitrary Skeleton retargeting, AnyMove Blender Euler conversion, root motion and Generic Solver.
-- DINOv2 and torch **must run in a separate Python 3.11 process**, not the iClone Python 3.8 host.
+- DINOv2 and torch **must run in a separate Python 3.11 or 3.14 process**, not the iClone Python 3.8 host.
 
 ## Run in iClone 8 Python console
 
