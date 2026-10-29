@@ -1,6 +1,6 @@
 # Dragon Prompt -> fal video -> AnyMove Motion -> iClone
 
-This optional external Python 3.11 command adds the final upstream step:
+This optional external Python 3.11 or 3.14 command adds the final upstream step:
 turn an action text into a two-camera Dragon video with fal.ai using
 the original tools/make_prompt.py and mocap.generate utilities.
 
@@ -51,7 +51,7 @@ The user enters an English motion description and explicitly confirms
 a billable fal.ai MiniMax H3 Max 5-second video generation. The UI
 checks FAL_KEY in the configured environment/.env, selects the existing
 Dragon-trained reader.pt and reference ref.png, and launches an EXTERNAL
-Python 3.11 QProcess (never heavy dependencies inside iClone).
+Python 3.11 or 3.14 QProcess (never heavy dependencies inside iClone).
 
 The original AnyMove scripts build the correct two-camera prompt,
 submit the user-approved fal video request, download the MP4, run
@@ -67,7 +67,7 @@ The existing MP4/NPZ button never contacts fal.ai.
 One-time setup for this known Dragon remains:
 - 42-Bone original Dragon imported in iClone at 100x FBX scene scale;
 - Dragon-trained reader.pt (pretrained release asset or self-trained);
-- dragon ref.png; NVIDIA CUDA and external Python 3.11 dependencies;
+- dragon ref.png; NVIDIA CUDA and external Python 3.11 or 3.14 dependencies;
 - FAL_KEY only when using the PAID Prompt button.
 
 Costs and remote model availability are NOT guaranteed. This and
@@ -83,7 +83,7 @@ Dragon, an incompatible actor, or no actor selected.
 
 The fal.ai charge still requires an available FAL_KEY and an explicit paid
 request confirmation. The trained Dragon Reader, reference image, external
-Python 3.11, output folder and capture-quality gates remain mandatory.
+Python 3.11 or 3.14, output folder and capture-quality gates remain mandatory.
 
 When motion.json is ready, the UI runs the unchanged strict direct-import
 preflight on the **then-selected** actor. If import preparation fails (wrong
@@ -100,7 +100,7 @@ been performed as part of this patch.
 
 The iClone UI performs a lightweight, non-billable external Python check
 before the fal.ai paid confirmation dialog or any local capture starts:
-- verifies the selected interpreter actually reports Python 3.11;
+- verifies the selected interpreter actually reports Python 3.11 or 3.14;
 - checks that the required top-level Python packages are installed;
 - identifies the exact executable and missing packages in the error.
 
@@ -116,3 +116,33 @@ rather than only "no receipt / external worker exited".
 **Avoid duplicate charges:** inspect an existing capture directory for
 `generated/h3max.mp4` and fal.ai request records before launching a new
 paid Prompt job. Never overwrite a previous capture folder.
+
+## v0.7.5 — Python 3.14 external worker support
+
+iClone's embedded Python remains unchanged. The external Prompt, MP4,
+det.npz and Solver workers now allow CPython **3.11 or 3.14**.
+The UI version preflight and both standalone worker entrypoints share
+the same allowlist. Interpreter checks happen before billable fal.ai
+generation, and offline tests now include Python 3.14.
+
+On Windows, use an existing Python 3.14 virtual environment at
+`F:\anymove\.venv\Scripts\python.exe` (or your clone root). Verify it:
+
+```powershell
+cd F:\anymove
+.\.venv\Scripts\python.exe --version
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cu128
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -c "import torch, cv2, numpy, transformers, requests, PIL; print('Torch:',torch.__version__,'CUDA:',torch.cuda.is_available())"
+```
+
+If the virtual environment is absent, create it using
+`py -3.14 -m venv .venv` first. Existing virtual environments use
+the Python version with which they were created; changing the Windows
+default Python does not migrate them.
+
+The lightweight preflight verifies Python and installed module names;
+it does NOT import CUDA, prove a working GPU driver, or guarantee
+successful DINOv2 inference. No remote fal.ai request was made to test
+this change. Review previous capture folders before repeating a paid job.
