@@ -238,7 +238,7 @@ class RootFlightFixTests(unittest.TestCase):
             position_space="armature")
         self.events.clear()
         with self.assertRaisesRegex(
-                ContractError,"NOT the original pelvis-local"):
+                ContractError,"does NOT match a safe positive scale"):
             fix.rescale_root_position(
                 self.path,self.root,100.,rlpy=self.sdk,
                 position_space="armature")
