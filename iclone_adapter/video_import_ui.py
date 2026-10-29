@@ -474,6 +474,54 @@ class VideoCaptureCoordinator:
                 plan=prepare_direct_import(str(motion),rlpy=self.rlpy)
             except Exception as exc:
                 reason=type(exc).__name__+": "+str(exc)
+                # A previous clip can pose an otherwise compatible Dragon.
+                # Never silently delete it: back up the whole scene, obtain
+                # explicit approval, then strictly revalidate Rest after cleanup.
+                try:
+                    from .replace_motion import (
+                        inspect_replacement_eligibility,
+                        replace_dragon_motion_with_backup)
+                    eligible=inspect_replacement_eligibility(
+                        str(motion),rlpy=self.rlpy)
+                except Exception:
+                    eligible=None
+                if eligible:
+                    folder=str(job.get("output_parent") or capture.parent)
+                    question=(
+                        "Motion Solver finished and saved motion.json.\n\n"
+                        "The selected Dragon already has %d Motion Clips. "
+                        "They prevent clean Rest Pose import.\n\n"
+                        "BACKUP the entire current iProject to:\n%s\n\n"
+                        "Then REMOVE old clips, revalidate the original "
+                        "42-Bone Rest Pose, and import the new motion?\n"
+                        "If verification/import fails, the project backup "
+                        "will be reloaded. No earlier motions will be "
+                        "silently deleted.\n\n"
+                        "Backup and REPLACE prior Dragon motion?"%
+                        (eligible["existing_clip_count"],folder))
+                    answer=self.widgets.QMessageBox.question(
+                        self.panel,"Backup before replacing Dragon motion",
+                        question,self.widgets.QMessageBox.Yes |
+                        self.widgets.QMessageBox.No,self.widgets.QMessageBox.No)
+                    if answer==self.widgets.QMessageBox.Yes:
+                        try:
+                            updated=replace_dragon_motion_with_backup(
+                                str(motion),folder,rlpy=self.rlpy)
+                            self._log(json.dumps(
+                                {"motion_replacement":updated},
+                                ensure_ascii=False,indent=2))
+                            self.widgets.QMessageBox.information(
+                                self.panel,"Dragon Motion replaced with backup",
+                                "New iProject:\n%s\n\nBackup:\n%s\n\n"
+                                "Root flight height still requires visual "
+                                "confirmation."%
+                                (updated["new_iProject"],
+                                 updated["backup_iProject"]))
+                        except Exception as replace_exc:
+                            err=type(replace_exc).__name__+": "+str(replace_exc)
+                            self._log("Motion replacement failed: "+err)
+                            self._warning("Motion replacement blocked",err)
+                        return
                 self._log(
                     "Dragon motion.json READY; automatic iClone import DEFERRED: "
                     +reason+"\nPreserved motion.json: "+str(motion))
