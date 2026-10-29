@@ -416,10 +416,20 @@ def main():
     sync["front_shift_frames"] = None if shift is None else shift.round(2).tolist()
     res = fit(d, info, dev="cuda" if torch.cuda.is_available() else "cpu")
     print("reprojection error px:", {k: round(v, 2) for k, v in res["reproj_px"].items()})
+    # Preserve the exact detection file and camera Layout provenance.
+    # These two values prevent the old "same 124 frames / same 50 names"
+    # ambiguity when a user later diagnoses an incorrect motion.
+    import hashlib
+    det_sha = hashlib.sha256()
+    with open(det_path, "rb") as source_det:
+        for chunk in iter(lambda: source_det.read(1048576), b""):
+            det_sha.update(chunk)
     motion = {"fps": float(raw["fps"]), "bones": res["bones"], "trans": res["trans"].round(5).tolist(),
               "root_quat": to_quat(res["root_rotmat"]).round(6).tolist(), "euler": res["euler"].round(5).tolist(),
               "joints": res["joints"].round(4).tolist(), "joint_names": res["joint_names"],
-              "reproj_px": res["reproj_px"], "sync": sync, "swaps": swapped}
+              "reproj_px": res["reproj_px"], "sync": sync, "swaps": swapped,
+              "solver_camera_layout": active_layout,
+              "source_detections_sha256": det_sha.hexdigest()}
     json.dump(motion, open(out, "w"))
     print("saved", out)
 

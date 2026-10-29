@@ -342,11 +342,28 @@ def main():
     a=p.parse_args()
     motion=_read(a.motion)
     blender=_read(a.blender_joints) if a.blender_joints else None
+    # New Solver versions embed a source detection hash. Compare it when
+    # present; old clips without provenance remain diagnostic-only.
     detections=load_npz(a.detections) if a.detections else None
+    if a.detections and motion.get("source_detections_sha256"):
+        import hashlib
+        digest=hashlib.sha256()
+        with open(a.detections,"rb") as f:
+            for chunk in iter(lambda:f.read(1048576),b""):
+                digest.update(chunk)
+        if digest.hexdigest()!=motion["source_detections_sha256"]:
+            raise ValueError(
+                "The supplied det.npz is NOT the exact source of this "
+                "motion.json (SHA-256 mismatch). Use the original detection "
+                "or re-solve from a known source.")
     rig=_read(a.rig_info)
     creature=_read(a.creature)
     result=diagnose(motion,rig,blender=blender,detections=detections,
                     layout=creature.get("layout"))
+    result["motion_solver_camera_layout"]=motion.get(
+        "solver_camera_layout","not_recorded_in_legacy_motion")
+    result["source_detections_hash_verified"]=bool(
+        a.detections and motion.get("source_detections_sha256"))
     output=pathlib.Path(a.output)
     output.parent.mkdir(parents=True,exist_ok=True)
     output.write_text(json.dumps(result,indent=2,ensure_ascii=False)+"\n",

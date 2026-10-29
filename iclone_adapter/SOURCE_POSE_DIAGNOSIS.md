@@ -58,3 +58,30 @@ Set the environment BEFORE launching Python:
 Then use mocap.solve with the original det.npz and a **new** output file.
 Do not delete any previous animation or attempt to correct Root by a
 fixed Quaternion. Compare new Solver motion against det.npz first.
+
+
+## v0.7.2 — exact camera and source detection provenance
+
+Regenerated mocap.solve output now embeds the loaded
+solver_camera_layout and the source_detections_sha256 (raw NPZ bytes).
+
+The next diagnosis uses the source hash to REFUSE a mismatched det.npz
+even when both clips happen to have 124 frames and the same joint names.
+The camera candidate test compares reprojection errors to the values
+actually recorded by the Solver when it produced the motion.
+
+Correct Dragon solve example from PowerShell:
+
+    cd F:\anymove
+    git pull --ff-only origin iClone
+    $env:MOCAP_CREATURE = 'assets/dragon'
+    New-Item -ItemType Directory -Force F:\anymove_test\roar_corrected | Out-Null
+    .venv\Scripts\python.exe -m mocap.solve examples\dragon_roar\det.npz assets\dragon\rigged\rig_info.json F:\anymove_test\roar_corrected\motion.json
+
+Inspect the console: Solver camera layout should include
+W_FRONT=640, W_SIDE=640, M_PER_PX=0.006875, GROUND_V=630. Then
+repeat source_pose_diagnose against the NEW motion and SAME det.npz;
+do not reuse the old Blender joints.json in that new-motion comparison.
+
+Once source-video fit is good, render a new Blender reference and
+import the new motion.json into an unposed Dragon iClone project.
