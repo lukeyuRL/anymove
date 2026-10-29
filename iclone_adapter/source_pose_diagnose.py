@@ -48,7 +48,23 @@ def _world_up_from_root(q, bone_rest):
         [1-2*(y*y+z*z), 2*(x*y-z*w), 2*(x*z+y*w)],
         [2*(x*y+z*w),1-2*(x*x+z*z),2*(y*z-x*w)],
         [2*(x*z-y*w),2*(y*z+x*w),1-2*(x*x+y*y)]]
-    basis=[[float(bone_rest[i][j]) for j in range(3)] for i in range(3)]
+    # Blender Rest matrices contain float32 rounding. Orthonormalize
+    # columns to avoid false world-up tilt even when q is identity.
+    cols=[[float(bone_rest[i][j]) for i in range(3)] for j in range(3)]
+    def unit(v):
+        n=math.sqrt(sum(x*x for x in v))
+        if n<1e-9:
+            raise ValueError("degenerate Pelvis Bone Rest rotation")
+        return [x/n for x in v]
+    x=unit(cols[0])
+    projection=sum(a*b for a,b in zip(x,cols[1]))
+    y=unit([cols[1][i]-projection*x[i] for i in range(3)])
+    z=[x[1]*y[2]-x[2]*y[1],
+       x[2]*y[0]-x[0]*y[2],
+       x[0]*y[1]-x[1]*y[0]]
+    if sum(a*b for a,b in zip(z,cols[2]))<.9:
+        raise ValueError("Pelvis Bone Rest rotation is reflected")
+    basis=[[x[i],y[i],z[i]] for i in range(3)]
     br=[[sum(basis[i][k]*rq[k][j] for k in range(3))
           for j in range(3)] for i in range(3)]
     world=[[sum(br[i][k]*basis[j][k] for k in range(3))

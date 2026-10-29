@@ -62,7 +62,12 @@ class SourcePoseTests(unittest.TestCase):
         wrong=copy.deepcopy(self.motion)
         for row in wrong["joints"]:
             row[1][0]+=.7
-        report=self.compare(motion=wrong)
+        # The Blender reference agrees with the modified Solver here,
+        # isolating the source-DINO joint mismatch rather than Blender.
+        blender=copy.deepcopy(self.blender)
+        for frame in blender["joints"]:
+            frame[0][0]+=.7
+        report=self.compare(motion=wrong,blender=blender)
         self.assertEqual(report["result"],
                          "solver_deviates_from_detected_video_joints")
         self.assertGreater(report["source_detection_fit_px"][
@@ -71,8 +76,9 @@ class SourcePoseTests(unittest.TestCase):
     def test_world_root_basis_conjugation(self):
         wrong=copy.deepcopy(self.motion)
         angle=math.radians(45.)
+        # Pelvis local X points along world X; local Y is tilted.
         wrong["root_quat"][1]=[
-            math.cos(angle*.5),0.,math.sin(angle*.5),0.]
+            math.cos(angle*.5),math.sin(angle*.5),0.,0.]
         report=self.compare(motion=wrong)
         self.assertAlmostEqual(report["pelvis_root_world_orientation"][
             "world_up_tilt_deg"]["max"],45.,places=3)
