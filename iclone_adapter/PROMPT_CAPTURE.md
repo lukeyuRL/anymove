@@ -378,3 +378,52 @@ the negative current Z and user's observed descent, NOT a verified
 production mapping. Visually compare peak height and direction in
 iClone, then calibrate the absolute multiplier before making this the
 default Motion Import profile. Do not re-run paid fal.ai generation.
+
+## v0.7.12 — Confirmed Root Position multiplier = 1.0; use source XYZ up
+
+This update fixes two linked path inconsistencies in the AnyMove Dragon
+importer. The native Dragon rig's FBX Rest geometry is still verified
+as 100x, but this is NOT the Pelvis Layer Position gain. The
+user-confirmed **Root Position multiplier is exactly 1.0**.
+
+For the actual flight motion provided during development, source Root
+translation delta from Frame 0 to the apex near Frame 57 is
+`[-0.06049,-0.12456,+1.21933]` (source +Z up).
+The previous `inverse(R_rest_pelvis) @ trans` conversion produces
+`[-0.06049,+0.50375,-1.11737]`, flipping the dominant upward
+trajectory into negative local Z. The reported iClone render descended
+when those keys were amplified, so the new experimental basis is to
+write **the full source armature/world XYZ (not a Z-only sign flip)**.
+
+- New direct imports / generated motion.json now use
+  `root_position_space="armature"`, `root_position_scale=1.0` in
+  `import_pipeline.py`. Rotations are unchanged. The bundle schema
+  and reference profile IDs were incremented, so previously serialized
+  pelvis-local FK bundles cannot masquerade as source XYZ.
+- Existing imported Dragon clips can use **ROOT FLIGHT: correct Pelvis
+  XYZ direction (1x, BACKUP)**. The reader first verifies every
+  previously written Pelvis Position key against the source
+  inverse-Rest trajectory. It recognizes old 1x as well as old
+  experimental 100x keys; the old scale is identification only and
+  is NEVER carried into the corrected data.
+- The corrected track is rebuilt from original `motion.json["trans"]`
+  and written at exactly **1.0**. The Root Flight API refuses all
+  other position multipliers, including 100x. The UI no longer offers
+  a numeric multiplier box.
+- Already-corrected source XYZ/1x clips are detected and are not
+  rewritten. Other/unmatched clips fail preflight.
+- A complete native iProject backup is saved BEFORE any key changes.
+  Every changed Position XYZ scalar is read back, a separate new
+  iProject is saved, and failed writes attempt to restore the backup.
+  Non-Root FK rotations are not touched.
+
+The above corrects the **stored Position coordinate basis**; the
+actual upward world-space displacement in iClone has NOT yet been
+measured. iClone's IK/Layer evaluation or actor transform can differ
+from controller values. It remains a tested hypothesis until the
+user validates flight and landing visually. No new fal.ai video
+generation or GPU solve is needed.
+
+The user-local Dragon project cannot be modified remotely when the
+Desktop Commander computer is offline. Pull the latest `iClone`
+branch and restart the plugin to use this version.
