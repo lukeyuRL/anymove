@@ -401,6 +401,45 @@ class VideoCaptureCoordinator:
                     data=json.load(f)
             except Exception as exc:
                 self._log("Could not inspect Capture receipt: "+str(exc))
+        # A solver quality gate is NOT a capture crash. The worker has
+        # already written motion.json and its independent quality receipt.
+        # Keep the strict 15 px reference threshold and require the user
+        # to deliberately review/import the preserved motion, never accept
+        # borderline quality automatically or rerun a paid video request.
+        if data and data.get("status")=="quality_gate_blocked":
+            motion=pathlib.Path(data.get("motion_file") or
+                                (capture/OUTPUT_MOTION))
+            if motion.is_file() and motion.stat().st_size>0:
+                summary=data.get("motion_summary") or {}
+                reasons=summary.get("quality_issues") or [
+                    data.get("error") or "quality gate not met"]
+                reproj=summary.get("reprojection_px") or {}
+                reproj_text=(
+                    "Front X reprojection: %s px (limit 10 px)\\n"
+                    "Side reprojection: %s px (limit 15 px)\\n"%
+                    (reproj.get("front_x_only","not reported"),
+                     reproj.get("side","not reported")))
+                msg=(
+                    "Motion Solver FINISHED, but the result NEEDS REVIEW.\\n"
+                    "Quality issues:\\n- %s\\n\\n"
+                    "Frames: %s\\n%s\\n"
+                    "Saved motion.json (NOT discarded):\\n%s\\n\\n"
+                    "The iClone scene has NOT been modified.\\n"
+                    "Do not pay to generate another video or rerun the "
+                    "solver for this quality warning.\\n\\n"
+                    "Inspect the source video, joint overlay (if available), "
+                    "and resulting animation before use. For a manual test "
+                    "on a fresh CLEAN 42-Bone Dragon (100x FBX, 24 FPS, "
+                    "Frame 0, no Motion Clips), select 'IMPORT AnyMove "
+                    "motion.json'. Manual import does NOT certify this "
+                    "motion's quality and bypasses the solver quality gate."
+                    %("\\n- ".join(str(x) for x in reasons),
+                      summary.get("frame_count","unknown"),
+                      reproj_text,str(motion)))
+                self._log("Dragon motion solved; QUALITY REVIEW required. "+
+                          "\\n"+msg)
+                self._warning("Dragon motion ready - quality review",msg)
+                return
         if (exit_code!=0 or
             exit_status!=self.core.QProcess.NormalExit or
             not data or data.get("status")!="motion_json_ready"):

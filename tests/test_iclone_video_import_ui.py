@@ -289,5 +289,62 @@ class VideoImportUITests(unittest.TestCase):
 
 
 
+    def test_quality_gate_blocked_preserves_motion_and_requires_manual_review(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            capture=root/"capture_h3max_001"
+            capture.mkdir()
+            motion=capture/"motion.json"
+            motion.write_text('{"test":"completed"}',encoding="utf-8")
+            receipt={
+                "status":"quality_gate_blocked",
+                "error":"side reprojection 15.2 px > 15 px",
+                "motion_file":str(motion),
+                "motion_summary":{
+                    "frame_count":124,
+                    "quality_status":"needs_review",
+                    "quality_issues":["side reprojection 15.2 px > 15 px"],
+                    "reprojection_px":{"front_x_only":7.0,"side":15.2}
+                }
+            }
+            (capture/video_ui.RECEIPT).write_text(
+                json.dumps(receipt),encoding="utf-8")
+            coordinator,widgets,panel=self._capture_widgets(root)
+            coordinator.job={
+                "capture_path":str(capture),"mode":"existing",
+                "python":"python.exe"}
+            with mock.patch.object(video_ui,"prepare_direct_import") as prepare:
+                with mock.patch.object(video_ui,"execute_direct_import") as write:
+                    coordinator._finished(2,coordinator.core.QProcess.NormalExit)
+            prepare.assert_not_called()
+            write.assert_not_called()
+            warning=str(widgets.QMessageBox.warning.call_args)
+            self.assertIn("quality review",warning.lower())
+            self.assertIn("15.2 px",warning)
+            self.assertIn("motion.json",warning)
+            self.assertIn(str(motion),warning)
+            self.assertIn("NOT been modified",warning)
+            self.assertIn("Manual import does NOT certify",warning)
+            self.assertTrue(motion.is_file())
+            self.assertTrue(panel.out.appendPlainText.called)
+
+    def test_quality_blocked_without_motion_is_not_reported_as_finished(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            capture=root/"capture_h3max_001"
+            capture.mkdir()
+            (capture/video_ui.RECEIPT).write_text(json.dumps({
+                "status":"quality_gate_blocked",
+                "error":"side reprojection 15.2 px > 15 px",
+                "motion_file":str(capture/"missing.json")
+            }),encoding="utf-8")
+            coordinator,widgets,_=self._capture_widgets(root)
+            coordinator.job={"capture_path":str(capture),"mode":"existing"}
+            coordinator._finished(2,coordinator.core.QProcess.NormalExit)
+            warning=str(widgets.QMessageBox.warning.call_args)
+            self.assertIn("not imported",warning.lower())
+            self.assertNotIn("quality review",warning.lower())
+
+
 if __name__=="__main__":
     unittest.main()

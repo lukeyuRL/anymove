@@ -172,3 +172,21 @@ otherwise choose `runs/capture_dragon_ai_prompt_001/generated/h3max.mp4`
 to repeat only local GPU joint detection and the solver. Choose a NEW
 capture output folder, leave the original run unchanged. After solving,
 iClone import still checks the original clean Dragon target separately.
+
+## v0.7.7 — Actionable quality review without changing acceptance thresholds
+
+A completed solve can be blocked solely by the post-solve reference
+quality gates (for example, `side reprojection 15.2 px > 15 px`).
+That is `quality_gate_blocked`, **not a failed solver**. The original
+`motion.json`, `det.npz`, and receipts are preserved.
+
+The iClone UI now distinguishes that status from actual capture failures
+and displays the saved motion path, measured reprojection and blocking
+reasons. The 15 px side / 10 px front X / 0.5 paw agreement thresholds
+are **unchanged**. No automatic retarget/write/charge occurs.
+
+Users can deliberately inspect the source, joint overlay (when available)
+and the animation in an expendable clean Dragon scene. After review,
+`IMPORT AnyMove motion.json` can load the saved file without rerunning
+fal.ai, detection or solving, but this manual path does **not** claim
+that a quality-failing motion has passed the solver's gates.
