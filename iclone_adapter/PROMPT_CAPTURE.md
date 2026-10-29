@@ -190,3 +190,62 @@ and the animation in an expendable clean Dragon scene. After review,
 `IMPORT AnyMove motion.json` can load the saved file without rerunning
 fal.ai, detection or solving, but this manual path does **not** claim
 that a quality-failing motion has passed the solver's gates.
+
+## v0.7.8 — Safe existing-Motion replacement and experimental root-flight repair
+
+### Existing Motion no longer needs manual deletion
+
+The direct import panel checks for a compatible Dragon hierarchy if an
+existing Motion Clip prevents clean Rest verification. If there is one,
+AnyMove offers a **BACKUP AND REPLACE** confirmation (default No).
+No old clip is deleted without this explicit approval.
+
+With approval, AnyMove:
+1. Saves a full backup of the CURRENT scene to a unique .iProject.
+2. Deletes ONLY clips on the selected Dragon Skeleton, checking each count.
+3. Evaluates Frame 0 and runs the UNCHANGED strict Rest Pose / clean layer
+   tests, on the actor AFTER removing the old clips.
+4. Imports the requested motion, performs full per-frame controller readback,
+   and saves a separate new .iProject.
+5. On any failure after the backup, attempts to reload the full original
+   scene from the backup and reports the backup path.
+
+If the original Dragon bone names/parents are incompatible, the operation
+is refused before any backup or deletion. The backup remains after success
+and can be manually re-opened if needed. This path is available after
+source MP4/NPZ Capture and in manual "IMPORT AnyMove motion.json".
+
+### ROOT FLIGHT: inspect / rescale existing Pelvis motion (BACKUP)
+
+Users who have a valid-looking 42-Bone animation but no visible global
+lift can use the new ROOT FLIGHT button. Choose the **original**
+motion.json that created the CURRENT iClone clip. A read-only preflight
+requires exactly one frame-zero clip and checks that every stored Pelvis
+Position XYZ controller key still matches the existing source-scale-1
+AnyMove trajectory, within 0.002 native values.
+
+The UI reports the source Z displacement (for the sample Dragon,
+approximately +1.22 m at Frame 57) and asks the user to enter a multiplier.
+A value of 100.0 is the suggested **experimental** unit-scale hypothesis
+for the 100x imported FBX, NOT a verified iClone layer convention.
+The FBX parent may already apply that scale: blindly multiplying 100x
+can overshoot. Use a disposable scene and compare the result visually.
+The multiplier is NEVER applied without user input and a second approval.
+
+After approval the repair:
+- Saves a complete, new backup iProject first.
+- Adjusts ONLY Pelvis Layer Position XYZ on every frame.
+- Reads back every adjusted scalar, confirming tolerance <= 0.002.
+- Saves a DIFFERENT new iProject and an audit receipt.
+
+FK rotations, original motion.json, det.npz, source video, and older
+iProjects are untouched. If writing fails, the backup is reloaded.
+Successful controller readback does not prove the evaluated Pelvis world
+translation (IK overrides, actor Transform or SDK evaluation can differ).
+This feature is a measurable root-scale experiment, not a claim that
+Root Motion is calibrated or quality-gated.
+
+The source Dragon MP4 and solver do NOT need to be generated again, so
+this process involves no additional fal.ai charges. GitHub CI validates
+mock SDK safety and math only; actual iClone 8 playback still needs a
+real on-device smoke test.
