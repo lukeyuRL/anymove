@@ -251,38 +251,19 @@ def show():
                 self.out.appendPlainText(json.dumps(
                     {"root_flight_preflight":report},
                     ensure_ascii=False,indent=2))
-                # Choose a full 3-axis mapping, NOT just a Z sign flip.
-                options=[
-                    "Source XYZ (+Z up, world/armature axes) - TEST",
-                    "Existing pelvis_local (Blender inverse-rest axes)"]
-                mode_label,mode_ok=QtWidgets.QInputDialog.getItem(
-                    self,"Experimental Root Position COORDINATE BASIS",
-                    "Source up-Z lift: %.3f at Frame %d.\n"
-                    "Currently saved pelvis-local Z delta: %.3f "
-                    "(negative means down if treated as world Z).\n"
-                    "Choose the FULL XYZ axis mapping to test:"%
-                    (report["source_vertical_rise_m"],report["peak_frame"],
-                     report["original_pelvis_local_peak_delta_xyz"][2]),
-                    options,0,False)
-                if not mode_ok:
+                if report["status"]=="already_source_xyz_scale_1":
+                    QtWidgets.QMessageBox.information(
+                        self,"Root Position already at source XYZ 1x",
+                        "This Dragon already has the exact source XYZ "
+                        "Pelvis Position keys at 1.0x. Nothing will be "
+                        "rewritten. Check actual iClone flight height "
+                        "before attempting any other corrections.")
                     return
-                position_space=("armature" if mode_label==options[0]
-                                else "pelvis_local")
+                # Source XYZ at precisely 1.0, as confirmed. Never offer
+                # a 10x or 100x default for this Root Flight operation.
                 current_scale=float(report["detected_current_scale"])
-                # Keep x100 if already applied. Never accidentally apply
-                # 100x to an existing 100x as a second multiplication.
-                suggested=min(100.0,max(10.0,current_scale))
-                multiplier,ok=QtWidgets.QInputDialog.getDouble(
-                    self,"Experimental Pelvis Position Units",
-                    "Current keys match the source pelvis-local motion at "
-                    "%.4gx.\n"
-                    "Select ABSOLUTE target Position multiplier "
-                    "(not a multiplier of existing keys).\n"
-                    "100x is a unit-scale hypothesis, not calibrated:"%
-                    current_scale,
-                    suggested,1.01,200.0,3)
-                if not ok:
-                    return
+                position_space="armature"
+                multiplier=1.0
                 parent=QtWidgets.QFileDialog.getExistingDirectory(
                     self,"Choose output folder for backup AND rescaled iProject",
                     str(pathlib.Path(path).parent))
@@ -294,12 +275,13 @@ def show():
                     "pelvis-local source at %.4gx. FK rotations will NOT change.\n"
                     "Source peak upward travel: %.3f m at Frame %d.\n"
                     "New full 3-axis Position basis: %s.\n"
-                    "New ABSOLUTE Position multiplier: %.3f.\n\n"
-                    "Current local Z is NEGATIVE for source upward motion. "
-                    "Testing Source XYZ changes the ENTIRE rotation basis, "
-                    "not only the Z sign. Source XYZ is a hypothesis until "
-                    "visually confirmed. This value may OVERSHOOT if the FBX "
-                    "parent already applies its 100x scale.\n"
+                    "New ABSOLUTE Position multiplier: %.3f (FIXED).\n\n"
+                    "Old local Z is NEGATIVE for source upward motion. "
+                    "Source XYZ changes the ENTIRE 3-axis position basis, "
+                    "not only the Z sign. The confirmed scale remains "
+                    "1.0: NO 100x multiplier. This basis is still an "
+                    "iClone world-motion hypothesis, requiring playback "
+                    "verification.\n"
                     "First save a FULL BACKUP iProject, then rescale only "
                     "Pelvis Position XYZ, read back every key and save a "
                     "separate new iProject. If a write fails, attempt "
@@ -311,7 +293,7 @@ def show():
                     (current_scale,report["source_vertical_rise_m"],
                      report["peak_frame"],position_space,multiplier))
                 answer=QtWidgets.QMessageBox.question(
-                    self,"BACKUP before experimental Root scale",question,
+                    self,"BACKUP before source XYZ 1x Root correction",question,
                     QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
                     QtWidgets.QMessageBox.No)
                 if answer!=QtWidgets.QMessageBox.Yes:
@@ -324,7 +306,7 @@ def show():
                     {"root_flight_repair":result},
                     ensure_ascii=False,indent=2))
                 QtWidgets.QMessageBox.information(
-                    self,"Experimental Root Flight keys saved",
+                    self,"Root Flight source XYZ 1x keys saved",
                     "Pelvis XYZ position key readback passed (not a "
                     "visual/runtime calibration).\n\n"
                     "Adjusted project:\n%s\n\nBackup project:\n%s\n\n"
