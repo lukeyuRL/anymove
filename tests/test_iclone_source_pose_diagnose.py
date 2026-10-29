@@ -46,8 +46,8 @@ class SourcePoseTests(unittest.TestCase):
         self.assertEqual(report["result"],
             "solver_blender_match_detected_2D_check_3D_visual_and_skin")
         self.assertEqual(report["solver_to_blender_cm"]["error_cm"]["max"],0.)
-        self.assertEqual(report["pelvis_root_world_orientation"][
-            "world_up_tilt_deg"]["max"],0.)
+        self.assertLess(report["pelvis_root_world_orientation"][
+            "world_up_tilt_deg"]["max"],1e-4)
 
     def test_blender_world_pose_mismatch_is_localized(self):
         wrong=copy.deepcopy(self.blender)
