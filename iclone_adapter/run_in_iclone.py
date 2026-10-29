@@ -47,6 +47,8 @@ def show():
                  self.video_capture.start),
                 ("IMPORT AnyMove motion.json -> iClone + iProject (42-Bone Dragon)",
                  self.import_original_anymove),
+                ("ROOT FLIGHT: inspect / rescale existing Pelvis motion (BACKUP)",
+                 self.repair_root_flight),
                 ("Inspect selected skeleton", self.inspect),
                 ("Export current-pose skeleton snapshot", self.export),
                 ("Save raw Skin Bone diagnostics (no export)", self.debug_bones),
@@ -156,6 +158,82 @@ def show():
                     "Direct AnyMove import FAILED: "+message)
                 QtWidgets.QMessageBox.critical(
                     self,"Direct AnyMove Import Failed",message)
+
+
+        def repair_root_flight(self):
+            """Reversible experimental root scale repair, never silent."""
+            import pathlib
+            from .root_flight_fix import inspect_root_scale, rescale_root_position
+            path,_=QtWidgets.QFileDialog.getOpenFileName(
+                self,"Choose the ORIGINAL Dragon motion.json used for this clip",
+                "","Original Dragon motion.json (*.json)")
+            if not path:
+                return
+            try:
+                report=inspect_root_scale(path,rlpy=RLPy)
+                self.out.appendPlainText(json.dumps(
+                    {"root_flight_preflight":report},
+                    ensure_ascii=False,indent=2))
+                multiplier,ok=QtWidgets.QInputDialog.getDouble(
+                    self,"Experimental Pelvis Root Position Scale",
+                    "Source lift: %.3f m at Frame %d.\n"
+                    "Current keys match SOURCE scale 1.\n"
+                    "Enter position multiplier for a BACKED-UP experiment.\n"
+                    "100x FBX geometry does not prove a 100x Layer multiplier:"%
+                    (report["source_vertical_rise_m"],report["peak_frame"]),
+                    100.0,1.01,200.0,3)
+                if not ok:
+                    return
+                parent=QtWidgets.QFileDialog.getExistingDirectory(
+                    self,"Choose output folder for backup AND rescaled iProject",
+                    str(pathlib.Path(path).parent))
+                if not parent:
+                    return
+                question=(
+                    "EXPERIMENTAL ROOT FLIGHT REPAIR\n\n"
+                    "Current Pelvis Position keys match the original "
+                    "scale-1 source. FK rotations will NOT change.\n"
+                    "Source peak upward travel: %.3f m at Frame %d.\n"
+                    "New Position multiplier: %.3f.\n\n"
+                    "This value may OVERSHOOT if the FBX parent already "
+                    "applies its 100x scale. The results are NOT calibrated.\n"
+                    "First save a FULL BACKUP iProject, then rescale only "
+                    "Pelvis Position XYZ, read back every key and save a "
+                    "separate new iProject. If a write fails, attempt "
+                    "to restore the backup. The original source files "
+                    "will not be modified.\n\n"
+                    "Review this result visually in iClone after saving. "
+                    "You may reopen the backup if the flight is wrong.\n\n"
+                    "Apply experiment?"%
+                    (report["source_vertical_rise_m"],report["peak_frame"],
+                     multiplier))
+                answer=QtWidgets.QMessageBox.question(
+                    self,"BACKUP before experimental Root scale",question,
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                    QtWidgets.QMessageBox.No)
+                if answer!=QtWidgets.QMessageBox.Yes:
+                    self.out.appendPlainText("Root scale experiment cancelled.")
+                    return
+                result=rescale_root_position(
+                    path,parent,multiplier,rlpy=RLPy)
+                self.out.appendPlainText(json.dumps(
+                    {"root_flight_repair":result},
+                    ensure_ascii=False,indent=2))
+                QtWidgets.QMessageBox.information(
+                    self,"Experimental Root Flight keys saved",
+                    "Pelvis XYZ position key readback passed (not a "
+                    "visual/runtime calibration).\n\n"
+                    "Adjusted project:\n%s\n\nBackup project:\n%s\n\n"
+                    "Please compare actual flight height to the "
+                    "source ~%.2f m rise. Open the backup if the "
+                    "result overshoots."%
+                    (result["adjusted_iProject"],result["backup_iProject"],
+                     report["source_vertical_rise_m"]))
+            except Exception as exc:
+                msg=type(exc).__name__+": "+str(exc)
+                self.out.appendPlainText("Root flight repair blocked: "+msg)
+                QtWidgets.QMessageBox.warning(
+                    self,"Root flight repair blocked",msg)
 
         def closeEvent(self,event):
             if self.video_capture.running():
