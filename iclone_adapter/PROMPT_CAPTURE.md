@@ -73,3 +73,25 @@ One-time setup for this known Dragon remains:
 Costs and remote model availability are NOT guaranteed. This and
 the MP4-to-iProject UI need actual on-device smoke tests; all
 repository CI tests are software/mock tests.
+
+## v0.7.3 — Defer iClone target validation until actual import
+
+Generate Prompt and Capture MP4/NPZ no longer inspect the selected iClone
+actor or require clean 42-Bone Rest geometry up front. Video capture and
+motion solving are actor-independent: they can run with an already-animated
+Dragon, an incompatible actor, or no actor selected.
+
+The fal.ai charge still requires an available FAL_KEY and an explicit paid
+request confirmation. The trained Dragon Reader, reference image, external
+Python 3.11, output folder and capture-quality gates remain mandatory.
+
+When motion.json is ready, the UI runs the unchanged strict direct-import
+preflight on the **then-selected** actor. If import preparation fails (wrong
+rest geometry, existing clips, nonzero playhead, wrong FPS, etc.), it displays
+"Dragon motion ready - import deferred", preserves the solved motion.json and
+does NOT write animation. To complete import, open a clean original Dragon
+scene and run "IMPORT AnyMove motion.json -> iClone + iProject".
+
+Previously keyed scenes must not be reused for a second import. GitHub CI
+covers mock UI/contract tests; real iClone and paid fal.ai runs have not
+been performed as part of this patch.
