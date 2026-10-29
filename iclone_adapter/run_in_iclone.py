@@ -251,14 +251,36 @@ def show():
                 self.out.appendPlainText(json.dumps(
                     {"root_flight_preflight":report},
                     ensure_ascii=False,indent=2))
+                # Choose a full 3-axis mapping, NOT just a Z sign flip.
+                options=[
+                    "Source XYZ (+Z up, world/armature axes) - TEST",
+                    "Existing pelvis_local (Blender inverse-rest axes)"]
+                mode_label,mode_ok=QtWidgets.QInputDialog.getItem(
+                    self,"Experimental Root Position COORDINATE BASIS",
+                    "Source up-Z lift: %.3f at Frame %d.\n"
+                    "Currently saved pelvis-local Z delta: %.3f "
+                    "(negative means down if treated as world Z).\n"
+                    "Choose the FULL XYZ axis mapping to test:"%
+                    (report["source_vertical_rise_m"],report["peak_frame"],
+                     report["original_pelvis_local_peak_delta_xyz"][2]),
+                    options,0,False)
+                if not mode_ok:
+                    return
+                position_space=("armature" if mode_label==options[0]
+                                else "pelvis_local")
+                current_scale=float(report["detected_current_scale"])
+                # Keep x100 if already applied. Never accidentally apply
+                # 100x to an existing 100x as a second multiplication.
+                suggested=min(100.0,max(10.0,current_scale))
                 multiplier,ok=QtWidgets.QInputDialog.getDouble(
-                    self,"Experimental Pelvis Root Position Scale",
-                    "Source lift: %.3f m at Frame %d.\n"
-                    "Current keys match SOURCE scale 1.\n"
-                    "Enter position multiplier for a BACKED-UP experiment.\n"
-                    "100x FBX geometry does not prove a 100x Layer multiplier:"%
-                    (report["source_vertical_rise_m"],report["peak_frame"]),
-                    100.0,1.01,200.0,3)
+                    self,"Experimental Pelvis Position Units",
+                    "Current keys match the source pelvis-local motion at "
+                    "%.4gx.\n"
+                    "Select ABSOLUTE target Position multiplier "
+                    "(not a multiplier of existing keys).\n"
+                    "100x is a unit-scale hypothesis, not calibrated:"%
+                    current_scale,
+                    suggested,1.01,200.0,3)
                 if not ok:
                     return
                 parent=QtWidgets.QFileDialog.getExistingDirectory(
@@ -269,11 +291,15 @@ def show():
                 question=(
                     "EXPERIMENTAL ROOT FLIGHT REPAIR\n\n"
                     "Current Pelvis Position keys match the original "
-                    "scale-1 source. FK rotations will NOT change.\n"
+                    "pelvis-local source at %.4gx. FK rotations will NOT change.\n"
                     "Source peak upward travel: %.3f m at Frame %d.\n"
-                    "New Position multiplier: %.3f.\n\n"
-                    "This value may OVERSHOOT if the FBX parent already "
-                    "applies its 100x scale. The results are NOT calibrated.\n"
+                    "New full 3-axis Position basis: %s.\n"
+                    "New ABSOLUTE Position multiplier: %.3f.\n\n"
+                    "Current local Z is NEGATIVE for source upward motion. "
+                    "Testing Source XYZ changes the ENTIRE rotation basis, "
+                    "not only the Z sign. Source XYZ is a hypothesis until "
+                    "visually confirmed. This value may OVERSHOOT if the FBX "
+                    "parent already applies its 100x scale.\n"
                     "First save a FULL BACKUP iProject, then rescale only "
                     "Pelvis Position XYZ, read back every key and save a "
                     "separate new iProject. If a write fails, attempt "
@@ -282,8 +308,8 @@ def show():
                     "Review this result visually in iClone after saving. "
                     "You may reopen the backup if the flight is wrong.\n\n"
                     "Apply experiment?"%
-                    (report["source_vertical_rise_m"],report["peak_frame"],
-                     multiplier))
+                    (current_scale,report["source_vertical_rise_m"],
+                     report["peak_frame"],position_space,multiplier))
                 answer=QtWidgets.QMessageBox.question(
                     self,"BACKUP before experimental Root scale",question,
                     QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
@@ -292,7 +318,8 @@ def show():
                     self.out.appendPlainText("Root scale experiment cancelled.")
                     return
                 result=rescale_root_position(
-                    path,parent,multiplier,rlpy=RLPy)
+                    path,parent,multiplier,rlpy=RLPy,
+                    position_space=position_space)
                 self.out.appendPlainText(json.dumps(
                     {"root_flight_repair":result},
                     ensure_ascii=False,indent=2))

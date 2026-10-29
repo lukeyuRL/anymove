@@ -341,3 +341,40 @@ world-space lift will match source motion. Before modifying any Pelvis
 Position keys, the tool still requires exact source-motion controller
 readback and a full-scene backup plus user confirmation.
 If preflight reports source-key mismatch, stop and inspect the stored keys.
+
+## v0.7.11 — Correct the suspected Root translation AXIS BASIS, not only its scale
+
+Observed Dragon source motion has approx +1.219 source units Z rise at
+Frame 57 relative to Frame 0, but the old Blender
+`inverse(R_rest_pelvis) @ trans` mapping produces a *negative*
+Pelvis-local Z delta of approx -1.117, plus +0.504 Y.
+A 100x scalar multiplies these to -111.7 Z, +50.4 Y and cannot
+repair the coordinate direction if the iClone Layer acts in world axes.
+
+The Root Flight dialog now offers **two experimental full-XYZ conventions**:
+- `armature`: preserve source XYZ (+Z up) as the candidate iClone
+  world-aligned position channels.
+- `pelvis_local`: original Blender inverse-Rest conversion.
+
+The dialog always reports source vertical motion, old mapped local Z, and
+the detected CURRENT position scale; it makes the source-XYZ axis mode the
+first test option. To avoid doubling an existing scale-100 clip, the
+preflight fits a single positive multiplier to ALL stored pelvis-local
+Position samples, accepting 1x or an already-applied 100x only when their
+complete trajectories match within strict tolerance. The new multiplier is
+an ABSOLUTE target scale, never multiplied onto previous keys.
+Already source-world remapped or arbitrary edited keys are rejected.
+
+Before any changes, save a complete iProject backup; change only the 3
+Pelvis Position channels at integer frames; read back all samples; save a
+separate experimental iProject. No FK rotations change. A failure attempts
+to reload the backup. Re-running the operation on an already armature-mapped
+clip is refused rather than applying scale again.
+
+**Safety limit:** Reallusion documents iClone world +Z up, but SDK
+Layer Position coordinate semantics have NOT been independently measured
+on this Dragon. Source XYZ is a strong basis hypothesis grounded in
+the negative current Z and user's observed descent, NOT a verified
+production mapping. Visually compare peak height and direction in
+iClone, then calibrate the absolute multiplier before making this the
+default Motion Import profile. Do not re-run paid fal.ai generation.

@@ -103,38 +103,68 @@ def inspect_root_scale(motion_path,rlpy=None,tolerance=0.002):
             "Pelvis Position key counts %s do not match %d motion frames"%
             (counts,n))
     actual=[]
-    max_error=0.0
     for frame in range(n):
         t=rlpy.IndexedFrameTime(frame,fps)
         row=[float(read_float_value(axis,t)) for axis in axes]
         if not all(math.isfinite(v) for v in row):
             raise ContractError("nonfinite Pelvis Position controller sample")
-        max_error=max(max_error,max(abs(x-y) for x,y in zip(row,expected[frame])))
         actual.append(row)
+    # An earlier Root Flight experiment may already have applied 100x.
+    # Fit ONE positive uniform scale to the exact pelvis-local SOURCE keys.
+    # This permits changing AXIS BASIS after a previous scale experiment
+    # without accidentally multiplying 100x by another 100x.
+    denominator=sum(sum(v*v for v in row) for row in expected)
+    if denominator<1e-10:
+        raise ContractError("source Pelvis translation is too small to identify")
+    current_scale=sum(
+        sum(a*b for a,b in zip(observed,reference))
+        for observed,reference in zip(actual,expected))/denominator
+    if not math.isfinite(current_scale) or not 0.01<=current_scale<=200.:
+        raise ContractError(
+            "Current Pelvis Position does NOT match a safe positive "
+            "scale of the source pelvis-local Dragon motion "
+            "(fitted scale %.6g). Already remapped/unknown animation "
+            "must not be modified."%current_scale)
+    max_error=max(
+        abs(a-current_scale*b)
+        for observed,reference in zip(actual,expected)
+        for a,b in zip(observed,reference))
     if max_error>tolerance:
         raise ContractError(
-            "Current Pelvis Position is NOT the original scale-1 Dragon "
-            "Motion (maximum per-axis mismatch %.6g; tolerance %.6g). "
-            "Never rescale unrelated or already adjusted animation."%
-            (max_error,tolerance))
+            "Current Pelvis Position is NOT the original pelvis-local "
+            "Dragon Motion at any uniform scale "
+            "(fitted %.6g; max per-axis mismatch %.6g; tolerance %.6g). "
+            "Never remap unrelated or already axis-corrected animation."%
+            (current_scale,max_error,tolerance))
     peak=max(range(n),key=lambda i:motion["trans"][i][2]-
              motion["trans"][0][2])
     z=float(motion["trans"][peak][2]-motion["trans"][0][2])
     delta=[float(actual[peak][i]-actual[0][i]) for i in range(3)]
     return {
-        "status":"source_motion_position_matches_scale_1",
+        "status":("source_motion_position_matches_scale_1"
+                  if abs(current_scale-1.0)<0.001 else
+                  "source_motion_position_matches_scaled_pelvis_local"),
         "motion_file":str(path),
         "frame_count":n,
         "peak_frame":peak,
         "peak_time_s":float(peak/24.0),
         "source_vertical_rise_m":z,
+        "source_world_axis_peak_delta_xyz":[
+            float(motion["trans"][peak][i]-motion["trans"][0][i])
+            for i in range(3)],
+        "original_pelvis_local_peak_delta_xyz":[
+            float(expected[peak][i]-expected[0][i])
+            for i in range(3)],
         "observed_stored_pelvis_local_delta_xyz":delta,
+        "detected_current_scale":float(current_scale),
         "key_counts_xyz":counts,
         "max_source_position_key_error":max_error,
-        "note":"Controller values, NOT evaluated world motion. "
-               "A 100x imported FBX does not prove the Layer Position "
-               "multiplier; testing 100x requires an explicit backup "
-               "and visual confirmation."
+        "note":"Current position keys match Blender pelvis-local data "
+               "at a fitted uniform multiplier. In this Dragon the "
+               "source +Z lift becomes NEGATIVE pelvis-local Z. "
+               "A world-axis XYZ remap is a TEST, not validated iClone "
+               "Layer coordinate semantics. Only measured scene motion "
+               "can establish the correct basis and scale."
     }
 
 
@@ -146,14 +176,18 @@ def _unused_path(folder,stem,suffix):
     raise ContractError("No free output filename; do not overwrite projects")
 
 
-def rescale_root_position(motion_path,output_parent,multiplier,rlpy=None):
-    """Backup, apply scalar Position adjustment, validate, save a new project.
+def rescale_root_position(motion_path,output_parent,multiplier,rlpy=None,
+                          position_space="pelvis_local"):
+    """Backup, remap 3D Position BASIS and scalar, save a new project.
 
     Requires caller's explicit confirmation. If any post-backup step fails,
     attempt LoadProject of the backup and retain the backup regardless.
     """
     if rlpy is None:
         import RLPy as rlpy
+    if position_space not in ("pelvis_local","armature"):
+        raise ContractError(
+            "Root position_space must be pelvis_local or armature")
     if (type(multiplier) not in (int,float) or
         not math.isfinite(multiplier) or
         multiplier<=1.001 or multiplier>200.0):
@@ -164,6 +198,10 @@ def rescale_root_position(motion_path,output_parent,multiplier,rlpy=None):
     inspected=inspect_root_scale(motion_path,rlpy=rlpy)
     _,_,_,fps,axes=_controls(rlpy)
     path,motion,expected=_load_source(motion_path)
+    # The CURRENT source-matching keys are pelvis_local (possibly x100).
+    # Proposed corrected TEST uses Blender armature/world XYZ (+Z up).
+    # Do not just flip Z: the rest rotation also mixes Y and Z.
+    target=(motion["trans"] if position_space=="armature" else expected)
     signature=hashlib.sha256(path.read_bytes()).hexdigest()[:10]
     backup=_unused_path(parent,"AnyMove_BeforeRootScale_"+signature,".iProject")
     output=_unused_path(parent,"AnyMove_RootScale_"+signature,".iProject")
@@ -179,7 +217,7 @@ def rescale_root_position(motion_path,output_parent,multiplier,rlpy=None):
     try:
         # Re-check the source-matching keys after the backup.
         inspect_root_scale(path,rlpy=rlpy)
-        for frame,row in enumerate(expected):
+        for frame,row in enumerate(target):
             t=rlpy.IndexedFrameTime(frame,fps)
             for axis,value in zip(axes,row):
                 modified=True
@@ -187,7 +225,7 @@ def rescale_root_position(motion_path,output_parent,multiplier,rlpy=None):
                     axis.SetValue(t,float(value)*float(multiplier)),
                     "write backed-up Pelvis Position")
         max_error=0.
-        for frame,row in enumerate(expected):
+        for frame,row in enumerate(target):
             t=rlpy.IndexedFrameTime(frame,fps)
             observed=[float(read_float_value(axis,t)) for axis in axes]
             if not all(math.isfinite(x) for x in observed):
@@ -205,15 +243,22 @@ def rescale_root_position(motion_path,output_parent,multiplier,rlpy=None):
             "backup_iProject":str(backup),
             "adjusted_iProject":str(output),
             "multiplier":float(multiplier),
+            "previous_local_position_scale":inspected["detected_current_scale"],
+            "position_space":position_space,
             "source_vertical_rise_m":inspected["source_vertical_rise_m"],
             "source_peak_frame":inspected["peak_frame"],
-            "expected_stored_local_delta_xyz":[
-                float(x)*float(multiplier) for x in
-                inspected["observed_stored_pelvis_local_delta_xyz"]],
+            "previous_stored_pelvis_delta_xyz":inspected[
+                "observed_stored_pelvis_local_delta_xyz"],
+            "expected_stored_position_delta_xyz":[
+                float(target[inspected["peak_frame"]][axis]-
+                      target[0][axis])*float(multiplier)
+                for axis in range(3)],
             "readback_max_error":max_error,
             "quality":"NOT_CALIBRATED_OR_VISUALLY_VERIFIED",
-            "note":"Only Pelvis Position XYZ was rescaled. FK rotations untouched. "
-                   "If movement is excessive/incorrect, reopen the backup iProject."
+            "note":"Only Pelvis Position XYZ was changed. FK rotations "
+                   "untouched. World-axis source XYZ is a coordinate-basis "
+                   "EXPERIMENT, not proved iClone Layer semantics. If movement "
+                   "is excessive or incorrect, reopen the backup iProject."
         }
         receipt=_unused_path(parent,"AnyMove_RootScale_receipt_"+signature,".json")
         receipt.write_text(json.dumps(result,ensure_ascii=False,indent=2),

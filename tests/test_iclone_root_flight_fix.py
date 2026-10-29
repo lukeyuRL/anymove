@@ -145,7 +145,7 @@ class RootFlightFixTests(unittest.TestCase):
 
     def test_wrong_clip_keys_must_not_be_rescaled_or_backed_up(self):
         self.axes[0].values[1]+=4.0
-        with self.assertRaisesRegex(ContractError,"NOT the original scale-1"):
+        with self.assertRaisesRegex(ContractError,"NOT the original pelvis-local"):
             fix.rescale_root_position(self.path,self.root,100.,rlpy=self.sdk)
         self.assertEqual(self.events,[])
         self.assertFalse(list(self.root.glob("*.iProject")))
@@ -173,6 +173,76 @@ class RootFlightFixTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError,"RESTORE also failed"):
             fix.rescale_root_position(self.path,self.root,100.,rlpy=self.sdk)
         self.assertTrue(list(self.root.glob("AnyMove_BeforeRootScale_*.iProject")))
+
+
+    def test_pelvis_rest_basis_turns_source_up_into_negative_local_z(self):
+        _,motion,local=fix._load_source(self.path)
+        peak=2
+        self.assertGreater(motion["trans"][peak][2]-motion["trans"][0][2],1.)
+        self.assertLess(local[peak][2]-local[0][2],-1.)
+        self.assertGreater(local[peak][1]-local[0][1],0.3)
+
+    def test_already_scaled_local_clip_remains_identifiable_and_read_only(self):
+        for axis in self.axes:
+            axis.values[:]=[100.*v for v in axis.values]
+        inspect=fix.inspect_root_scale(self.path,rlpy=self.sdk)
+        self.assertAlmostEqual(inspect["detected_current_scale"],100.,places=5)
+        self.assertEqual(inspect["status"],
+                         "source_motion_position_matches_scaled_pelvis_local")
+        self.assertLess(inspect["original_pelvis_local_peak_delta_xyz"][2],0)
+        self.assertGreater(inspect["source_world_axis_peak_delta_xyz"][2],0)
+        self.assertEqual(self.events,[])
+
+    def test_replace_x100_downward_local_with_x100_source_xyz_up_without_double_scale(self):
+        _,motion,local=fix._load_source(self.path)
+        for axis in self.axes:
+            axis.values[:]=[100.*v for v in axis.values]
+        # Backup fake saves the state of this already x100 clip.
+        self.sdk.RFileIO.original=[list(axis.values) for axis in self.axes]
+        result=fix.rescale_root_position(
+            self.path,self.root,100.0,rlpy=self.sdk,
+            position_space="armature")
+        self.assertEqual(self.events[0][0],"save")
+        self.assertEqual(result["previous_local_position_scale"],100.)
+        self.assertEqual(result["position_space"],"armature")
+        self.assertEqual(result["multiplier"],100.)
+        self.assertGreater(result["expected_stored_position_delta_xyz"][2],100.)
+        self.assertAlmostEqual(result["expected_stored_position_delta_xyz"][2],
+                               120.,places=5)
+        self.assertAlmostEqual(self.axes[2].values[2],120.,places=4)
+        self.assertAlmostEqual(self.axes[1].values[2],0.,places=4)
+        self.assertAlmostEqual(self.axes[0].values[2],0.,places=4)
+        self.assertTrue(pathlib.Path(result["backup_iProject"]).is_file())
+        self.assertTrue(pathlib.Path(result["adjusted_iProject"]).is_file())
+        self.assertTrue(pathlib.Path(result["receipt_path"]).is_file())
+
+    def test_remap_rejects_previously_modified_arbitrary_axis_data(self):
+        self.axes[0].values[2]+=0.7
+        self.axes[1].values[2]-=0.2
+        with self.assertRaisesRegex(ContractError,"NOT the original pelvis-local"):
+            fix.rescale_root_position(
+                self.path,self.root,100.,rlpy=self.sdk,
+                position_space="armature")
+        self.assertEqual(self.events,[])
+
+    def test_reject_unknown_position_space_before_backup(self):
+        with self.assertRaisesRegex(ContractError,"position_space"):
+            fix.rescale_root_position(
+                self.path,self.root,100.,rlpy=self.sdk,
+                position_space="not_an_axis")
+        self.assertEqual(self.events,[])
+
+    def test_reremapping_armature_track_does_not_stack_a_second_100x(self):
+        first=fix.rescale_root_position(
+            self.path,self.root,100.,rlpy=self.sdk,
+            position_space="armature")
+        self.events.clear()
+        with self.assertRaisesRegex(
+                ContractError,"NOT the original pelvis-local"):
+            fix.rescale_root_position(
+                self.path,self.root,100.,rlpy=self.sdk,
+                position_space="armature")
+        self.assertEqual(self.events,[])
 
     def test_multiplier_restricted_to_opt_in_increase(self):
         for factor in (0,1.0,-1,201.,float("nan")):
