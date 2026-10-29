@@ -383,6 +383,11 @@ def main():
     raw = np.load(det_path)
     d = {k: raw[k].copy() for k in ("front_uv", "side_uv", "front_conf", "side_conf")}
     info = json.load(open(info_path))
+    # Fail before optimization if imported rig and camera settings disagree.
+    # Without MOCAP_CREATURE, mocap.layout silently defaults to Wolf.
+    from mocap.layout_guard import verify_layout_for_rig
+    active_layout=verify_layout_for_rig(info_path,layout)
+    print("Solver camera layout:",active_layout,flush=True)
     names = [k["name"] for k in info["keypoints"]]
     before = sync_report(d)
     paws = paw_agreement(d, names)
