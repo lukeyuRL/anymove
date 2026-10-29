@@ -110,6 +110,22 @@ class SameRigBundleTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError,"100x"):
             build_bundle(source,target,self.info,self.info)
 
+    def test_pose_mismatch_reports_residual_bone_and_clean_template(self):
+        source=self.moving_motion(4)
+        target=self.target()
+        for bone in target["bones"]:
+            if bone["name"]=="head":
+                bone["snapshot_world_matrix"][3]+=10.
+                break
+        with self.assertRaises(ContractError) as raised:
+            build_bundle(source,target,self.info,self.info)
+        msg=str(raised.exception)
+        self.assertIn("needs_mapping_review",msg)
+        self.assertIn("Largest deviations: ",msg)
+        self.assertIn("head ",msg)
+        self.assertIn("Deleting Motion Clips does NOT restore Rest Pose",msg)
+        self.assertIn("verified CLEAN Dragon iProject",msg)
+
     def test_reject_other_rig_fps_or_root_missing(self):
         source=self.moving_motion(4)
         bad=copy.deepcopy(source)
