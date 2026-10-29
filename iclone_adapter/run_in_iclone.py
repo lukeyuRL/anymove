@@ -47,7 +47,7 @@ def show():
                  self.video_capture.start),
                 ("IMPORT AnyMove motion.json -> iClone + iProject (42-Bone Dragon)",
                  self.import_original_anymove),
-                ("ROOT FLIGHT: inspect / rescale existing Pelvis motion (BACKUP)",
+                ("ROOT FLIGHT: correct Pelvis XYZ direction (1x, BACKUP)",
                  self.repair_root_flight),
                 ("Inspect selected skeleton", self.inspect),
                 ("Export current-pose skeleton snapshot", self.export),
@@ -238,7 +238,7 @@ def show():
 
 
         def repair_root_flight(self):
-            """Reversible experimental root scale repair, never silent."""
+            """Confirm and back up before experimental source-XYZ correction at 1x."""
             import pathlib
             from .root_flight_fix import inspect_root_scale, rescale_root_position
             path,_=QtWidgets.QFileDialog.getOpenFileName(
