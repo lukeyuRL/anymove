@@ -1,4 +1,4 @@
-# Python 3.11. Versions this was built and tested with (October 2026).
+# External workers: Python 3.11 and 3.14. GPU inference must be smoke-tested on target Windows/CUDA hardware.
 # torch with CUDA comes from PyTorch's index: pip install torch==2.11.0 --index-url https://download.pytorch.org/whl/cu128
 torch==2.11.0
 transformers==5.20.2          # DINOv2 backbone (facebook/dinov2-with-registers-base, downloaded on first use)
