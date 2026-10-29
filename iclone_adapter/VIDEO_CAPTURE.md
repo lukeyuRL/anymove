@@ -1,4 +1,4 @@
-# Video / Detections to Dragon motion.json — external Python 3.11
+# Video / Detections to Dragon motion.json — external Python 3.11 / 3.14
 
 This is the missing upstream piece before iClone v0.5.0 direct import.
 The original AnyMove methods remain unchanged:
@@ -9,7 +9,7 @@ The original AnyMove methods remain unchanged:
 - mocap.solve: two-view sync, triangulation, rig-constrained fitting, Root
   Translation, Root Rotation, and 41 nonroot Euler XYZ tracks -> motion.json
 
-Use Python 3.11 and the repo's requirements. For MP4 source this means
+Use Python 3.11 or 3.14 and the repo's requirements. For MP4 source this means
 Torch + CUDA GPU, OpenCV, transformers, and the original trained Reader;
 no heavy dependencies are imported into iClone's Python 3.8 host.
 
@@ -29,7 +29,7 @@ reader and video artifacts must be independently present before capture.
 
 ## External CLI
 
-Start in F:\anymove (or your actual clone root) with Python 3.11.
+Start in F:\anymove (or your actual clone root) with Python 3.11 or 3.14.
 
     .venv\Scripts\python.exe -m iclone_adapter.video_capture ^
         --input F:\my_dragon_video.mp4 ^
@@ -97,3 +97,15 @@ Check the latest tool version v0.6.0 in the iClone window. This new
 QProcess/UI orchestration has offline mock tests, but its GPU inference
 and in-app Qt event integration still require one actual Windows/iClone
 8 run before claiming operational acceptance.
+
+## v0.7.5 — Python 3.14 worker support
+
+The embedded iClone interpreter stays separate. The external workers
+accept Python 3.11 or Python 3.14. The v0.6.0 step-by-step description
+above is historical: target Dragon validation is now done immediately
+before scene mutation, not before video generation or pose solving.
+
+Check `.venv\Scripts\python.exe --version` on Windows. For Dragon
+video detection, confirm the NVIDIA GPU is usable by PyTorch before
+making a billable video request. Offline tests cover the version gate;
+they do not exercise the physical Windows GPU, DINOv2 weights or fal.ai.
