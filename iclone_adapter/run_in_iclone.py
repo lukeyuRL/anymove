@@ -97,52 +97,68 @@ def show():
                         message+"\n\nCannot safely offer automatic replacement: "+
                         str(replacement_exc))
                     return
+                clean_project,_=QtWidgets.QFileDialog.getOpenFileName(
+                    self,"Choose previously verified CLEAN Dragon iProject",
+                    str(pathlib.Path(source).parent),
+                    "iClone Project (*.iProject)")
+                if not clean_project:
+                    self.out.appendPlainText(
+                        "No clean Dragon scene template selected. "
+                        "Rest Pose cannot be reconstructed by deleting Clips. "
+                        "Open the original 100x Dragon FBX in a NEW 24-FPS "
+                        "iClone scene, then import. The next import will "
+                        "save a reusable CLEAN iProject before writing keys.")
+                    return
                 parent=QtWidgets.QFileDialog.getExistingDirectory(
-                    self,"Choose folder for BACKUP before replacing Motion",
+                    self,"Choose output folder for current-scene BACKUP "
+                         "and new iProject",
                     str(pathlib.Path(source).parent))
                 if not parent:
                     return
                 confirmation=(
-                    "The selected Dragon has %d existing Motion Clips.\n"
-                    "Rest Pose verification cannot pass while they animate "
-                    "the character.\n\n"
-                    "Would you like AnyMove to:\n"
-                    "1. Save a complete BACKUP .iProject to:\n%s\n"
-                    "2. Remove the old Motion Clips.\n"
-                    "3. Recheck the original Dragon Rest Pose and hierarchy.\n"
-                    "4. ONLY if verified, write the new Motion and save "
-                    "a separate iProject.\n\n"
-                    "If any step fails, load the saved original project. "
-                    "No automatic deletion occurs without this approval.\n"
-                    "A backup file will remain available afterwards.\n\n"
-                    "BACKUP AND REPLACE existing Motion?"%
-                    (eligibility["existing_clip_count"],parent))
+                    "REPLACE ENTIRE SCENE WITH CLEAN DRAGON TEMPLATE\n\n"
+                    "Your selected Dragon has %d Motion Clips. Removing "
+                    "clips does NOT restore the original Rest Pose.\n\n"
+                    "Current scene will be saved as a complete backup. "
+                    "Then AnyMove will LOAD this independently clean "
+                    "Dragon scene:\n%s\n\n"
+                    "IMPORTANT: this REPLACES THE WHOLE CURRENT SCENE, "
+                    "not only Dragon's Motion. Other current scene objects "
+                    "will exist only in your BACKUP.\n\n"
+                    "The original Dragon hierarchy, Rest geometry, 100x "
+                    "scale and unkeyed scene will be checked BEFORE the "
+                    "new animation is imported. A failure restores the "
+                    "previous scene. No existing clip is deleted in place.\n\n"
+                    "BACK UP SCENE, LOAD CLEAN TEMPLATE AND IMPORT?"%
+                    (eligibility["existing_clip_count"],clean_project))
                 answer=QtWidgets.QMessageBox.question(
-                    self,"Replace Dragon Motion (FULL PROJECT BACKUP)",
+                    self,"Recover original Dragon Rest from CLEAN project",
                     confirmation,
                     QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
                     QtWidgets.QMessageBox.No)
                 if answer!=QtWidgets.QMessageBox.Yes:
                     self.out.appendPlainText(
-                        "Existing Motion retained; replacement cancelled.")
+                        "Current scene retained; clean template import cancelled.")
                     return
                 try:
                     replaced=replace_dragon_motion_with_backup(
-                        source,parent,rlpy=RLPy)
+                        source,parent,rlpy=RLPy,
+                        clean_project_path=clean_project)
                     self.out.appendPlainText(json.dumps(
-                        {"motion_replacement":replaced},
+                        {"clean_template_import":replaced},
                         ensure_ascii=False,indent=2))
                     QtWidgets.QMessageBox.information(
-                        self,"Dragon Motion replaced with backup",
-                        "New iProject:\n%s\n\nOriginal-scene backup:\n%s\n\n"
-                        "Root Position motion still requires visual "
-                        "flight-height calibration."%
-                        (replaced["new_iProject"],replaced["backup_iProject"]))
+                        self,"Dragon clean-template import saved",
+                        "New iProject:\n%s\n\nPrevious full-scene backup:\n%s"
+                        "\n\nRoot Position visual verification is still "
+                        "required."%
+                        (replaced["new_iProject"],
+                         replaced["original_scene_backup"]))
                 except Exception as replace_exc:
                     err=type(replace_exc).__name__+": "+str(replace_exc)
-                    self.out.appendPlainText("Motion replace failed: "+err)
+                    self.out.appendPlainText("Clean-template import failed: "+err)
                     QtWidgets.QMessageBox.warning(
-                        self,"Motion replacement blocked",err)
+                        self,"Clean-template import blocked",err)
                 return
             output=QtWidgets.QFileDialog.getExistingDirectory(
                 self,"Choose a folder for new iProject and audit package",
@@ -176,7 +192,8 @@ def show():
                 return
             try:
                 outcome=execute_direct_import(
-                    plan,output,rlpy=RLPy,save_project=True)
+                    plan,output,rlpy=RLPy,save_project=True,
+                    preserve_clean_template=True)
                 summary={
                     "status":outcome["status"],
                     "frame_count":outcome["frame_count"],
