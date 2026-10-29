@@ -249,3 +249,67 @@ The source Dragon MP4 and solver do NOT need to be generated again, so
 this process involves no additional fal.ai charges. GitHub CI validates
 mock SDK safety and math only; actual iClone 8 playback still needs a
 real on-device smoke test.
+
+## v0.7.9 — Why deleting Motion is not a clean Rest Pose (supersedes v0.7.8)
+
+**Critical iClone behavior:** removing an object's animation or deleting
+its Motion Clips can leave the original *current pose* in the scene.
+The Reallusion iClone 8 manual explicitly warns that removing object
+animation does not restore the startup/default pose. iClone's UI
+"Reset to Default" adds keys and is not necessarily identical to the
+FBX skeletal Rest pose expected by this importer's same-rig profile.
+
+Consequently the v0.7.8 approach "backup current scene, delete clips,
+assume Rest is restored, import new Motion" was **not reliable** and is
+no longer used by the UI. Merely having zero Clips is insufficient.
+The 42-Bone hierarchy and current world matrices must still align
+with the verified original FBX (100x) when evaluated.
+
+### Recovery using a genuinely clean iProject
+
+1. If you do not yet have a **CLEAN Dragon iProject** saved from an
+   original unanimated 42-Bone Dragon FBX imported at 100x:
+   - Open a **NEW iClone scene**, set 24 FPS and Frame 0.
+   - Import the original Dragon FBX (100x), keeping it unposed and
+     without any preexisting Motion Clips or animated Layer keys.
+   - Select Dragon and use "IMPORT AnyMove motion.json" once.
+   - The new import now saves, **before writing any animation keys**,
+     `AnyMove_Dragon_CLEAN_before_motion.iProject` inside the unique
+     output package, alongside the separate animated project
+     `AnyMove_Dragon.iProject`.
+2. On later attempts in a scene containing an old Motion or a pose
+   retained *after* clip deletion, choose "IMPORT AnyMove motion.json".
+   If strict Rest validation fails, the UI asks for this independently
+   **clean** template .iProject (not an animated output project).
+3. Before changing anything, the UI backs up the **WHOLE current scene**
+   to `AnyMove_BeforeSceneReplace_XXX.iProject`.
+4. With explicit user confirmation, it **REPLACES THE ENTIRE SCENE**
+   with the chosen clean template. Any other current-scene objects
+   remain only in the backup. No old clip is deleted in place.
+5. It locates exactly one 100x rest-compatible Dragon, checks that no
+   motion keys are active, re-selects it, runs the original exact
+   42-Bone same-rig/clean-scene gates, imports the supplied Motion JSON,
+   audits all integer-frame FK and Pelvis Position controls, then
+   saves a separate new .iProject.
+6. If the template is animated, incompatible, the scene cannot be
+   loaded, or the import is incomplete, it reloads the original scene
+   backup and reports the original path. If recovery fails, it
+   reports the intact backup path for manual recovery.
+
+**Do NOT mistake**
+`AnyMove_BeforeMotionReplace_001.iProject` from a failed v0.7.8
+attempt for an unposed baseline: it is a backup of the *posed* scene.
+
+An updated Rest diagnostic reports measured bone deviations and
+scale/hierarchy details rather than just `needs_mapping_review`.
+The strict Rest geometry and safety thresholds were NOT relaxed.
+This does not require rerunning fal.ai, DINOv2 or the pose solver.
+
+Runtime caveat: GitHub CI tests the code with mocked RLPy interfaces,
+not an actual running iClone installation. The project load/select
+workflow needs an on-device smoke test. AnyMove does not promise that
+loading a template will preserve the previous scene's props/camera;
+the full previous scene is kept in the mandatory backup.
+
+Official reference:
+https://manual.reallusion.com/iclone-8/content/enu/8.0/50-animation/motion-layer/Setting_Default_Keys_and_Resetting_Motion_Layer_Keys.htm
