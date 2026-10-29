@@ -136,7 +136,10 @@ class VideoImportUITests(unittest.TestCase):
                         side_effect=AssertionError("early rig check")):
                         with mock.patch.object(
                             coordinator,"_launch_worker") as launch:
-                            coordinator.start_prompt()
+                            with mock.patch.object(
+                                video_ui,"preflight_external_python",
+                                return_value={"executable":"mock-python"}):
+                                coordinator.start_prompt()
             launch.assert_called_once()
             args,kwargs=launch.call_args
             self.assertEqual(args[2]["mode"],"prompt")
@@ -160,7 +163,10 @@ class VideoImportUITests(unittest.TestCase):
                         side_effect=AssertionError("early rig check")):
                         with mock.patch.object(
                             coordinator,"_launch_worker") as launch:
-                            coordinator.start()
+                            with mock.patch.object(
+                                video_ui,"preflight_external_python",
+                                return_value={"executable":"mock-python"}):
+                                coordinator.start()
             launch.assert_called_once()
             self.assertEqual(launch.call_args[0][2]["mode"],"existing")
             self.assertNotIn("target",launch.call_args[0][2])
@@ -176,7 +182,10 @@ class VideoImportUITests(unittest.TestCase):
                                        return_value=False):
                     with mock.patch.object(
                         coordinator,"_launch_worker") as launch:
-                        coordinator.start_prompt()
+                        with mock.patch.object(
+                            video_ui,"preflight_external_python",
+                            return_value={"executable":"mock-python"}):
+                            coordinator.start_prompt()
             launch.assert_not_called()
             widgets.QMessageBox.question.assert_not_called()
             self.assertIn("FAL_KEY",str(widgets.QMessageBox.warning.call_args))
@@ -192,7 +201,10 @@ class VideoImportUITests(unittest.TestCase):
                                        return_value=True):
                     with mock.patch.object(
                         coordinator,"_launch_worker") as launch:
-                        coordinator.start_prompt()
+                        with mock.patch.object(
+                            video_ui,"preflight_external_python",
+                            return_value={"executable":"mock-python"}):
+                            coordinator.start_prompt()
             launch.assert_not_called()
             widgets.QMessageBox.warning.assert_not_called()
 
@@ -222,6 +234,52 @@ class VideoImportUITests(unittest.TestCase):
                           str(widgets.QMessageBox.warning.call_args).lower())
             self.assertIn(str(motion),
                           str(panel.out.appendPlainText.call_args))
+
+
+    def test_external_python_preflight_rejects_wrong_version(self):
+        check=mock.Mock(returncode=0,stdout=json.dumps({
+            "version":[3,12],"executable":"python312","missing":[]}))
+        with mock.patch.object(video_ui.subprocess,"run",
+                               return_value=check) as runner:
+            with self.assertRaisesRegex(ContractError,"requires Python 3.11"):
+                video_ui.preflight_external_python(
+                    "fake-python",("torch","numpy"))
+        self.assertEqual(runner.call_count,1)
+
+    def test_external_python_preflight_rejects_missing_modules(self):
+        check=mock.Mock(returncode=0,stdout=json.dumps({
+            "version":[3,11],"executable":"python311",
+            "missing":["torch","transformers"]}))
+        with mock.patch.object(video_ui.subprocess,"run",return_value=check):
+            with self.assertRaisesRegex(ContractError,"missing packages"):
+                video_ui.preflight_external_python(
+                    "fake-python",("torch","transformers"))
+
+    def test_external_python_preflight_accepts_matching_environment(self):
+        info={"version":[3,11],"executable":"python311","missing":[]}
+        check=mock.Mock(returncode=0,stdout=json.dumps(info))
+        with mock.patch.object(video_ui.subprocess,"run",return_value=check):
+            self.assertEqual(video_ui.preflight_external_python(
+                "fake-python",("numpy",)),info)
+
+    def test_no_receipt_shows_external_worker_stderr(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            coordinator,widgets,panel=self._capture_widgets(root)
+            coordinator.job={
+                "capture_path":str(root/"not-created"),
+                "python":"F:/anymove/.venv/Scripts/python.exe",
+                "mode":"prompt"}
+            coordinator._worker_log_tail=(
+                "Traceback: AI prompt worker needs external Python 3.11")
+            coordinator._finished(1,coordinator.core.QProcess.NormalExit)
+            warning=str(widgets.QMessageBox.warning.call_args)
+            self.assertIn("no receipt",warning)
+            self.assertIn("Traceback",warning)
+            self.assertIn("Exit code: 1",warning)
+            self.assertIn("F:/anymove/.venv/Scripts/python.exe",warning)
+            self.assertTrue(panel.out.appendPlainText.called)
+
 
 
 if __name__=="__main__":
