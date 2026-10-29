@@ -486,42 +486,50 @@ class VideoCaptureCoordinator:
                 except Exception:
                     eligible=None
                 if eligible:
-                    folder=str(job.get("output_parent") or capture.parent)
-                    question=(
-                        "Motion Solver finished and saved motion.json.\n\n"
-                        "The selected Dragon already has %d Motion Clips. "
-                        "They prevent clean Rest Pose import.\n\n"
-                        "BACKUP the entire current iProject to:\n%s\n\n"
-                        "Then REMOVE old clips, revalidate the original "
-                        "42-Bone Rest Pose, and import the new motion?\n"
-                        "If verification/import fails, the project backup "
-                        "will be reloaded. No earlier motions will be "
-                        "silently deleted.\n\n"
-                        "Backup and REPLACE prior Dragon motion?"%
-                        (eligible["existing_clip_count"],folder))
-                    answer=self.widgets.QMessageBox.question(
-                        self.panel,"Backup before replacing Dragon motion",
-                        question,self.widgets.QMessageBox.Yes |
-                        self.widgets.QMessageBox.No,self.widgets.QMessageBox.No)
-                    if answer==self.widgets.QMessageBox.Yes:
-                        try:
-                            updated=replace_dragon_motion_with_backup(
-                                str(motion),folder,rlpy=self.rlpy)
-                            self._log(json.dumps(
-                                {"motion_replacement":updated},
-                                ensure_ascii=False,indent=2))
-                            self.widgets.QMessageBox.information(
-                                self.panel,"Dragon Motion replaced with backup",
-                                "New iProject:\n%s\n\nBackup:\n%s\n\n"
-                                "Root flight height still requires visual "
-                                "confirmation."%
-                                (updated["new_iProject"],
-                                 updated["backup_iProject"]))
-                        except Exception as replace_exc:
-                            err=type(replace_exc).__name__+": "+str(replace_exc)
-                            self._log("Motion replacement failed: "+err)
-                            self._warning("Motion replacement blocked",err)
-                        return
+                    template,_=self.widgets.QFileDialog.getOpenFileName(
+                        self.panel,
+                        "Select VERIFIED CLEAN Dragon .iProject to import into",
+                        str(REPO/"runs"),
+                        "iClone Project (*.iProject)")
+                    if template:
+                        folder=str(job.get("output_parent") or capture.parent)
+                        question=(
+                            "Motion Solver completed and saved motion.json.\n\n"
+                            "The current Dragon has %d Motion Clips. Removing "
+                            "Motion DOES NOT reset its original Rest Pose.\n\n"
+                            "First SAVE the ENTIRE current scene as an "
+                            "iProject backup, then REPLACE the ENTIRE scene "
+                            "with the chosen CLEAN Dragon project:\n%s\n\n"
+                            "Other objects from the current scene will only "
+                            "remain in the original-scene backup.\n\n"
+                            "All 42 bones, original Rest Pose and 100x scene "
+                            "scale are independently verified BEFORE writing "
+                            "a new Motion and saving a separate iProject. "
+                            "Any failure attempts to reload the backup.\n\n"
+                            "BACKUP, LOAD CLEAN PROJECT, IMPORT NEW MOTION?"%
+                            (eligible["existing_clip_count"],template))
+                        answer=self.widgets.QMessageBox.question(
+                            self.panel,"Restore clean Dragon for new motion",
+                            question,self.widgets.QMessageBox.Yes |
+                            self.widgets.QMessageBox.No,self.widgets.QMessageBox.No)
+                        if answer==self.widgets.QMessageBox.Yes:
+                            try:
+                                updated=replace_dragon_motion_with_backup(
+                                    str(motion),folder,rlpy=self.rlpy,
+                                    clean_project_path=template)
+                                self._log(json.dumps(
+                                    {"clean_template_import":updated},
+                                    ensure_ascii=False,indent=2))
+                                self.widgets.QMessageBox.information(
+                                    self.panel,"Dragon new Motion saved in clean scene",
+                                    "New iProject:\n%s\n\nOriginal-scene backup:\n%s"%
+                                    (updated["new_iProject"],
+                                     updated["original_scene_backup"]))
+                            except Exception as replace_exc:
+                                err=type(replace_exc).__name__+": "+str(replace_exc)
+                                self._log("Clean template import failed: "+err)
+                                self._warning("Clean template import blocked",err)
+                            return
                 self._log(
                     "Dragon motion.json READY; automatic iClone import DEFERRED: "
                     +reason+"\nPreserved motion.json: "+str(motion))
@@ -562,7 +570,8 @@ class VideoCaptureCoordinator:
                           str(motion))
                 return
             result=execute_direct_import(
-                plan,str(capture),rlpy=self.rlpy,save_project=True)
+                plan,str(capture),rlpy=self.rlpy,save_project=True,
+                preserve_clean_template=True)
             self._log(json.dumps({
                 "import_status":result["status"],
                 "iProject":result["iProject_path"],
