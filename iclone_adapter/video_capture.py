@@ -155,19 +155,30 @@ def _read_detection_stats(path):
                 "source video/detections FPS is %.6f; exact 24 FPS required "
                 "by verified iClone reference profile (do not silently resample)"%
                 fps)
-        for label,array in (("front_uv",u),("side_uv",v),
-                            ("front_conf",fc),("side_conf",sc)):
+        # The reader's unsquashed linear heatmap peaks are not probabilities.
+        # Allow finite overshoot/undershoot; the solver bounds confidence
+        # WEIGHTS in memory instead of rejecting otherwise valid detections.
+        for label,array in (("front_uv",u),("side_uv",v)):
             if not np.isfinite(array).all():
                 raise ContractError("nonfinite detections in "+label)
-        if (np.any(fc<0) or np.any(fc>1) or
-            np.any(sc<0) or np.any(sc>1)):
-            raise ContractError("joint confidence outside [0,1]")
+        from mocap.confidence import bounded_peak_weights
+        try:
+            _,front_stats=bounded_peak_weights(fc,"front_conf")
+            _,side_stats=bounded_peak_weights(sc,"side_conf")
+        except ValueError as exc:
+            raise ContractError(str(exc))
         return {
             "frame_count":int(count),
             "joint_count":len(names),
             "fps":fps,
-            "mean_front_confidence":float(fc.mean()),
-            "mean_side_confidence":float(sc.mean())
+            "mean_front_confidence":front_stats["bounded_mean"],
+            "mean_side_confidence":side_stats["bounded_mean"],
+            "front_heatmap_peak_stats":front_stats,
+            "side_heatmap_peak_stats":side_stats,
+            "confidence_policy":"raw_heatmap_peaks_bounded_in_solver",
+            "note":"Raw det.npz preserved; heatmap peaks are uncalibrated, "
+                   "not probabilities. Reprojection/sync quality gates "
+                   "remain mandatory."
         }
 
 

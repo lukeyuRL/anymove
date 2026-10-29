@@ -146,3 +146,29 @@ The lightweight preflight verifies Python and installed module names;
 it does NOT import CUDA, prove a working GPU driver, or guarantee
 successful DINOv2 inference. No remote fal.ai request was made to test
 this change. Review previous capture folders before repeating a paid job.
+
+## v0.7.6 — Raw DINOv2 heatmap peaks are not probability confidences
+
+The trained joint reader uses a linear head with MSE heatmap targets.
+Its `mocap.model.decode` function returns raw peak amplitudes; unlike
+calibrated probabilities, valid finite values can fall below 0 or above 1.
+
+The previous iClone adapter incorrectly rejected any `det.npz`
+containing such overshoots with "joint confidence outside [0,1]".
+The updated adapter accepts finite heatmap peak arrays with correct
+Dragon joint names/shapes/24-FPS; it records original minimum/maximum,
+mean and clipped-sample counts in `detection_summary`.
+
+The solver now converts raw peaks to bounded [0,1] **weights in
+memory only**, without editing the original `det.npz`. The clipping
+is not an assertion that the joint coordinates are correct. Nonfinite
+values still fail closed, and final 3D reprojection/sync quality gates
+are unchanged. Existing `det.npz` files from v0.7.5 can be reused.
+
+**Resume a previous PAID Prompt run without another fal.ai charge**:
+use the existing-MP4/NPZ **CAPTURE** button and choose
+`runs/capture_dragon_ai_prompt_001/capture/det.npz` if it exists;
+otherwise choose `runs/capture_dragon_ai_prompt_001/generated/h3max.mp4`
+to repeat only local GPU joint detection and the solver. Choose a NEW
+capture output folder, leave the original run unchanged. After solving,
+iClone import still checks the original clean Dragon target separately.

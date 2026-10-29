@@ -2,7 +2,9 @@
 
 python -m mocap.detect VIDEO.mp4 MODEL.pt REF.png OUT.npz [overlay.mp4]
 The clip is first aligned to the reference frame (the video model may resize or crop the canvas), then each frame is
-split into its front and side views. Writes pixel positions in layout coordinates and peak confidences per view.
+split into its front and side views. Writes pixel positions in layout coordinates
+and RAW, UNCALIBRATED heatmap peak amplitudes (not probabilities) per view.
+The solver clips these peak values to [0,1] for confidence weighting.
 """
 import sys
 
@@ -104,7 +106,10 @@ def main():
     fuv, fconf = run(model, [f[:, :layout.W_FRONT] for f in frames])
     suv, sconf = run(model, [f[:, layout.W_FRONT:] for f in frames])
     np.savez(out, front_uv=fuv, side_uv=suv, front_conf=fconf, side_conf=sconf, fps=fps, names=np.array(names), calib=A)
-    print(f"{len(frames)} frames at {fps:.2f} fps; mean confidence front {fconf.mean():.2f} side {sconf.mean():.2f}")
+    print(f"{len(frames)} frames at {fps:.2f} fps; raw heatmap peak means "
+          f"front {fconf.mean():.2f} side {sconf.mean():.2f}; "
+          f"ranges front [{fconf.min():.3g},{fconf.max():.3g}] "
+          f"side [{sconf.min():.3g},{sconf.max():.3g}]")
     if len(args) > 4:
         overlay(frames, fuv, suv, fconf, names, args[4], fps)
 

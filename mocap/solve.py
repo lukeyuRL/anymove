@@ -16,6 +16,7 @@ import numpy as np
 import torch
 
 from mocap import layout
+from mocap.confidence import bounded_peak_weights
 
 LEGS = {"F": ["scap", "shoulder", "elbow", "wrist", "fpaw", "ftoe"], "H": ["hip", "knee", "hock", "hpaw", "htoe"]}
 
@@ -220,7 +221,8 @@ def triangulate(d, front_height_weight=0.25):
     sy = -(d["side_uv"][..., 0] - layout.W_SIDE / 2) * layout.M_PER_PX
     fz = layout.Z_CENTER + (layout.H / 2 - d["front_uv"][..., 1]) * layout.M_PER_PX
     sz = layout.Z_CENTER + (layout.H / 2 - d["side_uv"][..., 1]) * layout.M_PER_PX
-    w1, w2 = front_height_weight * d["front_conf"].clip(1e-3), d["side_conf"].clip(1e-3)
+    w1, w2 = (front_height_weight * d["front_conf"].clip(1e-3, 1.0),
+              d["side_conf"].clip(1e-3, 1.0))
     return np.stack([fx, sy, (fz * w1 + sz * w2) / (w1 + w2)], -1)
 
 
@@ -382,6 +384,15 @@ def main():
     det_path, info_path, out = sys.argv[1:4]
     raw = np.load(det_path)
     d = {k: raw[k].copy() for k in ("front_uv", "side_uv", "front_conf", "side_conf")}
+    # The reader decodes raw (unbounded) linear heatmap peaks. Weights for
+    # optimization are bounded without rewriting or corrupting det.npz.
+    for name in ("front_conf","side_conf"):
+        d[name],peak_stats=bounded_peak_weights(d[name],name)
+        print("Reader %s raw peak range %.4g..%.4g, clipped %d/%d "
+              "to [0,1] for solver weights"%
+              (name,peak_stats["raw_min"],peak_stats["raw_max"],
+               peak_stats["clipped_samples"],peak_stats["total_samples"]),
+              flush=True)
     info = json.load(open(info_path))
     # Fail before optimization if imported rig and camera settings disagree.
     # Without MOCAP_CREATURE, mocap.layout silently defaults to Wolf.

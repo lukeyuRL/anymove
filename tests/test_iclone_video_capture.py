@@ -151,6 +151,59 @@ class CaptureWorkerTests(unittest.TestCase):
         self.assertEqual(payload["status"],"capture_failed")
         self.assertIn("CUDA unavailable",payload["error"])
 
+    def test_unbounded_heatmap_peaks_accepted_without_mutating_npz(self):
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("NumPy not installed in lightweight CI environment")
+        from mocap.confidence import bounded_peak_weights
+        with open(str(capture.DEFAULT_SOURCE),encoding="utf-8") as f:
+            names=[kp["name"] for kp in json.load(f)["keypoints"]]
+        j=len(names)
+        uv=np.zeros((4,j,2),dtype=np.float32)
+        front=np.full((4,j),0.8,dtype=np.float32)
+        side=np.full((4,j),0.7,dtype=np.float32)
+        front[0,0]=1.25
+        front[1,1]=-0.15
+        side[2,2]=1.5
+        np.savez(self.det,front_uv=uv,side_uv=uv,
+                 front_conf=front,side_conf=side,
+                 fps=np.float32(24),names=np.array(names))
+        result=capture._read_detection_stats(self.det)
+        self.assertEqual(result["frame_count"],4)
+        self.assertEqual(result["joint_count"],j)
+        self.assertEqual(result["front_heatmap_peak_stats"]["clipped_samples"],2)
+        self.assertEqual(result["side_heatmap_peak_stats"]["clipped_samples"],1)
+        self.assertAlmostEqual(result["mean_front_confidence"],
+                               float(front.clip(0,1).mean()),places=5)
+        self.assertEqual(result["confidence_policy"],
+                         "raw_heatmap_peaks_bounded_in_solver")
+        bounded,stats=bounded_peak_weights(front)
+        self.assertAlmostEqual(float(bounded[0,0]),1.0)
+        self.assertAlmostEqual(float(bounded[1,1]),0.0)
+        self.assertEqual(stats["clipped_samples"],2)
+        with np.load(self.det,allow_pickle=False) as source:
+            self.assertAlmostEqual(float(source["front_conf"][0,0]),1.25)
+            self.assertAlmostEqual(float(source["front_conf"][1,1]),-0.15)
+            self.assertAlmostEqual(float(source["side_conf"][2,2]),1.5)
+
+    def test_nonfinite_heatmap_peaks_remain_blocked(self):
+        try:
+            import numpy as np
+        except ImportError:
+            self.skipTest("NumPy not installed in lightweight CI environment")
+        with open(str(capture.DEFAULT_SOURCE),encoding="utf-8") as f:
+            names=[kp["name"] for kp in json.load(f)["keypoints"]]
+        j=len(names)
+        uv=np.zeros((2,j,2),dtype=np.float32)
+        conf=np.ones((2,j),dtype=np.float32)
+        conf[0,0]=np.nan
+        np.savez(self.det,front_uv=uv,side_uv=uv,
+                 front_conf=conf,side_conf=np.ones_like(conf),
+                 fps=np.float32(24),names=np.array(names))
+        with self.assertRaisesRegex(ContractError,"nonfinite heatmap peaks"):
+            capture._read_detection_stats(self.det)
+
 
 if __name__=="__main__":
     unittest.main()
