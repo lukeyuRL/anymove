@@ -21,10 +21,20 @@ class DragonPromptCaptureTests(unittest.TestCase):
         self.ref.write_bytes(b"fake ref")
         self.action="the dragon raises both wings and roars, then settles."
 
-    def plan(self,action=None,require_credentials=False):
+    def plan(self,action=None,require_credentials=False,
+             require_supported_python=False):
         return prompt._prompt_plan(
             action or self.action,self.out,self.reader,self.ref,
-            require_python311=False,require_credentials=require_credentials)
+            require_supported_python=require_supported_python,
+            require_credentials=require_credentials)
+
+    def test_python_314_accepted_and_313_rejected(self):
+        with mock.patch.object(prompt.sys,"version_info",(3,14,0)):
+            self.assertEqual(
+                self.plan(require_supported_python=True)["model"],"h3max")
+        with mock.patch.object(prompt.sys,"version_info",(3,13,0)):
+            with self.assertRaisesRegex(ContractError,"3.11 or 3.14"):
+                self.plan(require_supported_python=True)
 
     def test_billable_requires_explicit_credentials(self):
         with mock.patch.object(prompt,"_credential_available",return_value=False):
@@ -41,7 +51,7 @@ class DragonPromptCaptureTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError,"unsupported"):
             prompt._prompt_plan(self.action,self.out,self.reader,self.ref,
                                 model="bad",require_credentials=False,
-                                require_python311=False)
+                                require_supported_python=False)
         self.out.mkdir()
         with self.assertRaisesRegex(ContractError,"NEW directory"):
             self.plan()
@@ -61,7 +71,7 @@ class DragonPromptCaptureTests(unittest.TestCase):
         local={"status":"motion_json_ready",
                "motion_file":str(self.root/"motion.json"),
                "source_motion_sha256":"sha123"}
-        with mock.patch.object(prompt.sys,"version_info",(3,11,0)):
+        with mock.patch.object(prompt.sys,"version_info",(3,14,0)):
             with mock.patch.object(prompt,"_credential_available",
                                    return_value=True):
                 with mock.patch.object(prompt,"run_capture",
