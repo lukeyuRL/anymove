@@ -1,8 +1,10 @@
-"""Opt-in, backed-up iClone Dragon pelvis Position calibration.
+"""Backed-up Root POSITION BASIS correction with a fixed 1.0 multiplier.
 
-Rescales ONLY the existing, fully verified Pelvis Layer Position XYZ keys.
-Does not touch rotations, actor Transform keys, solver output, or earlier
-source files. This is an experimental scale hypothesis, never silent retargeting.
+The user's confirmed iClone Pelvis Position scale is one. The old inverse
+Pelvis Rest axes turn source +Z lift into negative local Z; the new candidate
+writes full source XYZ instead. Only source-verified Position keys are
+changed; FK rotations and original motion.json are untouched. Actual iClone
+world motion must still be inspected visually after the new iProject save.
 """
 import hashlib
 import json
@@ -109,41 +111,53 @@ def inspect_root_scale(motion_path,rlpy=None,tolerance=0.002):
         if not all(math.isfinite(v) for v in row):
             raise ContractError("nonfinite Pelvis Position controller sample")
         actual.append(row)
-    # An earlier Root Flight experiment may already have applied 100x.
-    # Fit ONE positive uniform scale to the exact pelvis-local SOURCE keys.
-    # This permits changing AXIS BASIS after a previous scale experiment
-    # without accidentally multiplying 100x by another 100x.
-    denominator=sum(sum(v*v for v in row) for row in expected)
-    if denominator<1e-10:
-        raise ContractError("source Pelvis translation is too small to identify")
-    current_scale=sum(
-        sum(a*b for a,b in zip(observed,reference))
-        for observed,reference in zip(actual,expected))/denominator
-    if not math.isfinite(current_scale) or not 0.01<=current_scale<=200.:
-        raise ContractError(
-            "Current Pelvis Position does NOT match a safe positive "
-            "scale of the source pelvis-local Dragon motion "
-            "(fitted scale %.6g). Already remapped/unknown animation "
-            "must not be modified."%current_scale)
-    max_error=max(
-        abs(a-current_scale*b)
-        for observed,reference in zip(actual,expected)
-        for a,b in zip(observed,reference))
-    if max_error>tolerance:
-        raise ContractError(
-            "Current Pelvis Position is NOT the original pelvis-local "
-            "Dragon Motion at any uniform scale "
-            "(fitted %.6g; max per-axis mismatch %.6g; tolerance %.6g). "
-            "Never remap unrelated or already axis-corrected animation."%
-            (current_scale,max_error,tolerance))
+    # Readback may already be full source XYZ at 1x (new import). In that
+    # case refuse further writes rather than reapplying the correction.
+    world_error=max(
+        abs(a-float(b)) for observed,raw in zip(actual,motion["trans"])
+        for a,b in zip(observed,raw))
+    already_world=world_error<=tolerance
+    if already_world:
+        current_scale=1.0
+        max_error=world_error
+    else:
+        # Previous clips were written in inverse-Rest pelvis-local axes,
+        # possibly later amplified 100x. Fit that *OLD* basis to identify
+        # source-matching keys only. Do not use the fit as a new multiplier.
+        denominator=sum(sum(v*v for v in row) for row in expected)
+        if denominator<1e-10:
+            raise ContractError("source Pelvis translation is too small to identify")
+        current_scale=sum(
+            sum(a*b for a,b in zip(observed,reference))
+            for observed,reference in zip(actual,expected))/denominator
+        if not math.isfinite(current_scale) or not 0.01<=current_scale<=200.:
+            raise ContractError(
+                "Current Pelvis Position does NOT match a safe positive "
+                "scale of the source pelvis-local Dragon motion "
+                "(fitted scale %.6g). Already remapped/unknown animation "
+                "must not be modified."%current_scale)
+        max_error=max(
+            abs(a-current_scale*b)
+            for observed,reference in zip(actual,expected)
+            for a,b in zip(observed,reference))
+        if max_error>tolerance:
+            raise ContractError(
+                "Current Pelvis Position is NOT the original pelvis-local "
+                "Dragon Motion at any uniform scale "
+                "(fitted %.6g; max per-axis mismatch %.6g; tolerance %.6g). "
+                "Never remap unrelated or already axis-corrected animation."%
+                (current_scale,max_error,tolerance))
     peak=max(range(n),key=lambda i:motion["trans"][i][2]-
              motion["trans"][0][2])
     z=float(motion["trans"][peak][2]-motion["trans"][0][2])
     delta=[float(actual[peak][i]-actual[0][i]) for i in range(3)]
     return {
-        "status":("source_motion_position_matches_scale_1"
+        "status":("already_source_xyz_scale_1" if already_world else
+                  "source_motion_position_matches_scale_1"
                   if abs(current_scale-1.0)<0.001 else
                   "source_motion_position_matches_scaled_pelvis_local"),
+        "current_position_space":("armature" if already_world
+                                  else "pelvis_local"),
         "motion_file":str(path),
         "frame_count":n,
         "peak_frame":peak,
@@ -156,15 +170,16 @@ def inspect_root_scale(motion_path,rlpy=None,tolerance=0.002):
             float(expected[peak][i]-expected[0][i])
             for i in range(3)],
         "observed_stored_pelvis_local_delta_xyz":delta,
+        "observed_stored_position_delta_xyz":delta,
         "detected_current_scale":float(current_scale),
         "key_counts_xyz":counts,
         "max_source_position_key_error":max_error,
-        "note":"Current position keys match Blender pelvis-local data "
-               "at a fitted uniform multiplier. In this Dragon the "
-               "source +Z lift becomes NEGATIVE pelvis-local Z. "
-               "A world-axis XYZ remap is a TEST, not validated iClone "
-               "Layer coordinate semantics. Only measured scene motion "
-               "can establish the correct basis and scale."
+        "note":("Already source XYZ at 1x; no Root Flight correction is "
+                "needed." if already_world else
+                "Legacy keys match inverse-Rest pelvis-local data; "
+                "source +Z lift became negative local Z. Proposed correction "
+                "writes full source XYZ at exactly 1x, NOT a Z-only sign flip. "
+                "World-space trajectory still requires real iClone validation.")
     }
 
 
@@ -176,8 +191,8 @@ def _unused_path(folder,stem,suffix):
     raise ContractError("No free output filename; do not overwrite projects")
 
 
-def rescale_root_position(motion_path,output_parent,multiplier,rlpy=None,
-                          position_space="pelvis_local"):
+def rescale_root_position(motion_path,output_parent,multiplier=1.0,rlpy=None,
+                          position_space="armature"):
     """Backup, remap 3D Position BASIS and scalar, save a new project.
 
     Requires caller's explicit confirmation. If any post-backup step fails,
@@ -185,23 +200,29 @@ def rescale_root_position(motion_path,output_parent,multiplier,rlpy=None,
     """
     if rlpy is None:
         import RLPy as rlpy
-    if position_space not in ("pelvis_local","armature"):
+    if position_space!="armature":
         raise ContractError(
-            "Root position_space must be pelvis_local or armature")
+            "Root correction requires source armature XYZ (+Z up), "
+            "not the old inverse-Rest pelvis-local axes")
     if (type(multiplier) not in (int,float) or
         not math.isfinite(multiplier) or
-        multiplier<=1.001 or multiplier>200.0):
-        raise ContractError("experimental Root Position multiplier must be >1 and <=200")
+        abs(float(multiplier)-1.0)>1e-9):
+        raise ContractError(
+            "Confirmed Root Position multiplier must be exactly 1.0; "
+            "100x and all other gains are blocked")
     parent=pathlib.Path(output_parent)
     if not parent.is_dir():
         raise ContractError("Choose an existing output folder for project backup")
     inspected=inspect_root_scale(motion_path,rlpy=rlpy)
+    if inspected["status"]=="already_source_xyz_scale_1":
+        raise ContractError(
+            "Root Position already uses source XYZ at 1x; nothing to repair")
     _,_,_,fps,axes=_controls(rlpy)
     path,motion,expected=_load_source(motion_path)
-    # The CURRENT source-matching keys are pelvis_local (possibly x100).
-    # Proposed corrected TEST uses Blender armature/world XYZ (+Z up).
-    # Do not just flip Z: the rest rotation also mixes Y and Z.
-    target=(motion["trans"] if position_space=="armature" else expected)
+    # Replace every position sample with full source XYZ at absolute 1x.
+    # Legacy 100x is recognized solely for read-only source matching, not
+    # multiplied again; no other FK, root rotation or actor keys are touched.
+    target=motion["trans"]
     signature=hashlib.sha256(path.read_bytes()).hexdigest()[:10]
     backup=_unused_path(parent,"AnyMove_BeforeRootScale_"+signature,".iProject")
     output=_unused_path(parent,"AnyMove_RootScale_"+signature,".iProject")
@@ -239,7 +260,7 @@ def rescale_root_position(motion_path,output_parent,multiplier,rlpy=None,
         if not output.is_file() or output.stat().st_size==0:
             raise ContractError("rescaled project was not saved successfully")
         result={
-            "status":"experimental_root_scale_keys_verified_project_saved",
+            "status":"experimental_root_xyz_1x_keys_verified_project_saved",
             "backup_iProject":str(backup),
             "adjusted_iProject":str(output),
             "multiplier":float(multiplier),
@@ -256,9 +277,9 @@ def rescale_root_position(motion_path,output_parent,multiplier,rlpy=None,
             "readback_max_error":max_error,
             "quality":"NOT_CALIBRATED_OR_VISUALLY_VERIFIED",
             "note":"Only Pelvis Position XYZ was changed. FK rotations "
-                   "untouched. World-axis source XYZ is a coordinate-basis "
-                   "EXPERIMENT, not proved iClone Layer semantics. If movement "
-                   "is excessive or incorrect, reopen the backup iProject."
+                   "untouched. Applied source XYZ at confirmed 1x. "
+                   "World-axis mapping remains an experimental hypothesis "
+                   "until measured in iClone. Reopen the backup if wrong."
         }
         receipt=_unused_path(parent,"AnyMove_RootScale_receipt_"+signature,".json")
         receipt.write_text(json.dumps(result,ensure_ascii=False,indent=2),
