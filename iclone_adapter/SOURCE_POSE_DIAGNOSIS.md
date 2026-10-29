@@ -29,3 +29,32 @@ Interpretation:
 World Pelvis tilt is computed as B_rest * R(root_quat) * B_rest.T.
 Do not mistake the Pelvis bone's rotated local Rest axis for global lean.
 This tool does not edit animation or iClone FK mapping.
+
+
+## Additional camera-layout proof and prevention
+
+The source-pose report has an extraordinary discrepancy: Solver-to-Blender
+joints are within 0.0091 cm, but Solver-to-Dragon-detections mean reprojection
+error is ~68px front and ~72px side, while Root is already laterally
+~22.23 degrees off at Frame 0. An important candidate is **incorrect
+camera Layout when mocap.solve was originally run without
+MOCAP_CREATURE=assets/dragon**. In that situation mocap/layout.py silently
+uses Wolf's W_FRONT=420, W_SIDE=860, M_PER_PX=1.9/720 instead of
+Dragon's W_FRONT=640, W_SIDE=640, M_PER_PX=.006875.
+
+The diagnostic now calculates Solver-joint projections BOTH ways and
+compares the side mean to the original motion.json.reproj_px.side value.
+The side channel is important because the Solver may time-warp front
+landmarks internally. If the Wolf reprojection matches the Solver's
+reported side error while Dragon reprojection is ~72px, this is direct
+evidence that the wrong camera was loaded during solving.
+
+The original mocap.solve now has a fail-closed check against the Rig's
+creature.json and stops before optimizing if the active layout mismatches.
+Set the environment BEFORE launching Python:
+
+    $env:MOCAP_CREATURE = 'assets/dragon'
+
+Then use mocap.solve with the original det.npz and a **new** output file.
+Do not delete any previous animation or attempt to correct Root by a
+fixed Quaternion. Compare new Solver motion against det.npz first.

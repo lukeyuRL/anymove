@@ -91,6 +91,82 @@ def _projection(point, layout):
             [float(layout["W_SIDE"])/2-y/m,v])
 
 
+
+# mocap/layout.py defaults to Wolf when MOCAP_CREATURE is not set.
+WOLF_DEFAULT_LAYOUT={
+    "W_FRONT":420,"W_SIDE":860,
+    "M_PER_PX":1.9/720,"GROUND_V":630
+}
+
+
+def _camera_fit_statistics(motion,detections,layout):
+    front=[]
+    front_x=[]
+    side=[]
+    for frame, joints in enumerate(motion["joints"]):
+        for bone, xyz in enumerate(joints):
+            pf,ps=_projection(_point3(xyz),layout)
+            df=detections["front_uv"][frame][bone]
+            ds=detections["side_uv"][frame][bone]
+            front_x.append(abs(pf[0]-df[0]))
+            front.append(math.hypot(pf[0]-df[0],pf[1]-df[1]))
+            side.append(math.hypot(ps[0]-ds[0],ps[1]-ds[1]))
+    return {
+        "front_error_px":_statistics(front),
+        "front_x_only_error_px":_statistics(front_x),
+        "side_error_px":_statistics(side)
+    }
+
+
+def compare_solver_camera_layouts(motion,detections,dragon_layout):
+    """Which camera configuration best reproduces Solver's own losses?
+
+    This is diagnostic, not a silent correction to the animation.
+    Side view is strongest provenance signal: Solver time-warps only the
+    FRONT view internally, and may have edited its per-frame landmarks.
+    """
+    dragon=_camera_fit_statistics(motion,detections,dragon_layout)
+    wolf=_camera_fit_statistics(motion,detections,WOLF_DEFAULT_LAYOUT)
+    reported=motion.get("reproj_px") or {}
+    valid={k:float(v) for k,v in reported.items()
+           if k in ("front","front_x_only","side") and
+           type(v) in (int,float) and math.isfinite(v)}
+    source_warp=(motion.get("sync") or {}).get("front_shift_frames")
+    side_reported=valid.get("side")
+    wolf_side=wolf["side_error_px"]["mean"]
+    dragon_side=dragon["side_error_px"]["mean"]
+    sw=(abs(wolf_side-side_reported) if side_reported is not None else None)
+    sd=(abs(dragon_side-side_reported) if side_reported is not None else None)
+    if (sw is not None and
+        sw<=max(4.,.3*max(side_reported,1.)) and
+        sd>max(15.,sw*3) and wolf_side<dragon_side*.65):
+        inference="strong_evidence_solver_used_default_wolf_layout"
+    elif (sd is not None and
+          sd<=max(4.,.3*max(side_reported,1.)) and
+          sw>max(15.,sd*3) and dragon_side<wolf_side*.65):
+        inference="solver_used_expected_dragon_layout"
+    elif (wolf_side<dragon_side*.55 and
+          wolf["front_x_only_error_px"]["mean"] <
+          dragon["front_x_only_error_px"]["mean"]*.65):
+        inference="possible_wolf_fallback_need_original_solver_reprojection"
+    else:
+        inference="inconclusive_check_original_detection_provenance"
+    return {
+        "inference":inference,
+        "expected_dragon_layout":dict(dragon_layout),
+        "expected_dragon_projection":dragon,
+        "wolf_fallback_layout":dict(WOLF_DEFAULT_LAYOUT),
+        "wolf_fallback_projection":wolf,
+        "solver_reported_reproj_px":valid,
+        "side_mean_difference_from_solver_report_px":{
+            "dragon":sd,"wolf":sw},
+        "solver_front_was_time_aligned":source_warp is not None,
+        "note":"iClone Blender errors cannot be corrected by retargeting "
+               "if mocap.solve fitted joints under the wrong camera. "
+               "Use the EXACT source det.npz, and re-solve after setting "
+               "MOCAP_CREATURE=assets/dragon if Wolf fallback is confirmed."
+    }
+
 def _front_lean(a,b):
     height=abs(float(a[1])-float(b[1]))
     if height<1e-4:
@@ -219,6 +295,10 @@ def diagnose(motion,rig,blender=None,detections=None,layout=None):
             "side_error":sstat,
             "front_lean_disagreement_deg":lstat,
             "sample_frames":sample},
+        "camera_layout_comparison":(
+            compare_solver_camera_layouts(motion,detections,layout)
+            if detections is not None else
+            {"inference":"original_det_npz_required"}),
         "pelvis_root_world_orientation":{
             "world_up_tilt_deg":_statistics(tilt),
             "signed_lateral_tilt_deg":_statistics(lateral),
@@ -275,6 +355,16 @@ def main():
     print("Solver vs Blender (cm):",result["solver_to_blender_cm"]["error_cm"])
     print("Pelvis root world tilt (deg):",result[
         "pelvis_root_world_orientation"]["world_up_tilt_deg"])
+    print("Camera Layout inference:",
+          result["camera_layout_comparison"]["inference"])
+    if detections is not None:
+        compare=result["camera_layout_comparison"]
+        print("Dragon side reprojection mean:",
+              compare["expected_dragon_projection"]["side_error_px"]["mean"])
+        print("Wolf side reprojection mean:",
+              compare["wolf_fallback_projection"]["side_error_px"]["mean"])
+        print("Original Solver reprojection:",
+              compare["solver_reported_reproj_px"])
     print("Saved:",output)
 
 

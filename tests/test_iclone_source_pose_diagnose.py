@@ -2,7 +2,9 @@
 import copy
 import math
 import unittest
-from iclone_adapter.source_pose_diagnose import diagnose
+from iclone_adapter.source_pose_diagnose import (
+    diagnose,compare_solver_camera_layouts,WOLF_DEFAULT_LAYOUT
+)
 
 
 class SourcePoseTests(unittest.TestCase):
@@ -96,6 +98,33 @@ class SourcePoseTests(unittest.TestCase):
         det["front_uv"].pop()
         with self.assertRaisesRegex(ValueError,"EXACT"):
             self.compare(det=det)
+
+    def test_wrong_wolf_camera_inference_matches_solver_side_loss(self):
+        normal=copy.deepcopy(self.motion)
+        obs=copy.deepcopy(self.det)
+        camera=WOLF_DEFAULT_LAYOUT
+        for frame, joints in enumerate(normal["joints"]):
+            for i,(x,y,z) in enumerate(joints):
+                v=camera["GROUND_V"]-z/camera["M_PER_PX"]
+                obs["front_uv"][frame][i]=[
+                    camera["W_FRONT"]/2+x/camera["M_PER_PX"],v]
+                obs["side_uv"][frame][i]=[
+                    camera["W_SIDE"]/2-y/camera["M_PER_PX"],v]
+        normal["reproj_px"]={"front":0.,"front_x_only":0.,"side":0.}
+        result=compare_solver_camera_layouts(normal,obs,self.layout)
+        self.assertEqual(result["inference"],
+                         "strong_evidence_solver_used_default_wolf_layout")
+        self.assertAlmostEqual(
+            result["wolf_fallback_projection"]["side_error_px"]["mean"],0.)
+        self.assertGreater(
+            result["expected_dragon_projection"]["side_error_px"]["mean"],20.)
+
+    def test_proper_dragon_camera_inference_matches_original_loss(self):
+        normal=copy.deepcopy(self.motion)
+        normal["reproj_px"]={"front":0.,"front_x_only":0.,"side":0.}
+        result=compare_solver_camera_layouts(normal,self.det,self.layout)
+        self.assertEqual(result["inference"],
+                         "solver_used_expected_dragon_layout")
 
     def test_no_blender_or_source_is_not_a_false_success(self):
         report=diagnose(self.motion,self.rig,layout=self.layout)
