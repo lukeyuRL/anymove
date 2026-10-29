@@ -342,8 +342,9 @@ class VideoImportUITests(unittest.TestCase):
             coordinator.job={"capture_path":str(capture),"mode":"existing"}
             coordinator._finished(2,coordinator.core.QProcess.NormalExit)
             warning=str(widgets.QMessageBox.warning.call_args)
-            self.assertIn("not imported",warning.lower())
-            self.assertNotIn("quality review",warning.lower())
+            self.assertIn("Dragon Capture not imported",warning)
+            self.assertNotIn("Motion Solver FINISHED",warning)
+            self.assertNotIn("Saved motion.json (NOT discarded)",warning)
 
 
 if __name__=="__main__":
