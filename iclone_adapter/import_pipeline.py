@@ -108,8 +108,37 @@ def _validate_profile(motion,target,source_info,reference_source):
         raise ContractError("Dragon profile requires original 24 FPS without resampling")
     report = audit_rig(source_info,target)
     if report.get("result") != "compatible_static_rest_snapshot":
-        raise ContractError("Dragon target is not an unposed, same-rig snapshot: "+
-                            str(report.get("result")))
+        # The native snapshot is the evaluated CURRENT pose, not a verified
+        # bind matrix. iClone can retain the last pose after DeleteClip.
+        # Report measured mismatches rather than only needs_mapping_review.
+        bones=report.get("bone_errors") or []
+        worst=sorted(
+            bones,key=lambda item:max(
+                float(item.get("rotation_component_max_error") or 0),
+                float(item.get("position_error_source_units") or 0)),
+            reverse=True)[:5]
+        details="; ".join(
+            "%s rotComponent %.5g / pos %.5g source-units"%
+            (item.get("name","?"),
+             item.get("rotation_component_max_error") or 0,
+             item.get("position_error_source_units") or 0)
+            for item in worst)
+        raise ContractError(
+            "Dragon target is not an unposed, same-rig snapshot: %s. "
+            "Matched %s/%s bones; observed scale %s; "
+            "max matrix component error %s (limit %s); "
+            "max position error %s (limit %s). "
+            "Largest deviations: %s. "
+            "Deleting Motion Clips does NOT restore Rest Pose. "
+            "Load a verified CLEAN Dragon iProject or reimport the "
+            "original 100x Dragon FBX in a new scene."%
+            (report.get("result"),report.get("matched_unique_names"),
+             report.get("source_bones"),
+             report.get("source_to_target_uniform_scale"),
+             report.get("max_rotation_matrix_component_error"),
+             report.get("component_tolerance"),
+             report.get("max_position_error_source_units"),
+             report.get("position_tolerance"),details or "(none)"))
     scale = report["source_to_target_uniform_scale"]
     if not math.isfinite(scale) or abs(scale - REFERENCE_TARGET_SCALE) > 0.25:
         raise ContractError(
