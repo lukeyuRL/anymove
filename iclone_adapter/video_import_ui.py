@@ -3,8 +3,9 @@
 The iClone 8 Python 3.8 process remains RLPy/PySide2 ONLY.
 Expensive video decoding, DINOv2 CUDA inference and torch fitting execute
 in a separate Python 3.11 QProcess, with live progress and receipt files.
-When motion.json is ready, the previously verified same-Dragon-rig
-direct_import code validates and writes in the iClone process.
+Video generation and motion solving do not require a selected or clean
+iClone actor. Once motion.json is ready, direct_import validates the
+THEN-selected Dragon, with scene-write approval required.
 
 User confirms the scene change explicitly after motion capture finishes.
 The original existing MP4/NPZ path never calls fal.ai; a separate
@@ -25,7 +26,7 @@ REPO=pathlib.Path(__file__).resolve().parents[1]
 
 
 def preflight_video_target(rlpy):
-    """Read-only guard BEFORE launching costly external video processing."""
+    """Optional clean-target guard; not a prerequisite for video capture."""
     obj,fps=_selected_and_fps(rlpy,24)
     with open(str(DEFAULT_SOURCE),encoding="utf-8") as f:
         source_info=json.load(f)
@@ -128,7 +129,7 @@ class VideoCaptureCoordinator:
         if not path:
             return
         try:
-            target=preflight_video_target(self.rlpy)
+            # Actor-independent video generation/solving; validate on import.
             reader=None
             reference=None
             if path.lower().endswith(".mp4"):
@@ -166,7 +167,6 @@ class VideoCaptureCoordinator:
             arguments=worker_arguments(path,capture,reader,reference)
             text=(
                 "Dragon Motion Capture from an EXISTING two-camera source\n\n"
-                "Selected Dragon: %s\n"
                 "Source: %s\n"
                 "Python: %s (must be 3.11)\n"
                 "Capture folder: %s\n\n"
@@ -175,11 +175,13 @@ class VideoCaptureCoordinator:
                 "It reads GPU-trained Dragon DINOv2 Reader for MP4; "
                 "an existing det.npz skips Reader inference.\n"
                 "No fal.ai or paid video requests are made.\n"
-                "No iClone scene change occurs during capture. "
-                "After motion.json is produced, iClone will ask for "
-                "separate confirmation before writing animation.\n\n"
+                "No Dragon selection is required for capture. "
+                "After motion.json is produced, the THEN-selected Dragon "
+                "is validated before iClone asks to write animation. "
+                "Use a clean original 42-Bone Dragon at 100x, "
+                "24 FPS and Frame 0 for import.\n\n"
                 "Start capture?"%
-                (target["object_name"],path,python,str(capture))
+                (path,python,str(capture))
             )
             answer=self.widgets.QMessageBox.question(
                 self.panel,"Start Dragon Motion Capture",text,
@@ -191,7 +193,7 @@ class VideoCaptureCoordinator:
             self._launch_worker(
                 python,arguments,
                 {"source":path,"python":python,"capture_path":str(capture),
-                 "output_parent":str(parent),"target":target,"mode":"existing"})
+                 "output_parent":str(parent),"mode":"existing"})
         except Exception as exc:
             message=type(exc).__name__+": "+str(exc)
             self._log("Dragon Capture preflight FAILED: "+message)
@@ -210,7 +212,7 @@ class VideoCaptureCoordinator:
         if not ok or not action.strip():
             return
         try:
-            target=preflight_video_target(self.rlpy)
+            # Actor-independent video generation/solving; validate on import.
             reader=REPO/"runs"/"dragon"/"reader.pt"
             reference=REPO/"runs"/"dragon"/"ref"/"ref.png"
             if not reader.is_file():
@@ -258,8 +260,10 @@ class VideoCaptureCoordinator:
                 "model cost and availability may change.\n\n"
                 "If approved, generate the two-camera Dragon video, then "
                 "run DINOv2 + Motion Solver on external Python 3.11. "
-                "After a successful quality check you will be asked AGAIN "
-                "before the iClone scene is modified.\n\n"
+                "After a successful quality check the THEN-selected Dragon "
+                "will be verified; you will be asked AGAIN before the iClone "
+                "scene is modified. If the target is unsuitable, motion.json "
+                "is preserved for later import.\n\n"
                 "Proceed with the paid video-generation request?"%
                 action.strip())
             answer=self.widgets.QMessageBox.question(
@@ -274,7 +278,7 @@ class VideoCaptureCoordinator:
                 python,arguments,
                 {"source":"Dragon Prompt: "+action.strip(),
                  "python":python,"capture_path":str(capture),
-                 "output_parent":str(parent),"target":target,
+                 "output_parent":str(parent),
                  "mode":"prompt"})
         except Exception as exc:
             error=type(exc).__name__+": "+str(exc)
@@ -344,7 +348,24 @@ class VideoCaptureCoordinator:
                                 (capture/OUTPUT_MOTION))
             if not motion.is_file():
                 raise ContractError("Capture reported success but no motion.json exists")
-            plan=prepare_direct_import(str(motion),rlpy=self.rlpy)
+            try:
+                plan=prepare_direct_import(str(motion),rlpy=self.rlpy)
+            except Exception as exc:
+                reason=type(exc).__name__+": "+str(exc)
+                self._log(
+                    "Dragon motion.json READY; automatic iClone import DEFERRED: "
+                    +reason+"\nPreserved motion.json: "+str(motion))
+                self._warning(
+                    "Dragon motion ready - import deferred",
+                    "Video capture and motion solving completed successfully.\n"
+                    "Saved motion.json:\n%s\n\n"
+                    "Automatic iClone import could not be prepared:\n%s\n\n"
+                    "No animation was written to the iClone scene. "
+                    "When ready, select a clean original 42-Bone Dragon "
+                    "(100x, 24 FPS, Frame 0, no prior Motion Clips), then use "
+                    "'IMPORT AnyMove motion.json -> iClone + iProject'."%
+                    (str(motion),reason))
+                return
             quality=(data.get("motion_summary") or {}).get("quality_status")
             if quality is None and data.get("local_capture_receipt"):
                 with open(data["local_capture_receipt"],encoding="utf-8") as f:
