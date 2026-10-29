@@ -1,6 +1,6 @@
 """Capture a Dragon motion.json from an existing two-camera MP4 or det.npz.
 
-This is an EXTERNAL Python 3.11 worker. Never import torch, OpenCV or DINOv2
+This is an EXTERNAL Python 3.11 or 3.14 worker. Never import torch, OpenCV or DINOv2
 inside iClone's Python 3.8 process. The worker invokes the original
 mocap.detect and mocap.solve unchanged, in subprocesses so stdout/progress
 can stream to the calling iClone QProcess.
@@ -23,6 +23,21 @@ from .schema import ContractError
 from .verify_import import DEFAULT_SOURCE
 
 REPO=pathlib.Path(__file__).resolve().parents[1]
+
+# Only EXTERNAL workers use these interpreters; iClone stays on Python 3.8.
+SUPPORTED_EXTERNAL_PYTHON_VERSIONS=((3,11),(3,14))
+SUPPORTED_EXTERNAL_PYTHON_TEXT="3.11 or 3.14"
+
+
+def supports_external_python(version=None):
+    """Whether an external interpreter uses a supported AnyMove version."""
+    version=sys.version_info if version is None else version
+    try:
+        return tuple(version[:2]) in SUPPORTED_EXTERNAL_PYTHON_VERSIONS
+    except (IndexError,TypeError):
+        return False
+
+
 CAPTURE_VERSION="anymove.iclone.dragon_capture/1"
 RECEIPT="capture_receipt.json"
 OUTPUT_MOTION="motion.json"
@@ -64,13 +79,13 @@ def _required_file(value,label,suffix):
 
 
 def _input_plan(input_path,reader_path=None,ref_path=None,
-                output_dir=None,require_python311=True):
-    if require_python311 and not(
-            sys.version_info[0]==3 and sys.version_info[1]==11):
+                output_dir=None,require_supported_python=True):
+    if require_supported_python and not supports_external_python():
         raise ContractError(
-            "AnyMove detection/solver requires external Python 3.11; "
+            "AnyMove detection/solver requires external Python %s; "
             "current worker is %d.%d"%
-            (sys.version_info[0],sys.version_info[1]))
+            (SUPPORTED_EXTERNAL_PYTHON_TEXT,
+             sys.version_info[0],sys.version_info[1]))
     original=_required_file(input_path,"source clip/detections",
                             (".mp4",".npz"))
     mode="video" if original.suffix.lower()==".mp4" else "detections"
@@ -99,7 +114,7 @@ def _input_plan(input_path,reader_path=None,ref_path=None,
         "rig_info_sha256":_sha(rig),
         "output_path":str(output),
         "motion_path":str(output/OUTPUT_MOTION),
-        "required_python":"3.11",
+        "required_python":SUPPORTED_EXTERNAL_PYTHON_TEXT,
         "creature":"dragon",
         "note":"Reader requires trained DINOv2 + CUDA; default Wolf reader "
                "or arbitrary video is not supported. Use one fixed "
@@ -112,7 +127,7 @@ def _read_detection_stats(path):
     try:
         import numpy as np
     except ImportError:
-        raise ContractError("numpy unavailable; install requirements in Python 3.11")
+        raise ContractError("numpy unavailable; install requirements in Python 3.11 or 3.14")
     with np.load(str(path),allow_pickle=False) as source:
         required=("front_uv","side_uv","front_conf","side_conf","fps","names")
         missing=[x for x in required if x not in source.files]
@@ -280,7 +295,7 @@ def run_capture(input_path,output_dir,reader_path=None,ref_path=None,
 
 def main():
     parser=argparse.ArgumentParser(description=
-        "Capture original Dragon AnyMove motion.json in external Python 3.11")
+        "Capture original Dragon AnyMove motion.json in external Python 3.11 or 3.14")
     parser.add_argument("--input",required=True,
                         help="existing split-screen Dragon MP4 or detections NPZ")
     parser.add_argument("--output",required=True,
