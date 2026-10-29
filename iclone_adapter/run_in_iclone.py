@@ -32,7 +32,7 @@ def show():
             layout = QtWidgets.QVBoxLayout(self)
             layout.addWidget(QtWidgets.QLabel(
                 "Dragon 42-Bone same-rig: existing two-camera MP4, det.npz or AI prompt.\n"
-                "External Python 3.11 handles video generation / DINOv2 / solver.\n"
+                "External Python 3.11 or 3.14 handles video generation / DINOv2 / solver.\n"
                 "24 FPS, clean Dragon FBX; per-frame FK + Root Motion -> iProject."))
             self.root_translation_samples = {}
             self.video_capture = VideoCaptureCoordinator(
