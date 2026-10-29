@@ -1,6 +1,6 @@
 """Opt-in paid prompt -> fal.ai Dragon video -> DINOv2 -> solved motion.json.
 
-External Python 3.11 ONLY. This operation CAN INCUR remote fal.ai charges.
+External Python 3.11 or 3.14 ONLY. This operation CAN INCUR remote fal.ai charges.
 It is never called automatically by the iClone UI; the user must explicitly
 confirm the billable AI video generation before QProcess starts.
 
@@ -21,7 +21,8 @@ import sys
 
 from .schema import ContractError
 from .video_capture import (
-    REPO, _required_file, _atomic_json, _run_step, run_capture
+    REPO, _required_file, _atomic_json, _run_step, run_capture,
+    supports_external_python, SUPPORTED_EXTERNAL_PYTHON_TEXT
 )
 
 VERSION="anymove.iclone.dragon_prompt_capture/1"
@@ -47,9 +48,12 @@ def _credential_available():
 
 def _prompt_plan(action,output_dir,reader,reference,model="h3max",
                  seconds=5,seed=1,require_credentials=True,
-                 require_python311=True):
-    if require_python311 and (sys.version_info[0],sys.version_info[1])!=(3,11):
-        raise ContractError("AI prompt worker needs external Python 3.11")
+                 require_supported_python=True):
+    if require_supported_python and not supports_external_python():
+        raise ContractError(
+            "AI prompt worker requires external Python %s; current is %d.%d"%
+            (SUPPORTED_EXTERNAL_PYTHON_TEXT,
+             sys.version_info[0],sys.version_info[1]))
     if not isinstance(action,str) or not 8<=len(action.strip())<=1000:
         raise ContractError("action text must contain 8 to 1000 characters")
     if "\x00" in action:
