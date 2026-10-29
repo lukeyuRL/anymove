@@ -171,6 +171,57 @@ class DirectImportTests(unittest.TestCase):
         self.assertTrue(saved["playhead_restored_to_frame0"])
         self.assertEqual(len(self.sdk.RFileIO.saved),1)
 
+    def test_optional_clean_template_saved_before_motion_keys(self):
+        def verify_writer(motion,fps_confirmed,rlpy):
+            folders=list(self.root.glob("AnyMove_Dragon_*"))
+            self.assertEqual(len(folders),1)
+            template=folders[0]/direct.CLEAN_TEMPLATE_NAME
+            self.assertTrue(template.is_file())
+            self.assertGreater(template.stat().st_size,0)
+            self.assertTrue(self.sdk.RFileIO.saved)
+            self.assertEqual(self.sdk.RFileIO.saved[0],str(template))
+            return self.writer_success(motion,fps_confirmed,rlpy)
+        with mock.patch.object(direct,"write_selected",
+                               side_effect=verify_writer) as writer:
+            with mock.patch.object(direct,"audit_full_controller_frames",
+                                   side_effect=self.audit_success):
+                result=direct.execute_direct_import(
+                    self.prepare(),self.root,rlpy=self.sdk,
+                    preserve_clean_template=True)
+        writer.assert_called_once()
+        self.assertEqual(result["status"],
+                         "completed_full_frame_verified_project_saved")
+        self.assertEqual(len(self.sdk.RFileIO.saved),2)
+        self.assertEqual(result["clean_template_iProject"],
+                         self.sdk.RFileIO.saved[0])
+        self.assertNotEqual(self.sdk.RFileIO.saved[0],
+                            result["iProject_path"])
+        self.assertTrue(pathlib.Path(result["clean_template_iProject"]).is_file())
+
+    def test_clean_template_save_failure_blocks_before_any_keys(self):
+        self.sdk.RFileIO=FileIO("error")
+        with mock.patch.object(direct,"write_selected") as writer:
+            with self.assertRaisesRegex(
+                    ContractError,"NO animation keys written"):
+                direct.execute_direct_import(
+                    self.prepare(),self.root,rlpy=self.sdk,
+                    preserve_clean_template=True)
+        writer.assert_not_called()
+        folders=list(self.root.glob("AnyMove_Dragon_*"))
+        self.assertEqual(len(folders),1)
+        receipt=json.loads((folders[0]/"import_receipt.json").read_text())
+        self.assertEqual(receipt["status"],
+                         "clean_template_backup_failed_no_keys_written")
+        self.assertFalse(receipt["scene_may_contain_new_keys"])
+        self.assertEqual(len(self.sdk.RFileIO.saved),1)
+
+    def test_reusable_template_requires_native_project_save(self):
+        with self.assertRaisesRegex(ContractError,"native SaveProject"):
+            direct.execute_direct_import(
+                self.prepare(),self.root,rlpy=self.sdk,
+                save_project=False,preserve_clean_template=True)
+        self.assertFalse(any(self.root.glob("AnyMove_Dragon_*")))
+
     def test_fps_and_nonzero_time_rejected_before_package_creation(self):
         self.sdk.RGlobal.t=3
         with self.assertRaisesRegex(ContractError,"Frame 0"):
