@@ -97,6 +97,132 @@ class VideoImportUITests(unittest.TestCase):
                 with self.assertRaisesRegex(ContractError,"dirty"):
                     video_ui.preflight_video_target(sdk)
 
+    @staticmethod
+    def _capture_widgets(root):
+        widgets=mock.Mock()
+        widgets.QMessageBox.Yes=1
+        widgets.QMessageBox.No=2
+        widgets.QMessageBox.question.return_value=1
+        widgets.QInputDialog.getMultiLineText.return_value=(
+            "the dragon takes off, roars, then lands.",True)
+        widgets.QFileDialog.getExistingDirectory.return_value=str(root)
+        core=mock.Mock()
+        core.QProcess.NormalExit=0
+        panel=mock.Mock()
+        coordinator=video_ui.VideoCaptureCoordinator(
+            panel,widgets,core,object())  # no selected RLPy actor
+        return coordinator,widgets,panel
+
+    @staticmethod
+    def _prepare_capture_assets(root):
+        reader=root/"runs"/"dragon"/"reader.pt"
+        reference=root/"runs"/"dragon"/"ref"/"ref.png"
+        python=root/".venv"/"Scripts"/"python.exe"
+        for path in (reader,reference,python):
+            path.parent.mkdir(parents=True,exist_ok=True)
+            path.write_bytes(b"test fixture")
+        return reader,reference,python
+
+    def test_prompt_generation_ignores_selected_dragon_until_import(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            self._prepare_capture_assets(root)
+            coordinator,widgets,_=self._capture_widgets(root)
+            with mock.patch.object(video_ui,"REPO",root):
+                with mock.patch.object(video_ui,"_credential_available",
+                                       return_value=True):
+                    with mock.patch.object(
+                        video_ui,"preflight_video_target",
+                        side_effect=AssertionError("early rig check")):
+                        with mock.patch.object(
+                            coordinator,"_launch_worker") as launch:
+                            coordinator.start_prompt()
+            launch.assert_called_once()
+            args,kwargs=launch.call_args
+            self.assertEqual(args[2]["mode"],"prompt")
+            self.assertNotIn("target",args[2])
+            self.assertIn("--action",args[1])
+            self.assertTrue(widgets.QMessageBox.question.called)
+            widgets.QMessageBox.warning.assert_not_called()
+
+    def test_existing_video_capture_ignores_selected_dragon(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            self._prepare_capture_assets(root)
+            source=root/"input.mp4"
+            source.write_bytes(b"fixture")
+            coordinator,widgets,_=self._capture_widgets(root)
+            widgets.QFileDialog.getOpenFileName.return_value=(str(source),"")
+            with mock.patch.object(video_ui,"REPO",root):
+                with mock.patch.object(video_ui,"_input_plan",return_value={}):
+                    with mock.patch.object(
+                        video_ui,"preflight_video_target",
+                        side_effect=AssertionError("early rig check")):
+                        with mock.patch.object(
+                            coordinator,"_launch_worker") as launch:
+                            coordinator.start()
+            launch.assert_called_once()
+            self.assertEqual(launch.call_args[0][2]["mode"],"existing")
+            self.assertNotIn("target",launch.call_args[0][2])
+            widgets.QMessageBox.warning.assert_not_called()
+
+    def test_missing_fal_key_blocks_before_paid_confirmation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            self._prepare_capture_assets(root)
+            coordinator,widgets,_=self._capture_widgets(root)
+            with mock.patch.object(video_ui,"REPO",root):
+                with mock.patch.object(video_ui,"_credential_available",
+                                       return_value=False):
+                    with mock.patch.object(
+                        coordinator,"_launch_worker") as launch:
+                        coordinator.start_prompt()
+            launch.assert_not_called()
+            widgets.QMessageBox.question.assert_not_called()
+            self.assertIn("FAL_KEY",str(widgets.QMessageBox.warning.call_args))
+
+    def test_prompt_requires_explicit_billable_confirmation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            self._prepare_capture_assets(root)
+            coordinator,widgets,_=self._capture_widgets(root)
+            widgets.QMessageBox.question.return_value=widgets.QMessageBox.No
+            with mock.patch.object(video_ui,"REPO",root):
+                with mock.patch.object(video_ui,"_credential_available",
+                                       return_value=True):
+                    with mock.patch.object(
+                        coordinator,"_launch_worker") as launch:
+                        coordinator.start_prompt()
+            launch.assert_not_called()
+            widgets.QMessageBox.warning.assert_not_called()
+
+    def test_solved_motion_preserved_if_selected_target_is_not_clean(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            capture=root/"capture"
+            capture.mkdir()
+            motion=capture/"motion.json"
+            motion.write_text('{"test":"ready"}',encoding="utf-8")
+            (capture/video_ui.RECEIPT).write_text(
+                json.dumps({"status":"motion_json_ready",
+                            "motion_file":str(motion)}),encoding="utf-8")
+            coordinator,widgets,panel=self._capture_widgets(root)
+            coordinator.job={"capture_path":str(capture),"mode":"prompt"}
+            with mock.patch.object(
+                video_ui,"prepare_direct_import",
+                side_effect=ContractError("scene already has Motion Clips")):
+                with mock.patch.object(
+                    video_ui,"execute_direct_import") as write:
+                    coordinator._finished(0,coordinator.core.QProcess.NormalExit)
+            write.assert_not_called()
+            self.assertTrue(motion.exists())
+            self.assertIn("scene already has Motion Clips",
+                          str(widgets.QMessageBox.warning.call_args))
+            self.assertIn("import deferred",
+                          str(widgets.QMessageBox.warning.call_args).lower())
+            self.assertIn(str(motion),
+                          str(panel.out.appendPlainText.call_args))
+
 
 if __name__=="__main__":
     unittest.main()
