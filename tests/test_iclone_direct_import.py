@@ -141,7 +141,7 @@ class DirectImportTests(unittest.TestCase):
             self.assertEqual(plan["expected_scalar_samples"],4*43*3)
             self.assertEqual(plan["source_profile"],direct.PROFILE_ID)
             self.assertEqual(plan["fk"]["root_motion"]["root_position_space"],
-                             "pelvis_local")
+                             "armature")
             self.assertEqual(plan["fk"]["root_motion"]["root_position_scale"],1.)
             self.assertTrue(plan["fk"]["calibration_status"].startswith("unverified_"))
             self.assertFalse(any(self.root.glob("AnyMove_Dragon_*")))

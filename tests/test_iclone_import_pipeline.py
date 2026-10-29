@@ -50,13 +50,30 @@ class SameRigBundleTests(unittest.TestCase):
         self.assertEqual(audit["rotation_samples_checked"],5208)
         self.assertEqual(audit["root_position_samples_checked"],124)
         self.assertEqual(len(motion["tracks"]),42)
-        self.assertEqual(motion["root_motion"]["root_position_space"],"pelvis_local")
+        self.assertEqual(motion["root_motion"]["root_position_space"],"armature")
         self.assertEqual(motion["root_motion"]["root_position_scale"],1.0)
         self.assertTrue(motion["calibration_status"].startswith("unverified_"))
         self.assertLess(audit["maximum_quaternion_error_deg"],.001)
         self.assertLess(audit["maximum_root_position_error_source_units"],1e-8)
         self.assertEqual(manifest["observed_evidence"]["other_avatars_or_rigs"],
                          "NOT_VERIFIED")
+
+    def test_source_up_z_preserved_at_scale_one(self):
+        source=self.moving_motion(64)
+        for i,row in enumerate(source["trans"]):
+            row[:]=[0.01*i,-0.002*i,1.21933*i/57.]
+        motion,audit,manifest=build_bundle(
+            source,self.target(),self.info,self.info)
+        pelvis=next(b["id"] for b in self.target()["bones"]
+                    if b["name"]=="pelvis")
+        track=motion["position_tracks"][pelvis]
+        self.assertEqual(track[57],source["trans"][57])
+        self.assertAlmostEqual(track[57][2]-track[0][2],1.21933)
+        self.assertEqual(motion["root_motion"]["root_position_scale"],1.)
+        self.assertEqual(motion["root_motion"]["root_position_space"],"armature")
+        self.assertEqual(manifest["conversion"]["root_translation"],
+                         "source_armature_xyz_up_z_experimental")
+        self.assertLess(audit["maximum_root_position_error_source_units"],1e-8)
 
     def test_save_verify_and_integrity_fail_closed(self):
         source=self.moving_motion(14)

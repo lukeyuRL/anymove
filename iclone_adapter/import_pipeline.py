@@ -28,12 +28,11 @@ from .anymove_bridge import from_euler_xyz, qnormalize, qmul, qinverse_unit
 from .dragon_preview import make_preview
 from .motion_contract import validate_motion
 from .rest_basis import relative_rest_basis, root_rest_basis
-from .root_motion import _rotate_vector
 from .schema import ContractError, skeleton_hash, validate_skeleton
 from .verify_import import DEFAULT_SOURCE, audit_rig
 
-BUNDLE_VERSION = "anymove.iclone.same_rig_import_bundle/1"
-PROFILE_ID = "dragon_fbxsame_100x_rest_pelvis_local_v1"
+BUNDLE_VERSION = "anymove.iclone.same_rig_import_bundle/2"
+PROFILE_ID = "dragon_fbxsame_100x_rest_source_xyz_1x_v2"
 REFERENCE_SOURCE_BONES = 42
 REFERENCE_FPS = 24
 REFERENCE_TARGET_SCALE = 100.0
@@ -226,11 +225,10 @@ def _audit_all_frames(source,target,source_info,converted):
 
     root=converted["root_motion"]
     if (root["target_bone_id"]!=root_id or
-        root.get("root_position_space")!="pelvis_local" or
+        root.get("root_position_space")!="armature" or
         root.get("root_position_scale")!=1.0 or
         root.get("calibrated") is not False):
         raise ContractError("reference Root Motion profile configuration drift")
-    rest_inv=qinverse_unit(root_rest_basis(source_info))
     pos_track=positions[root_id]
     if len(pos_track)!=count:
         raise ContractError("root position track frame count drift")
@@ -238,7 +236,7 @@ def _audit_all_frames(source,target,source_info,converted):
     cumulative_travel=0.
     last=None
     for frame in range(count):
-        wanted=_rotate_vector(rest_inv,source["trans"][frame])
+        wanted=[float(v) for v in source["trans"][frame]]
         actual=pos_track[frame]
         error=_norm(_vsub(wanted,actual))
         max_position_error=max(max_position_error,error)
@@ -281,7 +279,10 @@ def build_bundle(source_motion,target_skeleton,source_rig_info,
     prepared=make_preview(
         source_motion,target_skeleton,source_rig_info,
         bones="all",basis="rest",root_mode="full",
-        root_position_space="pelvis_local",
+        # Source Dragon +Z upward must not be turned into negative local Z.
+        # Full source XYZ at confirmed 1x is the new flight-axis candidate.
+        # World-space evaluation in iClone remains required.
+        root_position_space="armature",
         root_position_scale=REFERENCE_ROOT_POSITION_MULTIPLIER)
     # Force unchanged contracts; pipeline metadata is a manifest reference,
     # not an artificial production calibration=true flag.
@@ -321,7 +322,7 @@ def build_bundle(source_motion,target_skeleton,source_rig_info,
         "conversion":{
             "basis":"parent_relative_rest_quaternion_conjugation",
             "root_rotation":"pelvis_rest_quaternion_conjugation",
-            "root_translation":"pelvis_local",
+            "root_translation":"source_armature_xyz_up_z_experimental",
             "root_position_scale":REFERENCE_ROOT_POSITION_MULTIPLIER,
             "full_bone_count":REFERENCE_SOURCE_BONES,
             "calibrated_for_other_skeletons":False
@@ -385,7 +386,7 @@ def verify_fk_manifest_for_writer(motion_path,motion=None):
         raise ContractError("embedded FK metadata differs from bundle manifest")
     if (current.get("calibration_status")!=
             "unverified_rest_basis_conjugation_preview" or
-        current.get("root_motion",{}).get("root_position_space")!="pelvis_local" or
+        current.get("root_motion",{}).get("root_position_space")!="armature" or
         current.get("root_motion",{}).get("root_position_scale")!=1.0):
         raise ContractError("bundled FK payload differs from Dragon reference profile")
     return {
