@@ -313,3 +313,31 @@ the full previous scene is kept in the mandatory backup.
 
 Official reference:
 https://manual.reallusion.com/iclone-8/content/enu/8.0/50-animation/motion-layer/Setting_Default_Keys_and_Resetting_Motion_Layer_Keys.htm
+
+## v0.7.10 — Fix iClone 8 RTime clip-origin false failure in ROOT FLIGHT
+
+Root flight preflight previously called `RTime.GetValue()` before inspecting
+Pelvis Position, which is the **legacy** iClone time API. iClone 8 instead
+uses `RTime.ToInt()` and 6000 ticks per second. On the real iClone 8 Python
+host a valid frame-zero Motion Clip was incorrectly rejected with:
+
+```
+ContractError: Cannot verify Motion Clip origin at Frame 0
+```
+
+The ROOT FLIGHT guard now uses the same `motion_writer._ticks()` converter
+as the already working Motion Writer and Scene Guard, checking that
+`RIClip.ClipTimeToSceneTime(IndexedFrameTime(0, fps))` maps to frame-zero
+scene ticks. An origin shifted away from frame zero is still refused,
+and unavailable conversion APIs or unknown time objects still fail safely.
+
+The regression suite now drives the real `_controls()` logic using a
+ToInt-only iClone 8 RTime mock (deliberately NO GetValue), checks an
+offset clip remains rejected, and covers missing conversion/bad time types.
+
+**This corrects only the preflight method call**. It does not retarget
+the Dragon, apply the experimental 100x multiplier, or assert that visible
+world-space lift will match source motion. Before modifying any Pelvis
+Position keys, the tool still requires exact source-motion controller
+readback and a full-scene backup plus user confirmation.
+If preflight reports source-key mismatch, stop and inspect the stored keys.
