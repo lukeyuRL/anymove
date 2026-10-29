@@ -122,45 +122,44 @@ class RootFlightFixTests(unittest.TestCase):
         self.assertEqual(report["key_counts_xyz"],[4,4,4])
         self.assertEqual(self.events,[])
 
-    def test_backup_before_any_key_write_and_scaled_project_is_separate(self):
+    def test_backup_before_write_and_source_xyz_1x_project_is_separate(self):
         result=fix.rescale_root_position(
-            self.path,self.root,100.0,rlpy=self.sdk)
+            self.path,self.root,1.0,rlpy=self.sdk)
         self.assertEqual(result["status"],
-                         "experimental_root_scale_keys_verified_project_saved")
+                         "experimental_root_xyz_1x_keys_verified_project_saved")
         self.assertAlmostEqual(result["source_vertical_rise_m"],1.2)
-        self.assertEqual(result["multiplier"],100.0)
+        self.assertEqual(result["multiplier"],1.0)
         self.assertTrue(pathlib.Path(result["backup_iProject"]).is_file())
         self.assertTrue(pathlib.Path(result["adjusted_iProject"]).is_file())
         self.assertNotEqual(result["backup_iProject"],
                             result["adjusted_iProject"])
         self.assertEqual(self.events[0][0],"save")
         self.assertIn(("set",2,self.axes[0].values[2]),self.events)
-        _,_,expected=fix._load_source(self.path)
         for i in range(3):
             for t in range(4):
                 self.assertAlmostEqual(self.axes[i].values[t],
-                                       expected[t][i]*100.0)
+                                       self.motion["trans"][t][i])
         self.assertEqual(self.motion["trans"][2][2],1.2)
         self.assertTrue(pathlib.Path(result["receipt_path"]).is_file())
 
     def test_wrong_clip_keys_must_not_be_rescaled_or_backed_up(self):
         self.axes[0].values[1]+=4.0
         with self.assertRaisesRegex(ContractError,"NOT the original pelvis-local"):
-            fix.rescale_root_position(self.path,self.root,100.,rlpy=self.sdk)
+            fix.rescale_root_position(self.path,self.root,1.,rlpy=self.sdk)
         self.assertEqual(self.events,[])
         self.assertFalse(list(self.root.glob("*.iProject")))
 
     def test_backup_failure_must_not_write_any_position_keys(self):
         self.sdk.RFileIO.fail_save=True
         with self.assertRaisesRegex(ContractError,"backup original iProject"):
-            fix.rescale_root_position(self.path,self.root,100.,rlpy=self.sdk)
+            fix.rescale_root_position(self.path,self.root,1.,rlpy=self.sdk)
         self.assertEqual([e[0] for e in self.events],["save"])
 
     def test_partial_setvalue_failure_restores_original_backup(self):
         old=[list(axis.values) for axis in self.axes]
         self.axes[1].fail=True
         with self.assertRaisesRegex(ContractError,"Original project reloaded"):
-            fix.rescale_root_position(self.path,self.root,100.,rlpy=self.sdk)
+            fix.rescale_root_position(self.path,self.root,1.,rlpy=self.sdk)
         self.assertEqual(self.events[0][0],"save")
         self.assertEqual(self.events[-1][0],"restore")
         for axis,before in zip(self.axes,old):
@@ -171,7 +170,7 @@ class RootFlightFixTests(unittest.TestCase):
         self.axes[0].fail=True
         self.sdk.RFileIO.fail_load=True
         with self.assertRaisesRegex(ContractError,"RESTORE also failed"):
-            fix.rescale_root_position(self.path,self.root,100.,rlpy=self.sdk)
+            fix.rescale_root_position(self.path,self.root,1.,rlpy=self.sdk)
         self.assertTrue(list(self.root.glob("AnyMove_BeforeRootScale_*.iProject")))
 
 
@@ -193,23 +192,23 @@ class RootFlightFixTests(unittest.TestCase):
         self.assertGreater(inspect["source_world_axis_peak_delta_xyz"][2],0)
         self.assertEqual(self.events,[])
 
-    def test_replace_x100_downward_local_with_x100_source_xyz_up_without_double_scale(self):
+    def test_replace_legacy_100x_downward_with_1x_source_up_without_compounding(self):
         _,motion,local=fix._load_source(self.path)
         for axis in self.axes:
             axis.values[:]=[100.*v for v in axis.values]
         # Backup fake saves the state of this already x100 clip.
         self.sdk.RFileIO.original=[list(axis.values) for axis in self.axes]
         result=fix.rescale_root_position(
-            self.path,self.root,100.0,rlpy=self.sdk,
+            self.path,self.root,1.0,rlpy=self.sdk,
             position_space="armature")
         self.assertEqual(self.events[0][0],"save")
         self.assertEqual(result["previous_local_position_scale"],100.)
         self.assertEqual(result["position_space"],"armature")
-        self.assertEqual(result["multiplier"],100.)
-        self.assertGreater(result["expected_stored_position_delta_xyz"][2],100.)
+        self.assertEqual(result["multiplier"],1.)
+        self.assertGreater(result["expected_stored_position_delta_xyz"][2],1.)
         self.assertAlmostEqual(result["expected_stored_position_delta_xyz"][2],
-                               120.,places=5)
-        self.assertAlmostEqual(self.axes[2].values[2],120.,places=4)
+                               1.2,places=5)
+        self.assertAlmostEqual(self.axes[2].values[2],1.2,places=4)
         self.assertAlmostEqual(self.axes[1].values[2],0.,places=4)
         self.assertAlmostEqual(self.axes[0].values[2],0.,places=4)
         self.assertTrue(pathlib.Path(result["backup_iProject"]).is_file())
@@ -221,31 +220,34 @@ class RootFlightFixTests(unittest.TestCase):
         self.axes[1].values[2]-=0.2
         with self.assertRaisesRegex(ContractError,"NOT the original pelvis-local"):
             fix.rescale_root_position(
-                self.path,self.root,100.,rlpy=self.sdk,
+                self.path,self.root,1.,rlpy=self.sdk,
                 position_space="armature")
         self.assertEqual(self.events,[])
 
     def test_reject_unknown_position_space_before_backup(self):
         with self.assertRaisesRegex(ContractError,"position_space"):
             fix.rescale_root_position(
-                self.path,self.root,100.,rlpy=self.sdk,
+                self.path,self.root,1.,rlpy=self.sdk,
                 position_space="not_an_axis")
         self.assertEqual(self.events,[])
 
-    def test_reremapping_armature_track_does_not_stack_a_second_100x(self):
-        first=fix.rescale_root_position(
-            self.path,self.root,100.,rlpy=self.sdk,
+    def test_corrected_world_xyz_is_recognized_not_reapplied(self):
+        fix.rescale_root_position(
+            self.path,self.root,1.,rlpy=self.sdk,
             position_space="armature")
         self.events.clear()
+        report=fix.inspect_root_scale(self.path,rlpy=self.sdk)
+        self.assertEqual(report["status"],"already_source_xyz_scale_1")
+        self.assertEqual(report["current_position_space"],"armature")
         with self.assertRaisesRegex(
-                ContractError,"does NOT match a safe positive scale"):
+                ContractError,"already uses source XYZ at 1x"):
             fix.rescale_root_position(
-                self.path,self.root,100.,rlpy=self.sdk,
+                self.path,self.root,1.,rlpy=self.sdk,
                 position_space="armature")
         self.assertEqual(self.events,[])
 
-    def test_multiplier_restricted_to_opt_in_increase(self):
-        for factor in (0,1.0,-1,201.,float("nan")):
+    def test_multiplier_is_confirmed_exactly_one(self):
+        for factor in (0,0.5,-1,1.01,2.,100.,201.,float("nan")):
             with self.subTest(factor=factor):
                 with self.assertRaisesRegex(ContractError,"multiplier"):
                     fix.rescale_root_position(
