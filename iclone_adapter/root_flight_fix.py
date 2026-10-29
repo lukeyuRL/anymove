@@ -202,7 +202,7 @@ def rescale_root_position(motion_path,output_parent,multiplier=1.0,rlpy=None,
         import RLPy as rlpy
     if position_space!="armature":
         raise ContractError(
-            "Root correction requires source armature XYZ (+Z up), "
+            "Root position_space must be armature XYZ (+Z up), "
             "not the old inverse-Rest pelvis-local axes")
     if (type(multiplier) not in (int,float) or
         not math.isfinite(multiplier) or
