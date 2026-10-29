@@ -241,10 +241,17 @@ class VideoImportUITests(unittest.TestCase):
             "version":[3,12],"executable":"python312","missing":[]}))
         with mock.patch.object(video_ui.subprocess,"run",
                                return_value=check) as runner:
-            with self.assertRaisesRegex(ContractError,"requires Python 3.11"):
+            with self.assertRaisesRegex(ContractError,"requires Python 3.11 or 3.14"):
                 video_ui.preflight_external_python(
                     "fake-python",("torch","numpy"))
         self.assertEqual(runner.call_count,1)
+
+    def test_external_python_preflight_accepts_python_314(self):
+        info={"version":[3,14],"executable":"python314","missing":[]}
+        check=mock.Mock(returncode=0,stdout=json.dumps(info))
+        with mock.patch.object(video_ui.subprocess,"run",return_value=check):
+            self.assertEqual(video_ui.preflight_external_python(
+                "python314",("torch","numpy")),info)
 
     def test_external_python_preflight_rejects_missing_modules(self):
         check=mock.Mock(returncode=0,stdout=json.dumps({
