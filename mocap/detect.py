@@ -64,7 +64,7 @@ def prep(view, size=LEGACY_INPUT_SIZE):
 def run(model, views, bs=None):
     size, hm_size = model.input_size, model.heatmap_size
     if bs is None:
-        bs = int(os.environ.get("MOCAP_DETECT_BATCH", 8 if size > 448 else 32))
+        bs = int(os.environ.get("MOCAP_DETECT_BATCH", 1 if size > 448 else 32))
     if bs < 1:
         raise ValueError("MOCAP_DETECT_BATCH must be positive")
     device = next(model.parameters()).device

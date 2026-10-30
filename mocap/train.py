@@ -17,6 +17,7 @@ from mocap import layout
 from mocap.model import JointReader, decode
 from mocap.reader_config import HIGH_RES_INPUT_SIZE, HIGH_RES_HEATMAP_SIZE, ReaderSpec
 from mocap.reader_geometry import Letterbox
+from mocap.reader_schedule import accumulation_group_size, optimizer_step_count
 
 
 def backdrop(h, w, ground, rng):
@@ -130,10 +131,16 @@ def main():
     parser.add_argument("--input-size", type=int, default=HIGH_RES_INPUT_SIZE)
     parser.add_argument("--heatmap-size", type=int, default=HIGH_RES_HEATMAP_SIZE)
     parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--grad-accum", type=int, default=1,
+                        help="microbatches per optimizer step, e.g. batch=1 + accum=8")
+    parser.add_argument("--gradient-checkpointing", action="store_true",
+                        help="trade compute for lower DINOv2 activation memory")
+    parser.add_argument("--freeze-backbone", action="store_true",
+                        help="fallback: train only the heatmap head; may reduce accuracy")
     args = parser.parse_args()
     spec = ReaderSpec(args.input_size, args.heatmap_size)
-    if args.epochs < 1 or args.batch < 1 or args.workers < 0:
-        parser.error("epochs/batch must be positive and workers >= 0")
+    if args.epochs < 1 or args.batch < 1 or args.workers < 0 or args.grad_accum < 1:
+        parser.error("epochs/batch/grad-accum must be positive and workers >= 0")
     if not torch.cuda.is_available():
         raise RuntimeError("DINOv2 fine-tuning requires a CUDA GPU")
 
@@ -161,37 +168,68 @@ def main():
                     batch_size=args.batch, num_workers=args.workers, pin_memory=True)
     model = JointReader(len(names), input_size=spec.input_size,
                         heatmap_size=spec.heatmap_size).cuda()
+    # Prefer memory-efficient PyTorch scaled dot-product attention.
+    model.backbone.set_attn_implementation("sdpa")
+    if args.freeze_backbone:
+        model.backbone.requires_grad_(False)
+    elif args.gradient_checkpointing:
+        model.backbone.gradient_checkpointing_enable(
+            gradient_checkpointing_kwargs={"use_reentrant": False})
     head = [p for n, p in model.named_parameters() if not n.startswith("backbone")]
-    opt = torch.optim.AdamW([{"params": model.backbone.parameters(), "lr": 2e-5},
-                             {"params": head, "lr": 1e-3}], weight_decay=0.05)
+    groups = [{"params": head, "lr": 1e-3}]
+    if not args.freeze_backbone:
+        groups.insert(0, {"params": model.backbone.parameters(), "lr": 2e-5})
+    opt = torch.optim.AdamW(groups, weight_decay=0.05)
     base = [g["lr"] for g in opt.param_groups]
+    amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    scaler = torch.amp.GradScaler("cuda", enabled=(amp_dtype == torch.float16))
+    print(f"CUDA {torch.cuda.get_device_name(0)}; AMP {amp_dtype}; "
+          f"batch {args.batch} x accumulation {args.grad_accum} = "
+          f"effective batch {args.batch * args.grad_accum}; "
+          f"gradient_checkpointing {args.gradient_checkpointing}; "
+          f"freeze_backbone {args.freeze_backbone}", flush=True)
     step, t0, warm = 0, time.time(), 300
     for ep in range(args.epochs):
         train, _ = split()
         dl = DataLoader(Views(train, True, spec.input_size), batch_size=args.batch,
                         shuffle=True, num_workers=args.workers, pin_memory=True)
-        print(f"epoch {ep}: {len(train)} train poses", flush=True)
+        if not len(dl):
+            raise RuntimeError("empty training DataLoader")
+        n_updates = optimizer_step_count(len(dl), args.grad_accum)
+        print(f"epoch {ep}: {len(train)} train poses; {n_updates} optimizer steps", flush=True)
         model.train()
+        if args.freeze_backbone:
+            model.backbone.eval()
+        opt.zero_grad(set_to_none=True)
         for bi_, (x, kp, _) in enumerate(dl):
-            f = 0.5 * (1 + math.cos(math.pi * (ep + bi_ / len(dl)) / args.epochs)) * min(1, (step + 1) / warm)
+            progress = (ep + (bi_ // args.grad_accum) / n_updates) / args.epochs
+            f = 0.5 * (1 + math.cos(math.pi * progress)) * min(1, (step + 1) / warm)
             for g, b0 in zip(opt.param_groups, base):
                 g["lr"] = b0 * f
             x, kp = x.cuda(non_blocking=True), kp.cuda(non_blocking=True)
-            with torch.autocast("cuda", dtype=torch.bfloat16):
+            with torch.autocast("cuda", dtype=amp_dtype):
                 pred = model(x)
             loss = F.mse_loss(pred.float(), heatmaps(kp, spec.input_size, spec.heatmap_size)) * 1000
-            opt.zero_grad(set_to_none=True)
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            opt.step()
-            step += 1
-            if step % 50 == 0:
-                print(f"ep {ep} step {step} loss {loss.item():.4f} lr {f:.3f} {time.time() - t0:.0f}s", flush=True)
+            divisor = accumulation_group_size(bi_, len(dl), args.grad_accum)
+            scaler.scale(loss / divisor).backward()
+            if (bi_ + 1) % args.grad_accum == 0 or bi_ + 1 == len(dl):
+                scaler.unscale_(opt)
+                torch.nn.utils.clip_grad_norm_(
+                    (p for p in model.parameters() if p.requires_grad), 1.0)
+                scaler.step(opt)
+                scaler.update()
+                opt.zero_grad(set_to_none=True)
+                step += 1
+                if step % 50 == 0:
+                    used = torch.cuda.max_memory_allocated() / (1024 ** 3)
+                    print(f"ep {ep} optimizer_step {step} loss {loss.item():.4f} "
+                          f"lr_factor {f:.3f} peak_vram_allocated {used:.2f}GiB "
+                          f"elapsed {time.time()-t0:.0f}s", flush=True)
         model.eval()
         errs = {"front": [], "side": []}
         with torch.no_grad():
             for bi, (x, kp, geo) in enumerate(vl):
-                with torch.autocast("cuda", dtype=torch.bfloat16):
+                with torch.autocast("cuda", dtype=amp_dtype):
                     pred = model(x.cuda(non_blocking=True)).float()
                 uv, _ = decode(pred)
                 uv = uv.cpu() * spec.input_size / spec.heatmap_size
@@ -203,7 +241,11 @@ def main():
         msg = {v: float(np.mean(errs[v])) for v in errs}
         print(f"epoch {ep} val mean px error (layout pixels) front {msg['front']:.2f} side {msg['side']:.2f}", flush=True)
         torch.save({"state_dict": model.state_dict(), "names": names, "epoch": ep,
-                    "val": msg, "reader_spec": spec.checkpoint_metadata()}, args.output)
+                    "val": msg, "reader_spec": spec.checkpoint_metadata(),
+                    "train_setup": {"batch": args.batch, "grad_accum": args.grad_accum,
+                                    "gradient_checkpointing": args.gradient_checkpointing,
+                                    "freeze_backbone": args.freeze_backbone,
+                                    "amp_dtype": str(amp_dtype)}}, args.output)
     print("saved", args.output)
 
 

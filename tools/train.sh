@@ -8,4 +8,11 @@ need_creature "${1:-}"
 epochs=${2:-20}; batch=${3:-8}; size=${4:-672}; heatmap=${5:-192}
 data=${6:-runs/$1/dataset_hr}; out=${7:-runs/$1/reader_hr.pt}; workers=${8:-4}
 [ -d "$data" ] || { echo "missing dataset: $data; run tools/dataset.sh first" >&2; exit 1; }
-"$PY" -m mocap.train "$data" "assets/$1/rigged/rig_info.json" "$out" "$epochs" "$batch" --input-size "$size" --heatmap-size "$heatmap" --workers "$workers" 2>&1 | tee "runs/$1/train_hr.log"
+extras=()
+if [ "${MOCAP_LOW_VRAM:-0}" = "1" ]; then
+  extras+=(--grad-accum "${MOCAP_GRAD_ACCUM:-8}" --gradient-checkpointing)
+fi
+if [ "${MOCAP_FREEZE_BACKBONE:-0}" = "1" ]; then
+  extras+=(--freeze-backbone)
+fi
+"$PY" -m mocap.train "$data" "assets/$1/rigged/rig_info.json" "$out" "$epochs" "$batch" --input-size "$size" --heatmap-size "$heatmap" --workers "$workers" "${extras[@]}" 2>&1 | tee "runs/$1/train_hr.log"
