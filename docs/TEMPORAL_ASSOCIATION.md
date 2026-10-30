@@ -177,3 +177,105 @@ original and temporal animations and, where possible, a known true motion.
 The report does not count lower reprojection error as accuracy improvement.
 Avoid promoting temporal association into the default iClone workflow until
 its root and hind-limb trajectories are visually and quantitatively checked.
+
+
+## v2: Visibility-aware evidence + candidate 3D continuity quarantine
+
+The earlier `motion_temporal.json` candidate from the roar clip changed left
+hind toe position by up to **62.02 cm** near frame 43. At the 40→41 seam,
+mean hind step length rose from **3.06** to **7.78 cm/frame** (2.54×), while
+the proposed 2D association improved its own height-MAE objective by only
+about 8%. A large 3D pose correction is not by itself proof of an error, but
+a new velocity discontinuity at the switching boundary is strong evidence
+for an unsafe **automatic** reassociation.
+
+The revised opt-in `--temporal-association` now has **two separate gates**:
+
+1. **Image-space reliability (not an occlusion model).** For each Front hind
+   landmark, measure proximity to Front foreleg landmarks and whether it is
+   clearly distinct from foreleg landmarks in the Side view. When the Front
+   landmark looks potentially occluded, reduce its evidential weight in
+   *both* Viterbi states. Require multiple independently contributing
+   hind-chain joints and enough mean visibility. These are only *proxies*;
+   raw DINO heatmap peaks are not calibrated visibility probabilities.
+2. **Actual solved 3D continuity.** Always solve the original aligned
+   detections first. For every accepted 2D swap interval, form a trial
+   detection set with **both entire Side hind chains and their matching
+   confidences** exchanged over that interval. Solve again with the same
+   rig and optimization. At the two interval boundaries, check whether
+   average hind-leg velocity increases too sharply relative to the original
+   solve, whether any hind joint changes velocity by more than the guarded
+   amount, and whether Root Translation or hind acceleration increases
+   abnormally. If the segment fails, **quarantine it and keep the original
+   baseline solved pose**; no blending that could create new invalid
+   skeleton states. Inspect the audit to understand *why*.
+
+The first gate is a heuristic, not a ground-truth visibility classifier. The
+second gate checks continuity relative to the original solved motion, not
+anatomical correctness. A true large repair may be quarantined and require
+manual review; passing the gate does not establish the swap is correct.
+The experiment stays off by default and the iClone Paw Agreement quality
+gate based on original detections remains enforced.
+
+### Reproduce the new guarded solve without overwriting old files
+
+```bash
+git switch iClone_High_Res
+git pull --ff-only
+export MOCAP_CREATURE=assets/dragon
+
+python.exe -m mocap.solve \
+  runs/dragon/clips/hr_roar/det.npz \
+  assets/dragon/rigged/rig_info.json \
+  runs/dragon/clips/hr_roar/motion_temporal_guarded.json \
+  --temporal-association
+```
+
+The diagnostics are written to
+`runs/dragon/clips/hr_roar/motion_temporal_guarded.association.json`.
+Key fields:
+
+- `pre_3d_candidate_segments`: intervals that passed the visibility-aware
+  2D Viterbi stage
+- `continuity_validation.status`: `all_candidates_passed`,
+  `partially_applied`, or `all_candidates_quarantined`
+- `continuity_validation.checks[]`: each interval's baseline/candidate
+  3D step lengths, Root changes, acceleration and failure reasons
+- `accepted_swapped_frames` and `state_by_frame`: only intervals
+  **actually applied** to the final motion
+- `pre_3d_candidate_paw_agreement` and
+  `aligned_paw_agreement_after`: distinguish hypothetical vs applied
+  metrics; the original `sync.paw_agreement` is not modified
+- `pre_3d_candidate_relative_hind_height_mae_px` and
+  `after_relative_hind_height_mae_px`: distinguish proposed vs applied
+  height consistency
+
+The original `motion.json` and the prior unsafe A/B
+`motion_temporal.json` remain intact. If the candidate is quarantined,
+the new `motion_temporal_guarded.json` is the baseline Solver's actual
+motion (not a blend or the rejected candidate), with unchanged keys and
+source detection SHA. Baseline fit and each trial are run with the same
+Solver configuration; the experimental mode may require multiple fitting
+passes.
+
+To summarize the result:
+
+```bash
+python.exe - <<'PY'
+import json
+p = 'runs/dragon/clips/hr_roar/motion_temporal_guarded.association.json'
+x = json.load(open(p))
+print('2D candidates:', x['pre_3d_candidate_segments'])
+print('3D guard:', x['continuity_validation']['status'])
+for s in x['continuity_validation']['checks']:
+    print(s['start_frame'], s['end_frame_exclusive'],
+          s['status'], s['failure_reasons'])
+print('Applied frames:', x['accepted_swapped_frames'])
+PY
+```
+
+For the *known numerical boundary* from the previous report, the
+new 3D seam test is specifically designed to quarantine a change of
+3.06→7.78 cm/frame. This is checked as a controlled synthetic test,
+not yet as a live rerun of the user's private 124-frame `det.npz`;
+that original file is only on the user's Windows computer.

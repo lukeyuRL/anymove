@@ -441,37 +441,34 @@ def main():
                   f"largest {np.abs(shift).max():.1f} frames (height gap down {gain:.0%})")
         else:
             print(f"views already in step (re-timing would only cut the height gap by {gain:.0%}); left as generated")
-    # Painted limbs make labels *usually* reliable; do not force corrections
-    # by default. Temporal mode is exclusive with per-frame swaps.
+    # Painted limbs make labels *usually* reliable; do not force corrections.
+    # Temporal mode is exclusive with the earlier per-frame swapping scheme.
     swapped = fix_swaps(d, names) if "--fix-swaps" in sys.argv else {}
-    association_audit = None
+    association_audit, candidate_d = None, None
     if temporal_mode:
         if (active_layout.get("creature") != "dragon"
                 or active_layout.get("status") != "camera_layout_verified_for_rig"):
             raise RuntimeError("--temporal-association requires verified Dragon camera layout")
         from mocap.temporal_association import temporal_hind_association
-        aligned_paws_before = paw_agreement(d, names)
-        d, association_audit = temporal_hind_association(d, names)
-        association_audit["aligned_paw_agreement_before"] = aligned_paws_before
-        association_audit["aligned_paw_agreement_after"] = paw_agreement(d, names)
+        candidate_d, association_audit = temporal_hind_association(
+            d, names, visibility_aware=True)
         association_audit["raw_input_paw_agreement"] = paws
-        print("Temporal association:", association_audit["profile"],
-              "swapped frames", association_audit["accepted_swapped_frames"],
+        association_audit["aligned_paw_agreement_before"] = paw_agreement(d, names)
+        # Retain 2D candidate diagnostics even if the 3D continuity stage
+        # ultimately quarantines all candidate segments.
+        association_audit["pre_3d_candidate_segments"] = list(
+            association_audit["accepted_segments"])
+        association_audit["pre_3d_candidate_paw_agreement"] = paw_agreement(
+            candidate_d, names)
+        association_audit["pre_3d_candidate_relative_hind_height_mae_px"] = (
+            association_audit["after_relative_hind_height_mae_px"])
+        print("Temporal 2D candidate:", association_audit["profile"],
+              "frames", association_audit["accepted_swapped_frames"],
               "segments", association_audit["accepted_segments"], flush=True)
-        print("Hind root-relative height MAE (px):",
-              association_audit["before_relative_hind_height_mae_px"], "->",
-              association_audit["after_relative_hind_height_mae_px"], flush=True)
-        print("Paw agreement remains from original detections for iClone QA",
-              flush=True)
-    sync = sync_report(d)
-    print("side-view leg swaps fixed (frames):", swapped)
-    print(f"sync after: mean height gap {sync['mean_height_gap_px']:.1f} px, worst {sync['worst_frame_gap_px']:.1f} px")
-    sync["before"] = {k: v for k, v in before.items() if k != "per_frame_gap_px"}
-    sync["paw_agreement"] = paws
-    sync["front_shift_frames"] = None if shift is None else shift.round(2).tolist()
+
     front_visibility, visibility_audit = None, None
     if "--visibility-aware" in sys.argv:
-        # Do not enable on other creatures or unverified layout mappings.
+        # This older weighting experiment remains independent and opt-in.
         if (active_layout.get("creature") != "dragon"
                 or active_layout.get("status") != "camera_layout_verified_for_rig"):
             raise RuntimeError("--visibility-aware requires verified Dragon camera layout")
@@ -481,8 +478,66 @@ def main():
               visibility_audit["profile"],
               "affected joints:", visibility_audit["affected_joint_count"],
               "(not an observed occlusion mask)", flush=True)
-    res = fit(d, info, dev="cuda" if torch.cuda.is_available() else "cpu",
-              front_visibility=front_visibility)
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if temporal_mode:
+        from mocap.association_safety import gated_temporal_fit
+        # Full baseline solve, then one candidate solve per accepted 2D
+        # segment. A failed 3D seam gate restores the original baseline
+        # detection arrays and exactly its already-computed solved motion.
+        d, res, gate = gated_temporal_fit(
+            d, candidate_d, association_audit, names,
+            lambda tracks: fit(tracks, info, dev=device))
+        association_audit["continuity_validation"] = gate
+        association_audit["state_by_frame"] = gate["applied_state_by_frame"]
+        association_audit["accepted_swapped_frames"] = gate["accepted_swapped_frames"]
+        association_audit["accepted_segments"] = [
+            segment for segment, check in zip(
+                association_audit["pre_3d_candidate_segments"], gate["checks"])
+            if check["status"] == "continuity_gate_passed"]
+        association_audit["rejected_segments"].extend([
+            {"start_frame": check.get("start_frame"),
+             "end_frame_exclusive": check.get("end_frame_exclusive"),
+             "reason": "3d_continuity_quarantine",
+             "detail": check}
+            for check in gate["checks"]
+            if check["status"] == "quarantined"])
+        if gate["status"] == "all_candidates_quarantined":
+            association_audit["status"] = "quarantined_by_3d_guard"
+        elif gate["status"] == "partially_applied":
+            association_audit["status"] = "partially_applied_after_3d_guard"
+        else:
+            association_audit["status"] = (
+                "swapped_after_3d_guard" if gate["accepted_swapped_frames"]
+                else "identity_retained")
+        association_audit["aligned_paw_agreement_after"] = paw_agreement(d, names)
+        hind_idx = [names.index(stem + "_" + label)
+                    for label in ("L", "R") for stem in
+                    ("hip", "knee", "hock", "hpaw", "htoe")]
+        hips_i = names.index("hips")
+        front_h = d["front_uv"][:, hind_idx, 1] - d["front_uv"][:, hips_i, 1:2]
+        side_h = d["side_uv"][:, hind_idx, 1] - d["side_uv"][:, hips_i, 1:2]
+        association_audit["after_relative_hind_height_mae_px"] = round(
+            float(np.mean(np.abs(front_h-side_h))), 4)
+        print("Temporal 3D continuity gate:", gate["status"],
+              "candidate frames", gate["candidate_swapped_frames"],
+              "applied frames", gate["accepted_swapped_frames"], flush=True)
+        for check in gate["checks"]:
+            print("3D seam audit:", check.get("start_frame"),
+                  check.get("end_frame_exclusive"), check["status"],
+                  check.get("failure_reasons"), flush=True)
+        print("Raw original Paw Agreement is unchanged for iClone QA", flush=True)
+    else:
+        res = fit(d, info, dev=device, front_visibility=front_visibility)
+
+    # These diagnostics describe the ACTUALLY APPLIED detections, never a
+    # 2D swap later vetoed by the continuity gate.
+    sync = sync_report(d)
+    print("side-view leg swaps fixed (frames):", swapped)
+    print(f"sync after: mean height gap {sync['mean_height_gap_px']:.1f} px, worst {sync['worst_frame_gap_px']:.1f} px")
+    sync["before"] = {k: v for k, v in before.items() if k != "per_frame_gap_px"}
+    sync["paw_agreement"] = paws
+    sync["front_shift_frames"] = None if shift is None else shift.round(2).tolist()
     print("reprojection error px:", {k: round(v, 2) for k, v in res["reproj_px"].items()})
     # Preserve the exact detection file and camera Layout provenance.
     # These two values prevent the old "same 124 frames / same 50 names"

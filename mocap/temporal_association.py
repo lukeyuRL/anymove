@@ -13,7 +13,11 @@ evidence defaults to identity (preserving the painted-limb convention).
 """
 import numpy as np
 
-PROFILE = "dragon_temporal_hind_association_v1"
+from mocap.association_safety import (
+    front_hind_reliability, VISIBILITY_MIN_SEGMENT_MEAN
+)
+
+PROFILE = "dragon_temporal_hind_association_v2_visibility_guard"
 STEMS = ("hip", "knee", "hock", "hpaw", "htoe")
 STEM_WEIGHTS = np.array((0.35, 1.0, 1.2, 1.65, 0.65), dtype=np.float64)
 HEIGHT_CLIP_PX = 48.0
@@ -74,7 +78,7 @@ def _correlation(a, b):
     return round(float(np.corrcoef(a, b)[0, 1]), 5)
 
 
-def _state_costs(front, side, fc, sc, pairs, hips):
+def _state_costs(front, side, fc, sc, pairs, hips, visibility):
     # Hips subtraction independently per camera removes body/root vertical
     # translation, which can otherwise make *opposite* limb tracks correlate.
     fy = front[:, pairs, 1] - front[:, hips, 1, None, None]
@@ -91,7 +95,9 @@ def _state_costs(front, side, fc, sc, pairs, hips):
         sd = np.diff(s, axis=0, prepend=s[:1])
         peak = np.sqrt(np.clip(fc[:, pairs], 0, 1) *
                        np.clip(sc[:, ids], 0, 1))
-        weights = peak * w
+        # Downweight ambiguous Front hind landmarks in both candidate states.
+        # An occluded landmark must not "prove" a Side L/R swap.
+        weights = peak * w * visibility[:, pairs]
         height = np.minimum(np.abs(fy - s), HEIGHT_CLIP_PX)
         change = np.minimum(np.abs(fdelta - sd), DELTA_CLIP_PX)
         # Full-chain agreement: compare vertical span across each adjacent
@@ -111,7 +117,8 @@ def _state_costs(front, side, fc, sc, pairs, hips):
     # least two distinct *anatomical segments* to support the alternative.
     h0, _ = detail[0]
     h1, _ = detail[1]
-    votes = ((h0[:, :, 1:] - h1[:, :, 1:]).mean(axis=1)
+    votes = (((h0[:, :, 1:] - h1[:, :, 1:]) *
+              visibility[:, pairs][:, :, 1:]).mean(axis=1)
              > STEM_VOTE_MARGIN_PX).sum(axis=1)
     emission[:, 1] += np.where(votes >= MIN_CHAINS_VOTING, 0., 10.)
     return emission, votes
@@ -130,7 +137,7 @@ def _transition_cost(side, pair, t, previous, current):
     return float(SWITCH_PENALTY + motion_cost)
 
 
-def temporal_hind_association(d, names):
+def temporal_hind_association(d, names, visibility_aware=True):
     """Return corrected, copy-owned detection arrays and a JSON-safe audit.
 
     There are exactly two global hind-chain association states per frame:
@@ -145,7 +152,14 @@ def temporal_hind_association(d, names):
     front = np.asarray(d["front_uv"], dtype=np.float64)
     side = np.asarray(d["side_uv"], dtype=np.float64)
     fc, sc = np.asarray(d["front_conf"]), np.asarray(d["side_conf"])
-    emission, votes = _state_costs(front, side, fc, sc, pairs, hips)
+    if visibility_aware:
+        reliability, reliability_audit = front_hind_reliability(d, names)
+    else:
+        reliability = np.ones(front.shape[:2], dtype=np.float64)
+        reliability_audit = {"profile": "disabled_by_caller",
+                             "is_true_occlusion_probability": False}
+    emission, votes = _state_costs(front, side, fc, sc, pairs, hips,
+                                   reliability)
     t_count = len(front)
 
     # Two-state Viterbi: pay when switching state, not on every joint.
@@ -170,13 +184,23 @@ def temporal_hind_association(d, names):
     # average unpenalized emissions do not clearly favor reassignment.
     for first, last in _segments(states):
         gain = float((emission[first:last, 0] - emission[first:last, 1]).mean())
-        if (last-first < MIN_SWAPPED_SEGMENT_FRAMES or
-                gain < MIN_SEGMENT_GAIN_PER_FRAME_PX):
+        # These key joints carry actual hind-leg lifting evidence.
+        key_stems = [1, 2, 3]  # knee, hock, paw
+        reliability_mean = float(reliability[first:last, pairs][:, :, key_stems].mean())
+        reason = None
+        if last-first < MIN_SWAPPED_SEGMENT_FRAMES:
+            reason = "short_swapped_interval"
+        elif gain < MIN_SEGMENT_GAIN_PER_FRAME_PX:
+            reason = "insufficient_association_gain"
+        elif reliability_mean < VISIBILITY_MIN_SEGMENT_MEAN:
+            reason = "front_hind_visibility_ambiguous"
+        if reason is not None:
             states[first:last] = 0
             rejected.append({"start_frame": int(first),
                              "end_frame_exclusive": int(last),
                              "mean_gain_px": round(gain, 4),
-                             "reason": "short_or_ambiguous"})
+                             "mean_front_reliability": round(reliability_mean, 4),
+                             "reason": reason})
 
     corrected = {k: np.array(v, copy=True) for k, v in d.items()}
     for t in np.flatnonzero(states):
@@ -202,6 +226,8 @@ def temporal_hind_association(d, names):
             "frame_count": int(last-first),
             "mean_identity_cost_px": round(float(emission[first:last, 0].mean()), 4),
             "mean_swap_cost_px": round(float(emission[first:last, 1].mean()), 4),
+            "mean_front_reliability": round(float(
+                reliability[first:last, pairs][:, :, [1, 2, 3]].mean()), 4)
         })
     audit = {
         "schema_version": "anymove.temporal_joint_association/1",
@@ -209,6 +235,8 @@ def temporal_hind_association(d, names):
         "status": "swapped" if np.any(states) else "identity_retained",
         "candidate_swapped_frames": int(candidate.sum()),
         "accepted_swapped_frames": int(states.sum()),
+        "pre_3d_candidate_state_by_frame": states.tolist(),
+        "visibility_diagnostics": reliability_audit,
         "accepted_segments": segments,
         "rejected_segments": rejected,
         "state_by_frame": states.tolist(),
@@ -227,12 +255,15 @@ def temporal_hind_association(d, names):
             "minimum_segment_gain_per_frame_px": MIN_SEGMENT_GAIN_PER_FRAME_PX,
             "root_relative": True,
             "joint_peak_weights": "bounded geometric mean; uncalibrated",
+            "visibility_proxy_enabled": bool(visibility_aware),
+            "visibility_reference": "within-view front/side foreleg separation, not calibrated occlusion",
             "group_assignment": "both L/R hind chains always switched together",
         },
         "warnings": [
             "This is an experimental correspondence hypothesis, not labeled occlusion or 3D ground truth.",
             "State switches may be wrong if AI-rendered views disagree anatomically.",
             "All unmatched joints and Front detections are preserved; iClone low-paw-agreement gate must not be bypassed.",
+            "Passing 2D Viterbi association is NOT permission to apply to 3D; a separate continuity gate may reject it.",
         ],
     }
     return corrected, audit
