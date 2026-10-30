@@ -176,6 +176,24 @@ class AssociationSafetyTests(unittest.TestCase):
         self.assertEqual(len(counter), 1)
         self.assertEqual(report["accepted_swapped_frames"], 0)
 
+    def test_root_rotation_jump_at_swap_boundary_is_quarantined(self):
+        _, names = self.fixture()
+        base = self.fitted(names)
+        candidate = self.fitted(names)
+        theta = np.radians(12.)
+        rotation = np.array([
+            [np.cos(theta), -np.sin(theta), 0.],
+            [np.sin(theta), np.cos(theta), 0.],
+            [0., 0., 1.]
+        ])
+        candidate["root_rotmat"][41:] = rotation
+        report = validate_3d_segment(base, candidate, names, 41, 53)
+        self.assertEqual(report["status"], "quarantined")
+        self.assertIn("excessive_root_rotation_step", report["failure_reasons"])
+        self.assertAlmostEqual(
+            report["boundary_checks"][0]["root_angular_step_candidate_deg"],
+            12., places=4)
+
     def test_bad_3d_solution_fails_closed(self):
         _, names = self.fixture()
         a, b = self.fitted(names), self.fitted(names)

@@ -206,7 +206,8 @@ The revised opt-in `--temporal-association` now has **two separate gates**:
    average hind-leg velocity increases too sharply relative to the original
    solve, whether any hind joint changes velocity by more than the guarded
    amount, and whether Root Translation or hind acceleration increases
-   abnormally. If the segment fails, **quarantine it and keep the original
+   abnormally. Root Rotation is also checked for sudden angular step
+   increases at each association boundary. If the segment fails, **quarantine it and keep the original
    baseline solved pose**; no blending that could create new invalid
    skeleton states. Inspect the audit to understand *why*.
 

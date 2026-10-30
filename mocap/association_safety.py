@@ -25,6 +25,8 @@ SEAM_ROOT_ADDED_CM = 1.5
 SEAM_ROOT_RATIO_LIMIT = 2.0
 SEAM_ACCEL_RATIO_LIMIT = 2.2
 SEAM_ACCEL_ADDED_CM = 4.0
+SEAM_ROOT_ROTATION_STEP_RATIO_LIMIT = 2.0
+SEAM_ROOT_ROTATION_STEP_ADDED_DEG = 4.0
 
 
 def front_hind_reliability(d, names):
@@ -137,6 +139,12 @@ def validate_3d_segment(baseline, candidate, names, start, end):
         different = np.linalg.norm(v1-v0, axis=-1)
         root_a = float(np.linalg.norm((p0[t]-p0[t-1])*100.))
         root_b = float(np.linalg.norm((p1[t]-p1[t-1])*100.))
+        def root_angular_step(rot):
+            relative = rot[t] @ rot[t-1].T
+            cosine = np.clip((np.trace(relative)-1.)/2., -1., 1.)
+            return float(np.degrees(np.arccos(cosine)))
+        root_rot_a = root_angular_step(r0)
+        root_rot_b = root_angular_step(r1)
         reasons = []
         if (float(b.mean()) > float(a.mean())*SEAM_STEP_RATIO_LIMIT
                 and float(b.mean()-a.mean()) > SEAM_STEP_ADDED_CM):
@@ -147,6 +155,9 @@ def validate_3d_segment(baseline, candidate, names, start, end):
         if (root_b > root_a*SEAM_ROOT_RATIO_LIMIT
                 and root_b-root_a > SEAM_ROOT_ADDED_CM):
             reasons.append("excessive_root_translation_step")
+        if (root_rot_b > root_rot_a*SEAM_ROOT_ROTATION_STEP_RATIO_LIMIT
+                and root_rot_b-root_rot_a > SEAM_ROOT_ROTATION_STEP_ADDED_DEG):
+            reasons.append("excessive_root_rotation_step")
         # Three-frame acceleration estimates at each candidate switch.
         accel0 = accel1 = None
         if t >= 2:
@@ -167,6 +178,8 @@ def validate_3d_segment(baseline, candidate, names, start, end):
             "hind_step_vector_change_max_cm": round(float(different.max()), 5),
             "root_step_baseline_cm": round(root_a, 5),
             "root_step_candidate_cm": round(root_b, 5),
+            "root_angular_step_baseline_deg": round(root_rot_a, 5),
+            "root_angular_step_candidate_deg": round(root_rot_b, 5),
             "hind_accel_baseline_mean_cm_per_frame2": None if accel0 is None else round(accel0, 5),
             "hind_accel_candidate_mean_cm_per_frame2": None if accel1 is None else round(accel1, 5),
             "failure_reasons": reasons
@@ -258,7 +271,9 @@ def gated_temporal_fit(base_d, candidate_d, association, names, fit_fn):
             "seam_root_step_ratio": SEAM_ROOT_RATIO_LIMIT,
             "seam_root_added_cm": SEAM_ROOT_ADDED_CM,
             "seam_accel_ratio": SEAM_ACCEL_RATIO_LIMIT,
-            "seam_accel_added_cm": SEAM_ACCEL_ADDED_CM
+            "seam_accel_added_cm": SEAM_ACCEL_ADDED_CM,
+            "seam_root_rotation_ratio": SEAM_ROOT_ROTATION_STEP_RATIO_LIMIT,
+            "seam_root_rotation_added_deg": SEAM_ROOT_ROTATION_STEP_ADDED_DEG
         },
         "warning": "Candidate may be anatomically wrong even if it passes; requires visual and 3D truth QA."
     }
