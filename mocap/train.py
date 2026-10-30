@@ -1,11 +1,11 @@
-"""Teach the joint reader one creature, from the rendered dataset.
+"""Fine-tune the DINOv2 joint reader on two views with configurable resolution.
 
 python -m mocap.train DATASET_DIR rig_info.json OUT.pt [epochs] [batch]
-Every sample gives two training images (front and side). The renders are transparent, so each one is laid on a
-fresh random backdrop, then jittered in framing, colour, sharpness and compression, the ways a video model's frames
-differ from a clean render. Holds out 4% of samples and reports their mean joint error in layout pixels.
+    [--input-size 672] [--heatmap-size 192] [--workers 4]
+Renders may be at a different (known) scale from the 1280x720 camera layout;
+all validation errors are reported back in the unscaled layout pixel space.
 """
-import json, math, pathlib, sys, time
+import argparse, json, math, pathlib, time
 
 import cv2
 import numpy as np
@@ -14,7 +14,9 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 
 from mocap import layout
-from mocap.model import HM, SIZE, JointReader, decode, square
+from mocap.model import JointReader, decode
+from mocap.reader_config import HIGH_RES_INPUT_SIZE, HIGH_RES_HEATMAP_SIZE, ReaderSpec
+from mocap.reader_geometry import Letterbox
 
 
 def backdrop(h, w, ground, rng):
@@ -53,8 +55,8 @@ def photometric(img, rng):
 
 
 class Views(Dataset):
-    def __init__(self, metas, train):
-        self.metas, self.train = metas, train
+    def __init__(self, metas, train, input_size=HIGH_RES_INPUT_SIZE):
+        self.metas, self.train, self.input_size = metas, train, input_size
 
     def __len__(self):
         return 2 * len(self.metas)
@@ -64,30 +66,43 @@ class Views(Dataset):
         m = self.metas[i // 2]
         view = ("front", "side")[i % 2]
         meta = json.loads(m.read_text())
-        s = meta["scale"]
-        rgba = cv2.imread(str(m).replace("_meta.json", f"_{view}.png"), cv2.IMREAD_UNCHANGED)[..., [2, 1, 0, 3]].astype(np.float32)
-        h, w = rgba.shape[:2]
+        s = float(meta["scale"])
+        if not np.isfinite(s) or s <= 0:
+            raise ValueError(f"invalid render scale in {m}")
+        path = str(m).replace("_meta.json", f"_{view}.png")
+        raw = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        if raw is None or raw.ndim != 3 or raw.shape[2] != 4:
+            raise ValueError(f"missing or invalid RGBA dataset image: {path}")
+        h, w = raw.shape[:2]
+        expected = (round(getattr(layout, f"W_{view.upper()}") * s), round(layout.H * s))
+        if (w, h) != expected:
+            raise ValueError(f"{path}: image {(w,h)} != expected {expected}; check render scale and MOCAP_CREATURE")
+        rgba = raw[..., [2, 1, 0, 3]].astype(np.float32)
         kp = np.array(meta[f"{view}_uv"], np.float32) * s
         if self.train:
             bg = backdrop(h, w, round(layout.GROUND_V * s), rng)
         else:
-            bg = np.empty((h, w, 3), np.float32); bg[:] = layout.BG; bg[round(layout.GROUND_V * s):] = layout.FLOOR
+            bg = np.empty((h, w, 3), np.float32); bg[:] = layout.BG
+            bg[round(layout.GROUND_V * s):] = layout.FLOOR
         a = rgba[..., 3:] / 255
         img = rgba[..., :3] * a + bg * (1 - a)
-        if self.train and rng.random() < 0.7:  # the divider at the shared edge
+        if self.train and rng.random() < 0.7:
             img[:, -2:] = 34 if view == "front" else img[:, -2:]
             img[:, :2] = 34 if view == "side" else img[:, :2]
-        _, ox, oy, side = square(img, bg[0, 0])
-        k = SIZE / side
-        A = np.array([[k, 0, ox * k], [0, k, oy * k]], np.float32)
-        if self.train:  # framing jitter: scale, small rotation, shift
+        geo = Letterbox(w, h, self.input_size)
+        ox, oy, side = geo.ox, geo.oy, geo.side
+        k = self.input_size / side
+        A = np.array(geo.affine, np.float32)
+        if self.train:
             sc, rot = rng.uniform(0.85, 1.15), math.radians(rng.uniform(-4, 4))
-            c = SIZE / 2
+            c = self.input_size / 2
             R = cv2.getRotationMatrix2D((c, c), math.degrees(rot), sc)
-            R[:, 2] += rng.uniform(-0.05, 0.05, 2) * SIZE
+            R[:, 2] += rng.uniform(-0.05, 0.05, 2) * self.input_size
             A = R @ np.vstack([A, [0, 0, 1]])
-        out = cv2.warpAffine(img, A.astype(np.float32), (SIZE, SIZE), flags=cv2.INTER_AREA if k < 1 else cv2.INTER_LINEAR,
-                             borderMode=cv2.BORDER_CONSTANT, borderValue=tuple(float(x) for x in bg[0, 0]))
+        out = cv2.warpAffine(img, A.astype(np.float32), (self.input_size, self.input_size),
+                             flags=cv2.INTER_AREA if k < 1 else cv2.INTER_LINEAR,
+                             borderMode=cv2.BORDER_CONSTANT,
+                             borderValue=tuple(float(x) for x in bg[0, 0]))
         kp = kp @ A[:, :2].T + A[:, 2]
         if self.train:
             out = photometric(out, rng)
@@ -95,49 +110,76 @@ class Views(Dataset):
         return x, torch.from_numpy(kp.astype(np.float32)), torch.tensor([ox, oy, side, s], dtype=torch.float32)
 
 
-def heatmaps(kp, sigma=2.0):
-    """Gaussian targets at HM resolution for keypoints given in SIZE pixels."""
+def heatmaps(kp, input_size, hm_size, sigma=2.0):
+    """Gaussian targets at hm_size resolution for keypoints in input_size pixels."""
     b, j, _ = kp.shape
-    g = (kp * HM / SIZE).view(b, j, 1, 1, 2)
-    ys, xs = torch.meshgrid(torch.arange(HM, device=kp.device), torch.arange(HM, device=kp.device), indexing="ij")
+    g = (kp * hm_size / input_size).view(b, j, 1, 1, 2)
+    ys, xs = torch.meshgrid(torch.arange(hm_size, device=kp.device),
+                            torch.arange(hm_size, device=kp.device), indexing="ij")
     d2 = (xs - g[..., 0]) ** 2 + (ys - g[..., 1]) ** 2
     return torch.exp(-d2 / (2 * sigma ** 2))
 
 
 def main():
-    data, info_path, out = sys.argv[1:4]
-    epochs = int(sys.argv[4]) if len(sys.argv) > 4 else 12
-    bs = int(sys.argv[5]) if len(sys.argv) > 5 else 24
-    info = json.load(open(info_path))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("dataset_dir")
+    parser.add_argument("rig_info")
+    parser.add_argument("output")
+    parser.add_argument("epochs", type=int, nargs="?", default=20)
+    parser.add_argument("batch", type=int, nargs="?", default=8)
+    parser.add_argument("--input-size", type=int, default=HIGH_RES_INPUT_SIZE)
+    parser.add_argument("--heatmap-size", type=int, default=HIGH_RES_HEATMAP_SIZE)
+    parser.add_argument("--workers", type=int, default=4)
+    args = parser.parse_args()
+    spec = ReaderSpec(args.input_size, args.heatmap_size)
+    if args.epochs < 1 or args.batch < 1 or args.workers < 0:
+        parser.error("epochs/batch must be positive and workers >= 0")
+    if not torch.cuda.is_available():
+        raise RuntimeError("DINOv2 fine-tuning requires a CUDA GPU")
+
+    info = json.load(open(args.rig_info))
     names = [k["name"] for k in info["keypoints"]]
+
     def split():
-        metas = sorted(pathlib.Path(data).glob("*_meta.json"))
+        metas = sorted(pathlib.Path(args.dataset_dir).glob("*_meta.json"))
         val = [m for m in metas if int(m.name[:5]) % 25 == 0]
-        return [m for m in metas if int(m.name[:5]) % 25 != 0], val
+        train = [m for m in metas if int(m.name[:5]) % 25 != 0]
+        return train, val
 
     train, val = split()
-    print(f"{len(train)} train / {len(val)} val samples so far, {len(names)} joints", flush=True)
-    vl = DataLoader(Views(val, False), batch_size=bs, num_workers=4)
-    dev = "cuda"
-    model = JointReader(len(names)).to(dev)
+    if not train or not val:
+        raise ValueError("dataset must include both train and held-out samples")
+    scales = set()
+    for m in train + val:
+        metadata = json.loads(m.read_text())
+        scales.add(float(metadata["scale"]))
+    if len(scales) != 1:
+        raise ValueError(f"mixed dataset render scales {sorted(scales)}; use a fresh dataset_hr directory")
+    print(f"{len(train)} train / {len(val)} val poses; {len(names)} joints; "
+          f"render scale {next(iter(scales))}; reader {spec.input_size}/{spec.heatmap_size}", flush=True)
+    vl = DataLoader(Views(val, False, spec.input_size),
+                    batch_size=args.batch, num_workers=args.workers, pin_memory=True)
+    model = JointReader(len(names), input_size=spec.input_size,
+                        heatmap_size=spec.heatmap_size).cuda()
     head = [p for n, p in model.named_parameters() if not n.startswith("backbone")]
     opt = torch.optim.AdamW([{"params": model.backbone.parameters(), "lr": 2e-5},
                              {"params": head, "lr": 1e-3}], weight_decay=0.05)
     base = [g["lr"] for g in opt.param_groups]
     step, t0, warm = 0, time.time(), 300
-    for ep in range(epochs):
+    for ep in range(args.epochs):
         train, _ = split()
-        dl = DataLoader(Views(train, True), batch_size=bs, shuffle=True, num_workers=10, drop_last=True)
-        print(f"epoch {ep}: {len(train)} train samples", flush=True)
+        dl = DataLoader(Views(train, True, spec.input_size), batch_size=args.batch,
+                        shuffle=True, num_workers=args.workers, pin_memory=True)
+        print(f"epoch {ep}: {len(train)} train poses", flush=True)
         model.train()
         for bi_, (x, kp, _) in enumerate(dl):
-            f = 0.5 * (1 + math.cos(math.pi * (ep + bi_ / len(dl)) / epochs)) * min(1, (step + 1) / warm)
+            f = 0.5 * (1 + math.cos(math.pi * (ep + bi_ / len(dl)) / args.epochs)) * min(1, (step + 1) / warm)
             for g, b0 in zip(opt.param_groups, base):
                 g["lr"] = b0 * f
-            x, kp = x.to(dev, non_blocking=True), kp.to(dev, non_blocking=True)
+            x, kp = x.cuda(non_blocking=True), kp.cuda(non_blocking=True)
             with torch.autocast("cuda", dtype=torch.bfloat16):
                 pred = model(x)
-            loss = F.mse_loss(pred.float(), heatmaps(kp)) * 1000
+            loss = F.mse_loss(pred.float(), heatmaps(kp, spec.input_size, spec.heatmap_size)) * 1000
             opt.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -150,18 +192,21 @@ def main():
         with torch.no_grad():
             for bi, (x, kp, geo) in enumerate(vl):
                 with torch.autocast("cuda", dtype=torch.bfloat16):
-                    pred = model(x.to(dev)).float()
+                    pred = model(x.cuda(non_blocking=True)).float()
                 uv, _ = decode(pred)
-                uv = uv.cpu() * SIZE / HM
-                # back to layout pixels: undo resize, padding and the render scale
-                lay = lambda p: (p * geo[:, None, 2:3] / SIZE - geo[:, None, :2]) / geo[:, None, 3:4]
+                uv = uv.cpu() * spec.input_size / spec.heatmap_size
+                # Undo letterbox and render scale; report in 1280x720 layout pixels.
+                lay = lambda p: (p * geo[:, None, 2:3] / spec.input_size - geo[:, None, :2]) / geo[:, None, 3:4]
                 e = (lay(uv) - lay(kp)).norm(dim=-1)
                 for r in range(len(x)):
-                    errs[("front", "side")[(bi * bs + r) % 2]].append(e[r].numpy())
+                    errs[("front", "side")[(bi * args.batch + r) % 2]].append(e[r].numpy())
         msg = {v: float(np.mean(errs[v])) for v in errs}
         print(f"epoch {ep} val mean px error (layout pixels) front {msg['front']:.2f} side {msg['side']:.2f}", flush=True)
-        torch.save({"state_dict": model.state_dict(), "names": names, "epoch": ep, "val": msg}, out)
-    print("saved", out)
+        torch.save({"state_dict": model.state_dict(), "names": names, "epoch": ep,
+                    "val": msg, "reader_spec": spec.checkpoint_metadata()}, args.output)
+    print("saved", args.output)
+
+
 
 
 if __name__ == "__main__":

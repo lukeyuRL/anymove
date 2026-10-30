@@ -6,14 +6,17 @@ split into its front and side views. Writes pixel positions in layout coordinate
 and RAW, UNCALIBRATED heatmap peak amplitudes (not probabilities) per view.
 The solver clips these peak values to [0,1] for confidence weighting.
 """
-import sys
+import os, sys
+from contextlib import nullcontext
 
 import cv2
 import numpy as np
 import torch
 
 from mocap import layout
-from mocap.model import HM, SIZE, JointReader, decode, square
+from mocap.model import JointReader, decode
+from mocap.reader_config import LEGACY_INPUT_SIZE, spec_from_checkpoint
+from mocap.reader_geometry import Letterbox
 
 
 def read_frames(path):
@@ -46,35 +49,47 @@ def calibrate(first, ref):
     return A[:2].astype(np.float32)
 
 
-def prep(view):
-    _, ox, oy, side = square(view, view[2, 2])
-    k = SIZE / side
-    A = np.array([[k, 0, ox * k], [0, k, oy * k]], np.float32)
+def prep(view, size=LEGACY_INPUT_SIZE):
+    h, w = view.shape[:2]
+    geo = Letterbox(w, h, size)
     fill = tuple(float(x) for x in view[2, 2])
-    out = cv2.warpAffine(view, A, (SIZE, SIZE), flags=cv2.INTER_AREA, borderMode=cv2.BORDER_CONSTANT, borderValue=fill)
-    return out, (ox, oy, side)
+    k = size / geo.side
+    out = cv2.warpAffine(view, np.array(geo.affine, np.float32), (size, size),
+                         flags=cv2.INTER_AREA if k < 1 else cv2.INTER_LINEAR,
+                         borderMode=cv2.BORDER_CONSTANT, borderValue=fill)
+    return out, geo
 
 
 @torch.no_grad()
-def run(model, views, bs=32):
+def run(model, views, bs=None):
+    size, hm_size = model.input_size, model.heatmap_size
+    if bs is None:
+        bs = int(os.environ.get("MOCAP_DETECT_BATCH", 8 if size > 448 else 32))
+    if bs < 1:
+        raise ValueError("MOCAP_DETECT_BATCH must be positive")
+    device = next(model.parameters()).device
     uv_all, conf_all = [], []
     for i in range(0, len(views), bs):
-        batch = [prep(v) for v in views[i:i + bs]]
-        x = torch.from_numpy(np.stack([b[0] for b in batch])).permute(0, 3, 1, 2).float().cuda() / 255
-        with torch.autocast("cuda", dtype=torch.bfloat16):
-            hm = model(x).float()
-        uv, conf = decode(hm)
-        uv = uv.cpu().numpy() * SIZE / HM
-        for (_, (ox, oy, side)), u in zip(batch, uv):
-            uv_all.append(u * side / SIZE - np.array([ox, oy]))
+        batch = [prep(v, size) for v in views[i:i + bs]]
+        x = torch.from_numpy(np.stack([b[0] for b in batch])).permute(0, 3, 1, 2).float().to(device) / 255
+        context = torch.autocast("cuda", dtype=torch.bfloat16) if device.type == "cuda" else nullcontext()
+        with context:
+            pred = model(x).float()
+        uv, conf = decode(pred)
+        uv = uv.cpu().numpy() * size / hm_size
+        for (_, geo), u in zip(batch, uv):
+            uv_all.append(u * geo.side / size - np.array([geo.ox, geo.oy]))
         conf_all.append(conf.cpu().numpy())
     return np.array(uv_all), np.concatenate(conf_all)
 
 
 def load(model_path):
-    ck = torch.load(model_path, map_location="cpu", weights_only=True)  # tensors, names and numbers only: safe for downloaded readers
-    model = JointReader(len(ck["names"])).cuda().eval()
+    ck = torch.load(model_path, map_location="cpu", weights_only=True)
+    spec = spec_from_checkpoint(ck)
+    model = JointReader(len(ck["names"]), input_size=spec.input_size,
+                        heatmap_size=spec.heatmap_size).cuda().eval()
     model.load_state_dict(ck["state_dict"])
+    print(f"loaded reader {spec.input_size}x{spec.input_size} / heatmap {spec.heatmap_size}", flush=True)
     return model, ck["names"]
 
 

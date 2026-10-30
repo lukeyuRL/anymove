@@ -1,7 +1,8 @@
 """The joint reader: DINOv2 (ViT-B/14 with registers) plus a small upsampling head that draws one heatmap per joint.
 
-Both views go through the same network one at a time. A view is padded to a square with the backdrop grey, centred,
-and resized to 448 x 448 (32 x 32 patches); heatmaps come out at 128 x 128.
+Both views go through the same network one at a time. Input and heatmap sizes are
+specified by the checkpoint (legacy 448/128, high-res default 672/192).
+Positional embeddings are interpolated automatically by transformers 5.20.x.
 """
 import numpy as np
 import torch
@@ -9,15 +10,21 @@ import torch.nn as nn
 import torch.nn.functional as F
 from transformers import AutoModel
 
+from mocap.reader_config import ReaderSpec, LEGACY_INPUT_SIZE, LEGACY_HEATMAP_SIZE
+
 BACKBONE = "facebook/dinov2-with-registers-base"
-SIZE, HM = 448, 128
+# Kept for callers outside this repository; not the high-res training defaults.
+SIZE, HM = LEGACY_INPUT_SIZE, LEGACY_HEATMAP_SIZE
 MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
 STD = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
 
 
 class JointReader(nn.Module):
-    def __init__(self, n_joints, backbone=BACKBONE):
+    def __init__(self, n_joints, backbone=BACKBONE, input_size=SIZE, heatmap_size=HM):
         super().__init__()
+        self.spec = ReaderSpec(input_size, heatmap_size)
+        self.input_size = self.spec.input_size
+        self.heatmap_size = self.spec.heatmap_size
         self.backbone = AutoModel.from_pretrained(backbone)
         self.n_reg = getattr(self.backbone.config, "num_register_tokens", 0)
         c = self.backbone.config.hidden_size
@@ -32,12 +39,19 @@ class JointReader(nn.Module):
 
     def forward(self, x):
         b = x.shape[0]
+        if tuple(x.shape[-2:]) != (self.input_size, self.input_size):
+            raise ValueError(f"reader expects {self.input_size}x{self.input_size}, got {tuple(x.shape[-2:])}")
+        # Dinov2WithRegistersEmbeddings in pinned transformers 5.20.2
+        # automatically interpolates pretrained positional embeddings.
         tokens = self.backbone(pixel_values=(x - MEAN.to(x)) / STD.to(x)).last_hidden_state
-        g = SIZE // 14
-        f = tokens[:, 1 + self.n_reg:].transpose(1, 2).reshape(b, -1, g, g)
+        g = self.input_size // 14
+        patches = tokens[:, 1 + self.n_reg:]
+        if patches.shape[1] != g * g:
+            raise ValueError(f"reader expected {g*g} patch tokens, got {patches.shape[1]}")
+        f = patches.transpose(1, 2).reshape(b, -1, g, g)
         f = self.neck(f)
         f = self.up1(F.interpolate(f, scale_factor=2, mode="bilinear", align_corners=False))
-        f = self.up2(F.interpolate(f, size=(HM, HM), mode="bilinear", align_corners=False))
+        f = self.up2(F.interpolate(f, size=(self.heatmap_size, self.heatmap_size), mode="bilinear", align_corners=False))
         return self.out(f)
 
 
@@ -53,7 +67,7 @@ def square(img, fill):
 
 
 def decode(hm):
-    """Heatmaps (B, J, 128, 128) to sub-pixel peaks in heatmap units and peak values."""
+    """Heatmaps (B, J, H, W) to sub-pixel peaks in heatmap units and raw values."""
     b, j, h, w = hm.shape
     flat = hm.reshape(b, j, -1)
     conf, idx = flat.max(-1)
