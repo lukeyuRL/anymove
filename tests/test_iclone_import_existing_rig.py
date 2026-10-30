@@ -103,6 +103,16 @@ class ExistingRigImportTests(unittest.TestCase):
                 ensure_similarity(matrix, "Armature")
 
 
+    def test_near_identical_fbX_joint_endpoints_are_shared(self):
+        changed = [dict(b) for b in self.records]
+        changed[2]["tail"] = [0.0000025, -.800003, 1.500001]
+        changed[1]["head"] = [-.000002, -.799999, 1.500000]
+        info = build_rig_info(changed, camera_layout(self.bounds))
+        self.assertEqual(info["bones"][3]["tail_joint"],
+                         info["bones"][4]["head_joint"])
+        self.assertEqual(len(info["keypoints"]),
+                         len(set(k["name"] for k in info["keypoints"])))
+
 
 if __name__ == "__main__":
     unittest.main()

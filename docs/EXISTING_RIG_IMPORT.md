@@ -89,3 +89,30 @@ Compare the prepared mesh appearance to the original, and check the
 first four training samples plus labels before full training.
 
     bash tools/dataset.sh dino_prepared 4 1 500 1.0 runs/dino_prepared/dataset_smoke
+
+
+## Imported FBX Object names and near-coincident Bone endpoints
+
+The runtime Blender renderers now discover exactly one skinned Armature
+and one Mesh from the Armature modifier, regardless of their Object
+names (for example Armature / Dinosaur_Geo). This is supported in
+render_dataset.py, render_ref.py and apply_motion.py. The animation
+writer also accepts a character without the old legpaint colour attribute.
+Multi-Mesh rendering is still unsupported.
+
+The importer merges near-identical Bone endpoints using a 0.00001-metre
+Euclidean Rest Position threshold. This avoids duplicate reader heatmaps
+caused by float32 FBX rest coordinates. Re-export rig_info.json before
+training. Mixing pre-fix joint metadata with a reader.pt trained on the
+new metadata is invalid.
+
+The report's current_dataset_loader_compatible value now tests whether
+there is exactly one skinned Mesh, and does not require literal names
+or a perfect floor position. Those remain separate diagnostics.
+
+To re-export an identity-transform original .blend:
+
+    blender -b -P tools/import_existing_rig.py -- assets/dino/rigged/rigged.blend --overwrite
+
+If Armature Object has non-identity transform, use the separate
+--prepare-copy workflow above. Do not modify the original asset.

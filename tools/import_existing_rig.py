@@ -60,17 +60,17 @@ def build_rig_info(records, layout):
     """Match existing solver's bones/keypoints/layout schema without changing a Rig."""
     ordered = parent_first(records)
     indices = {b["name"]: i for i, b in enumerate(ordered)}
-    bones, keypoints, shared = [], [], {}
+    bones, keypoints = [], []
     def keypoint(bone, index, end):
         pos = xyz(bone[end])
-        quantized = tuple(round(v, 6) for v in pos)
-        if quantized in shared:
-            name, original = shared[quantized]
-            if max(abs(x - y) for x, y in zip(original, pos)) > 1e-6:
-                raise ValueError("keypoint precision collision")
-            return name
+        # FBX/Blender float32 Rest endpoints may differ by only a few
+        # micrometres. The old 6-decimal rounding assigned different
+        # heatmap targets to physically identical joints.
+        # Euclidean threshold is tiny relative to a visible pixel.
+        for existing in keypoints:
+            if math.dist(pos, existing["rest"]) <= 1e-5:
+                return existing["name"]
         name = "joint:" + bone["name"] + ":" + end
-        shared[quantized] = (name, pos)
         keypoints.append({"name": name, "bone": index, "end": end, "rest": pos})
         return name
 
@@ -367,9 +367,9 @@ def main(argv=None):
     warnings = []
     if min(bz) < -0.02 or min(bz) > 0.05:
         warnings.append("Floor is not at Z=0; fix rest placement on a COPY")
-    if arm.name != "rig" or len(meshes) != 1 or meshes[0].name != "body":
-        warnings.append("Existing render_dataset.py needs ONE Mesh 'body' and Armature 'rig'; "
-                        "prepare a COPY of the .blend, or adapt renderer for multiple meshes")
+    if len(meshes) != 1:
+        warnings.append("Current dataset renderer requires ONE skinned Mesh; "
+                        "arbitrary Blender Object names are now supported")
     if any("draft_default" in v for v in limits_sources.values()):
         warnings.append("Rotation limits include temporary +/-20 degree defaults: REVIEW first")
     if any(pb.constraints for pb in arm.pose.bones):
@@ -391,10 +391,7 @@ def main(argv=None):
         "joint_count": len(info["keypoints"]),
         "bounds_min": [min(bx), min(by), min(bz)],
         "bounds_max": [max(bx), max(by), max(bz)],
-        "current_dataset_loader_compatible": (
-            arm.name == "rig" and len(meshes) == 1 and
-            meshes[0].name == "body" and -.02 <= min(bz) <= .05
-        ),
+        "current_dataset_loader_compatible": len(meshes) == 1,
         "warnings": warnings,
     }
     # Saving is opt-in and ALWAYS to a different path.

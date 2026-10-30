@@ -38,6 +38,27 @@ LAYOUT = {"H": H, "W_FRONT": W_FRONT, "W_SIDE": W_SIDE, "M_PER_PX": M_PER_PX, "G
           "Z_CENTER": Z_CENTER, "Y_CENTER": 0.0, "X_CENTER": 0.0}
 
 
+def skinned_character_objects():
+    """Find one Armature and exactly one skinned Mesh, regardless of Object names.
+
+    Generic imported FBX names are accepted. Multiple skinned Meshes need
+    a dedicated renderer change and are intentionally rejected for now.
+    """
+    arms = [obj for obj in bpy.data.objects if obj.type == "ARMATURE"]
+    if len(arms) != 1:
+        raise ValueError("Expected exactly one Armature; found %d" % len(arms))
+    arm = arms[0]
+    meshes = [obj for obj in bpy.data.objects
+              if obj.type == "MESH" and any(
+                  mod.type == "ARMATURE" and mod.object == arm
+                  for mod in obj.modifiers)]
+    if len(meshes) != 1:
+        raise ValueError("Expected ONE skinned Mesh bound to %s, found %d. "
+                         "Multi-Mesh rendering is not implemented yet." %
+                         (arm.name, len(meshes)))
+    return arm, meshes[0]
+
+
 def mirror(name):
     return name[:-2] + "_R" if name and name.endswith("_L") else name
 

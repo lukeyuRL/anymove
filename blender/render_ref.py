@@ -13,7 +13,8 @@ args = sys.argv[sys.argv.index("--") + 1:]
 out = pathlib.Path(args[1])
 out.mkdir(parents=True, exist_ok=True)
 bpy.ops.wm.open_mainfile(filepath=args[0])
-for pb in bpy.data.objects["rig"].pose.bones:
+rig, body = common.skinned_character_objects()
+for pb in rig.pose.bones:
     pb.rotation_mode = "XYZ"
     pb.rotation_euler = (0, 0, 0)
     pb.location = (0, 0, 0)

@@ -31,7 +31,7 @@ print(f"dataset output directory: {out}", flush=True)
 bpy.ops.wm.open_mainfile(filepath=str(blend))
 scene = bpy.context.scene
 info = json.load(open(info_path))
-rig, body = bpy.data.objects["rig"], bpy.data.objects["body"]
+rig, body = common.skinned_character_objects()
 bones = [b["name"] for b in info["bones"]]
 lim = {b["name"]: np.radians(np.array(b["limits_deg"], float)) for b in info["bones"]}
 for pb in rig.pose.bones:

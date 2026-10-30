@@ -38,7 +38,7 @@ bpy.ops.wm.open_mainfile(filepath=blend)
 scene = bpy.context.scene
 info = json.load(open(info_path))
 motion = json.load(open(motion_path))
-rig, body = bpy.data.objects["rig"], bpy.data.objects["body"]
+rig, body = common.skinned_character_objects()
 names = motion["bones"]
 T = len(motion["euler"])
 fps = motion.get("fps", 24)
@@ -47,9 +47,10 @@ scene.render.fps_base = round(fps) / fps
 scene.frame_start, scene.frame_end = 0, T - 1
 
 if "--paint" not in opts:
-    attr = body.data.color_attributes["legpaint"]
-    rgba = np.zeros(len(attr.data) * 4)
-    attr.data.foreach_set("color", rgba)
+    attr = body.data.color_attributes.get("legpaint")
+    if attr is not None:
+        rgba = np.zeros(len(attr.data) * 4)
+        attr.data.foreach_set("color", rgba)
 
 root = names[0]
 B = rig.data.bones[root].matrix_local.to_3x3()
