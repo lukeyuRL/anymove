@@ -269,3 +269,12 @@ of 0.5. Do not suppress that gate. Better or worse reprojection error also
 does not establish 3D correctness; before adopting this solver, compare
 hind paw trajectories, wing motion, root Z and scale in a clean iClone
 scene, and run a Blender known-ground-truth 3D joint test.
+
+## Temporal Joint Association (experimental)
+
+A separate Dragon-only, opt-in two-state Viterbi association for entire
+hind-leg chains has been added after the visibility-weighting experiment.
+It preserves the original Reader, `det.npz`, motion JSON schema and iClone
+Root Flight behavior. See [TEMPORAL_ASSOCIATION.md](TEMPORAL_ASSOCIATION.md)
+for the same-detection A/B commands, diagnostics, strict output naming and
+known limitations. It is **not enabled by default**.

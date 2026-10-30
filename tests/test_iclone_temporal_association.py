@@ -159,6 +159,33 @@ class TemporalAssociationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "finite"):
             temporal_hind_association(broken, names)
 
+    def test_real_repo_example_npz_smoke_without_model_training(self):
+        import pathlib
+        repo = pathlib.Path(__file__).resolve().parents[1]
+        sample = repo / "examples" / "dragon_roar" / "det.npz"
+        if not sample.is_file():
+            self.skipTest("original example detections are absent")
+        with np.load(str(sample), allow_pickle=False) as z:
+            data = {k: z[k].copy()
+                    for k in ("front_uv", "side_uv", "front_conf", "side_conf")}
+            names = [str(x) for x in z["names"].tolist()]
+        prior = {k: v.copy() for k, v in data.items()}
+        fixed, report = temporal_hind_association(data, names)
+        self.assertEqual(fixed["side_uv"].shape, data["side_uv"].shape)
+        self.assertEqual(report["num_frames"] if "num_frames" in report
+                         else len(report["state_by_frame"]), len(data["front_uv"]))
+        self.assertGreater(len(data["front_uv"]), 20)
+        self.assertTrue(np.isfinite(fixed["side_uv"]).all())
+        self.assertTrue(np.isfinite(fixed["side_conf"]).all())
+        for key, value in prior.items():
+            np.testing.assert_array_equal(data[key], value)
+        print("EXAMPLE_ASSN_REPORT",
+              {"frames": len(data["front_uv"]),
+               "swapped": report["accepted_swapped_frames"],
+               "segments": report["accepted_segments"],
+               "raw_mae": report["before_relative_hind_height_mae_px"],
+               "new_mae": report["after_relative_hind_height_mae_px"]})
+
     def test_audit_json_and_state_contract(self):
         import json
         d, names = self.fixture(124)
