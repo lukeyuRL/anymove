@@ -34,4 +34,7 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_iclone_association_safety.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_temporal_tracking.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_quality_targets.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_motion_prior.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_temporal_tracking.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_quality_targets.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_temporal_tracking.py' -v

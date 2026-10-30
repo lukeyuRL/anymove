@@ -145,3 +145,86 @@ probability. To promote this experiment, measure true known-mask AUC,
 held-out pixel-error calibration (e.g. expected-vs-actual error bins),
 and same-clip 3D foot motion with independent Ground Truth. A separate
 Blender body-part visibility mask is still an open item.
+
+
+### P3 implementation: empirical learned Motion Prior / Denoising
+
+The first P3 model is deliberately small and interpretable. From
+**independent verified continuous animation sequences**, learn each
+bone-axis angular acceleration spread (radians/frame²) and fit a Gaussian
+second-order temporal MAP prior on Euler angle tracks. Unlike a generic
+Savitzky–Golay or median filter, smoothing strength is adjusted by the
+observed angular dynamics of the verified training corpus.
+
+This is a learned *statistical prior*, not a generative diffusion model.
+It does not synthesize new wingbeat/flight motion, infer foot contacts or
+repair an incorrect left/right body-part association. Its first version
+keeps `root_quat` and `trans` exactly unchanged, clips all non-root
+Euler rotations to rig limits, recomputes Blender-style FK world joints
+using the same `mocap.solve.Rig.forward`, and recalculates 2D reprojection
+against the original `det.npz`. It refuses stale/mismatched data rather
+than emitting inconsistent motion.json fields.
+
+**Required training data:** at least two genuinely continuous motion.json
+animations with the *same* bone order and FPS, with source_kind manually
+certified in a manifest. The independent 2,200 still-pose training
+samples are NOT suitable Motion Prior training data, and a single wrong
+AI Reader/Solver result is NOT verified ground truth.
+
+Sample `verified_motion_manifest.json` in a folder holding your verified
+animations:
+
+```json
+{
+  "version": 1,
+  "sequences": [
+    {
+      "path": "verified_flight.json",
+      "source_kind": "verified_blender_animation",
+      "verified": true
+    },
+    {
+      "path": "verified_land.json",
+      "source_kind": "verified_iclone_animation",
+      "verified": true
+    }
+  ]
+}
+```
+
+Both file paths are illustrative; they are not included in this repo.
+The prior training command refuses an existing output and all unverified
+source_kind values:
+
+```bash
+python.exe -m mocap.motion_prior train \
+  runs/dragon/verified_motion/verified_motion_manifest.json \
+  runs/dragon/motion_prior_verified.json
+```
+
+After creating this trusted prior file, apply it to an existing capture
+in a **new** output file:
+
+```bash
+export MOCAP_CREATURE=assets/dragon
+python.exe -m mocap.denoise_motion \
+  runs/dragon/motion_prior_verified.json \
+  runs/dragon/clips/hr_roar/motion.json \
+  assets/dragon/rigged/rig_info.json \
+  runs/dragon/clips/hr_roar/det.npz \
+  runs/dragon/clips/hr_roar/motion_denoised.json \
+  --strength 1.0
+```
+
+This writes `motion_denoised.json` and a separate
+`motion_denoised.denoise.json` with input SHA, FK consistency, Euler
+delta and before/after reprojection. It DOES NOT overwrite original
+outputs. Do not assume lower reprojection means better temporal motion;
+measure root trajectory, per-joint jerk, hind foot sliding and 3D error
+against a known verified animation.
+
+No ready-to-use verified Dragon motion corpus or trained prior checkpoint
+has been supplied here. This workflow is implemented and testable on
+synthetic clean sequences, but cannot be described as a *trained Dragon
+Motion Prior* until the source corpus is actually provided and the train
+command has run. Do not enable this postprocessor by default in iClone.
