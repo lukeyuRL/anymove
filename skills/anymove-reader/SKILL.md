@@ -10,11 +10,16 @@ compatibility: NVIDIA GPU with CUDA (about 12 GB at batch 20, so a 24 GB card), 
 The reader is trained on the creature itself, so it knows every joint name and every limb colour. Data is free:
 Blender poses the rig at random inside its joint limits and records where each joint lands in both views.
 
-## 1. Render the dataset (about 25 min for 2,200 poses on one RTX 4090)
+## 1. Render the high-res dataset
 
 ```bash
-tools/dataset.sh <c> 2200 3     # 3 Blender processes -> runs/<c>/dataset/{00000_front.png, _side.png, _meta.json}
+tools/dataset.sh <c> 2200 3 500 1.0    # full layout renders -> runs/<c>/dataset_hr
 ```
+
+This uses an independent dataset directory so the legacy 0.6x renders are not mixed
+with the high-resolution 1.0x renders. On Dragon, each view is 640x720, saved as
+RGBA. The 1280x720 two-view video layout is **not** changed.
+For more detail and full regression steps, see `docs/HIGH_RES.md`.
 
 Half the poses spread uniformly over the limits, half stay near rest; the pelvis sometimes rears; half carry motion
 blur from a random velocity (video models smear fast limbs); lights, turn (±30°, sometimes ±70°), position and
@@ -25,11 +30,16 @@ GPU budget on a 24 GB card under WSL: a reader training (about 12 GB) plus more 
 the card and everything stalls. Render first, or train beside at most two renders. Blender uses CUDA (OptiX is
 unreliable under WSL).
 
-## 2. Train (17-20 min, 20 epochs)
+## 2. Train at 672x672 input / 192x192 heatmap
 
 ```bash
-tools/train.sh <c> 20 20        # runs/<c>/reader.pt; prints held-out error per epoch in layout pixels
+tools/train.sh <c> 20 8 672 192   # runs/<c>/reader_hr.pt; held-out error in layout pixels
 ```
+
+The high-res checkpoint is new and does **not** overwrite the original `reader.pt`.
+The training batch defaults to 8 because ViT self-attention grows with resolution.
+The old `reader.pt` is still supported by `mocap.detect` at 448/128.
+Timing/memory from old 448 training must not be assumed to hold for 672.
 
 Every render is laid on a fresh random backdrop and degraded like video (framing jitter, colour, blur, downscale,
 noise, JPEG) so the reader works on AI clips, not just clean renders. 4% of the samples are held out. The checkpoint
@@ -49,7 +59,7 @@ export MOCAP_CREATURE=assets/<c>; R=assets/<c>/rigged; E=runs/<c>/exam
 .venv/bin/python -m mocap.exam make $R/rig_info.json $E/truth.json 0 120
 blender -b -P blender/apply_motion.py -- $R/rigged.blend $R/rig_info.json $E/truth.json $E/truth --views front,side --paint --blur
 .venv/bin/python -m mocap.exam video $E/truth $E/exam.mp4 24
-.venv/bin/python -m mocap.detect $E/exam.mp4 runs/<c>/reader.pt runs/<c>/ref/ref.png $E/det.npz --no-calib
+.venv/bin/python -m mocap.detect $E/exam.mp4 runs/<c>/reader_hr.pt runs/<c>/ref/ref.png $E/det.npz --no-calib
 .venv/bin/python -m mocap.solve $E/det.npz $R/rig_info.json $E/solved.json
 blender -b -P blender/apply_motion.py -- $R/rigged.blend $R/rig_info.json $E/solved.json $E/solved
 .venv/bin/python -m mocap.exam score $E/truth/joints.json $E/solved/joints.json

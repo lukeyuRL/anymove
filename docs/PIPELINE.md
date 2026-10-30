@@ -50,9 +50,14 @@ it, every module falls back to the wolf's layout (420 + 860 px, 1.9 m of height 
 
 DINOv2 ViT-B/14 with registers (`facebook/dinov2-with-registers-base`, Apache-2.0), fine-tuned end to end (backbone at
 2e-5, head at 1e-3, AdamW, cosine schedule with warm-up). Each view is padded to a square with the backdrop grey and
-resized to 448 x 448 (32 x 32 patches); the patch tokens go through a small conv head that upsamples to one 128 x 128
-heatmap per joint, trained against Gaussian targets (sigma 2). Peaks are refined to sub-pixel from their neighbours.
-Training images are laid on random backdrops and degraded like video; 4% of samples are held out.
+resized using the checkpoint-defined reader input (legacy 448x448 / 128x128 heatmap,
+high-resolution 672x672 / 192x192 heatmap). The DINOv2 ViT-B/14 patch tokens go through a small conv head that
+upsamples to per-joint heatmaps, trained against Gaussian targets (sigma 2 in heatmap pixels).
+Peaks are refined to sub-pixel from their neighbours. Training images are laid on random
+backdrops and degraded like video; 4% of samples are held out. `reader_spec` stores both dimensions in new
+checkpoints. Legacy checkpoints without this field remain fixed at 448/128.
+The high-res branch keeps two-camera layout and solver coordinates unchanged; see
+[`HIGH_RES.md`](HIGH_RES.md) for renderer scale, training and validation.
 
 ## Inside the fit
 
