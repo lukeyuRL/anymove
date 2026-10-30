@@ -150,6 +150,99 @@ def creature_draft(name, bounds, layout):
     }
 
 
+def ensure_similarity(matrix, label):
+    """Allow translation/rotation/uniform positive scale; refuse shear or mirroring."""
+    a = [[float(matrix[i][j]) for j in range(4)] for i in range(4)]
+    if any(not math.isfinite(v) for row in a for v in row):
+        raise ValueError(label + " has non-finite transform values")
+    if any(abs(a[3][i] - (1.0 if i == 3 else 0.0)) > 1e-6 for i in range(4)):
+        raise ValueError(label + " needs an affine object transform")
+    cols = [[a[row][col] for row in range(3)] for col in range(3)]
+    lengths = [math.sqrt(sum(v*v for v in col)) for col in cols]
+    scale = sum(lengths) / 3.0
+    if scale < 1e-8 or any(abs(v-scale) > 1e-4*scale for v in lengths):
+        raise ValueError(label + " has nonuniform/zero scale; prepare manually on a COPY")
+    if any(abs(sum(cols[i][k]*cols[j][k] for k in range(3))) > 1e-4*scale*scale
+           for i in range(3) for j in range(i+1, 3)):
+        raise ValueError(label + " has shear; prepare manually on a COPY")
+    cross = [cols[0][1]*cols[1][2]-cols[0][2]*cols[1][1],
+             cols[0][2]*cols[1][0]-cols[0][0]*cols[1][2],
+             cols[0][0]*cols[1][1]-cols[0][1]*cols[1][0]]
+    det = sum(cross[k]*cols[2][k] for k in range(3))
+    if det <= 0:
+        raise ValueError(label + " is mirrored (negative determinant); prepare manually on a COPY")
+    return scale
+
+
+def prepare_copy_in_memory(bpy, arm, meshes):
+    """Normalize Armature and skin Mesh REST data in a new unsaved in-memory copy.
+
+    Only similarity transforms are supported on the Armature. The caller must
+    explicitly save to a new .blend path, never back to the original.
+    """
+    from mathutils import Matrix
+    metric = float(bpy.context.scene.unit_settings.scale_length)
+    if not math.isfinite(metric) or metric <= 0:
+        raise ValueError("invalid Blender scene unit scale")
+    world = arm.matrix_world.copy()
+    uniform_scale = ensure_similarity(world, "Armature Object")
+    for pb in arm.pose.bones:
+        basis = pb.matrix_basis
+        if max(abs(basis[i][j] - (1.0 if i == j else 0.0))
+               for i in range(4) for j in range(4)) > 1e-4:
+            raise ValueError("Existing Armature is not in Rest Pose: " + pb.name)
+    original_bones = {
+        bone.name: (metric*(world @ bone.head_local),
+                    metric*(world @ bone.tail_local))
+        for bone in arm.data.bones
+    }
+    old_meshes = []
+    for obj in meshes:
+        w = obj.matrix_world.copy()
+        if not math.isfinite(w.determinant()) or w.determinant() <= 1e-10:
+            raise ValueError("Negative/degenerate Mesh transform: " + obj.name)
+        vertices = [metric*(w @ v.co) for v in list(obj.data.vertices)[:12]]
+        old_meshes.append((obj, w, vertices))
+    original_name = arm.name
+    original_mesh_names = [m.name for m in meshes]
+    arm.data = arm.data.copy()
+    arm.data.transform(Matrix.Scale(metric, 4) @ world)
+    arm.parent = None
+    arm.matrix_world = Matrix.Identity(4)
+    for obj, old_world, before in old_meshes:
+        obj.data = obj.data.copy()
+        obj.data.transform(Matrix.Scale(metric, 4) @ old_world, shape_keys=True)
+        obj.parent = None
+        obj.matrix_world = Matrix.Identity(4)
+        for index, expected in enumerate(before):
+            if (obj.data.vertices[index].co - expected).length > 2e-4*max(1.0, expected.length):
+                raise RuntimeError("Normalized Mesh vertex mismatch: " + obj.name)
+    bpy.context.scene.unit_settings.scale_length = 1.0
+    bpy.context.view_layer.update()
+    for bone in arm.data.bones:
+        old_head, old_tail = original_bones[bone.name]
+        if ((bone.head_local-old_head).length > 2e-4*max(1.0, old_head.length)
+                or (bone.tail_local-old_tail).length > 2e-4*max(1.0, old_tail.length)):
+            raise RuntimeError("Normalized Bone Rest Position mismatch: " + bone.name)
+    # Only one skinned mesh can be consumed by the current dataset renderer.
+    if len(meshes) == 1:
+        if bpy.data.objects.get("rig") not in (None, arm):
+            raise ValueError("Object name 'rig' already belongs to another object")
+        if bpy.data.objects.get("body") not in (None, meshes[0]):
+            raise ValueError("Object name 'body' already belongs to another object")
+        arm.name = "rig"
+        meshes[0].name = "body"
+    return {
+        "original_armature_name": original_name,
+        "original_mesh_names": original_mesh_names,
+        "original_armature_world_matrix": [[float(x) for x in row] for row in world],
+        "original_scene_unit_scale": metric,
+        "original_uniform_armature_scale": uniform_scale,
+        "rest_bone_vertex_coordinate_audit": "passed",
+        "skin_deformation_runtime_audit": "not_yet_verified",
+    }
+
+
 def rotation_limits(pose_bone):
     """Read active LOCAL limit-rotation constraints; do not invent anatomy."""
     limits = [row[:] for row in DEFAULT_LIMITS]
@@ -188,7 +281,9 @@ def main(argv=None):
     parser.add_argument("blend", help="Existing rigged .blend (never modified)")
     parser.add_argument("--asset-dir", help="Output assets/<creature> path")
     parser.add_argument("--name", help="Override creature name")
-    parser.add_argument("--overwrite", action="store_true", help="Replace generated JSON only")
+    parser.add_argument("--overwrite", action="store_true", help="Replace generated outputs after backup")
+    parser.add_argument("--prepare-copy", action="store_true",
+                        help="Save a new normalized .blend and metadata, never the source")
     args = parser.parse_args(argv)
     source = Path(args.blend).expanduser().resolve()
     if source.suffix.lower() != ".blend" or not source.is_file():
@@ -197,17 +292,23 @@ def main(argv=None):
         asset_dir = Path(args.asset_dir).expanduser().resolve()
     elif source.parent.name == "rigged":
         asset_dir = source.parent.parent
+        if args.prepare_copy:
+            asset_dir = asset_dir.with_name(asset_dir.name + "_prepared")
     else:
         raise ValueError("Provide --asset-dir for a .blend outside a rigged/ directory")
     name = args.name or asset_dir.name
     if not name or "/" in name or "\\" in name:
         raise ValueError("invalid creature name")
+    prepared_blend = asset_dir / "rigged" / "rigged.blend" if args.prepare_copy else None
+    if prepared_blend is not None and prepared_blend.resolve() == source:
+        raise ValueError("Prepared copy must not overwrite original .blend")
     targets = (asset_dir / "rigged" / "rig_info.json",
                asset_dir / "creature.json",
                asset_dir / "rigged" / "rig_import_report.json")
-    if not args.overwrite and any(p.exists() for p in targets):
+    all_outputs = targets + ((prepared_blend,) if prepared_blend else ())
+    if not args.overwrite and any(p.exists() for p in all_outputs):
         raise FileExistsError("Existing output metadata; back up then use --overwrite: " +
-                              ", ".join(str(p) for p in targets if p.exists()))
+                              ", ".join(str(p) for p in all_outputs if p.exists()))
 
     import bpy
     from mathutils import Matrix, Vector
@@ -221,11 +322,22 @@ def main(argv=None):
     if not meshes:
         raise ValueError("No Mesh with an Armature modifier bound to selected rig")
     identity = Matrix.Identity(4)
-    if max(abs(arm.matrix_world[i][j] - identity[i][j])
-           for i in range(4) for j in range(4)) > 1e-4:
-        raise ValueError("Armature Object transform is not identity; normalize a COPY")
-    if abs(bpy.context.scene.unit_settings.scale_length - 1.0) > 1e-5:
-        raise ValueError("Scene unit is not 1 metre/unit; normalize a COPY")
+    normalization_audit = None
+    if args.prepare_copy:
+        normalization_audit = prepare_copy_in_memory(bpy, arm, meshes)
+        prepared_blend.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        if max(abs(arm.matrix_world[i][j] - identity[i][j])
+               for i in range(4) for j in range(4)) > 1e-4:
+            matrix = [[round(float(x), 7) for x in row] for row in arm.matrix_world]
+            raise ValueError(
+                "Armature Object transform is not identity: %s. "
+                "This is common for FBX and does not mean Skin Weights are bad. "
+                "Do NOT Apply Transform to the original asset. "
+                "Rerun with --prepare-copy for a separate normalized blend." % matrix
+            )
+        if abs(bpy.context.scene.unit_settings.scale_length - 1.0) > 1e-5:
+            raise ValueError("Scene units not metres; rerun with --prepare-copy")
 
     bounds = [[float(v) for v in (o.matrix_world @ Vector(corner))]
               for o in meshes for corner in o.bound_box]
@@ -270,6 +382,8 @@ def main(argv=None):
     report = {
         "status": "draft_needs_review",
         "source_blend": str(source),
+        "prepared_blend": str(prepared_blend) if prepared_blend else None,
+        "normalization_audit": normalization_audit,
         "creature": name,
         "armature": arm.name,
         "mesh_names": [m.name for m in meshes],
@@ -283,7 +397,12 @@ def main(argv=None):
         ),
         "warnings": warnings,
     }
-    # Only JSON files are written; original .blend remains unchanged.
+    # Saving is opt-in and ALWAYS to a different path.
+    if prepared_blend is not None:
+        bpy.ops.wm.save_as_mainfile(filepath=str(prepared_blend))
+        if not prepared_blend.is_file():
+            raise RuntimeError("Blender did not create prepared copy: " + str(prepared_blend))
+        print("created prepared .blend:", prepared_blend)
     for path, payload in zip(targets, (info, creature, report)):
         atomic_json(path, payload)
         print("created:", path)
