@@ -20,7 +20,8 @@ STD = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
 
 
 class JointReader(nn.Module):
-    def __init__(self, n_joints, backbone=BACKBONE, input_size=SIZE, heatmap_size=HM):
+    def __init__(self, n_joints, backbone=BACKBONE, input_size=SIZE,
+                 heatmap_size=HM, quality_head=False):
         super().__init__()
         self.spec = ReaderSpec(input_size, heatmap_size)
         self.input_size = self.spec.input_size
@@ -36,8 +37,15 @@ class JointReader(nn.Module):
         self.up1 = block(256, 128)
         self.up2 = block(128, 128)
         self.out = nn.Conv2d(128, n_joints, 1)
+        # Quality maps are deliberately optional. Legacy and 672x672 Reader
+        # state_dict keys remain unchanged when quality_head=False.
+        # For each joint: synthetic cutout visibility logit and logarithmic
+        # expected heatmap localization error (NOT calibrated visibility).
+        self.quality_head = bool(quality_head)
+        if self.quality_head:
+            self.quality_out = nn.Conv2d(128, 2*n_joints, 1)
 
-    def forward(self, x):
+    def forward(self, x, return_quality=False):
         b = x.shape[0]
         if tuple(x.shape[-2:]) != (self.input_size, self.input_size):
             raise ValueError(f"reader expects {self.input_size}x{self.input_size}, got {tuple(x.shape[-2:])}")
@@ -52,7 +60,36 @@ class JointReader(nn.Module):
         f = self.neck(f)
         f = self.up1(F.interpolate(f, scale_factor=2, mode="bilinear", align_corners=False))
         f = self.up2(F.interpolate(f, size=(self.heatmap_size, self.heatmap_size), mode="bilinear", align_corners=False))
-        return self.out(f)
+        heatmap = self.out(f)
+        if return_quality:
+            if not self.quality_head:
+                raise ValueError("checkpoint has no trained quality head")
+            return heatmap, self.quality_out(f)
+        return heatmap
+
+
+def quality_at(quality_maps, uv):
+    """Sample per-joint visibility and log-error at heatmap-space (u,v).
+
+    quality_maps (B,2*J,H,W), uv (B,J,2). Optional predictions are kept
+    separate from raw Reader peak values, which are not probabilities.
+    """
+    b, channels, h, w = quality_maps.shape
+    if channels % 2 or uv.shape != (b, channels//2, 2):
+        raise ValueError("quality map/UV shapes incompatible")
+    j = channels//2
+    # DINO output stacks visibility logits [0:J] and log-error [J:2J].
+    # grid_sample is differentiable with respect to quality map values.
+    points = uv.detach().clone()
+    points[..., 0] = points[..., 0]*2/max(w-1, 1)-1
+    points[..., 1] = points[..., 1]*2/max(h-1, 1)-1
+    selected = F.grid_sample(
+        quality_maps, points.reshape(b, j, 1, 2),
+        mode="bilinear", padding_mode="border", align_corners=True
+    )[..., 0]  # (B,2J,J)
+    idx = torch.arange(j, device=quality_maps.device)
+    return (selected[:, idx, idx],
+            selected[:, j+idx, idx])
 
 
 def square(img, fill):

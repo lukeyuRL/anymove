@@ -32,7 +32,7 @@ def fuse_tracks(raw_uv, raw_peak, flow_next, flow_valid, fb_error,
     valid = np.asarray(flow_valid, dtype=bool)
     err = np.asarray(fb_error, dtype=np.float64)
     if (uv.ndim != 3 or uv.shape[-1] != 2 or uv.shape[0] < 2
-            or next_uv.shape != uv or peaks.shape != uv.shape[:2]
+            or next_uv.shape != uv.shape or peaks.shape != uv.shape[:2]
             or valid.shape != peaks.shape or err.shape != peaks.shape
             or not all(np.isfinite(v).all() for v in (uv, peaks, next_uv, err))
             or not (view_width > 0 and view_height > 0)):

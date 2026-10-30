@@ -15,4 +15,13 @@ fi
 if [ "${MOCAP_FREEZE_BACKBONE:-0}" = "1" ]; then
   extras+=(--freeze-backbone)
 fi
-"$PY" -m mocap.train "$data" "assets/$1/rigged/rig_info.json" "$out" "$epochs" "$batch" --input-size "$size" --heatmap-size "$heatmap" --workers "$workers" "${extras[@]}" 2>&1 | tee "runs/$1/train_hr.log"
+if [ "${MOCAP_TRAIN_QUALITY:-0}" = "1" ]; then
+  extras+=(--train-quality)
+  # Preserve old trained checkpoints. An explicit new path is required for
+  # a new quality head, unless this is the default output.
+  if [ "${7:-}" = "" ]; then out="runs/$1/reader_hr_quality.pt"; fi
+  if [ "$out" = "runs/$1/reader_hr.pt" ] || [ "$out" = "runs/$1/reader.pt" ]; then
+    echo "quality model requires a distinct checkpoint filename" >&2; exit 2
+  fi
+fi
+"$PY" -m mocap.train "$data" "assets/$1/rigged/rig_info.json" "$out" "$epochs" "$batch" --input-size "$size" --heatmap-size "$heatmap" --workers "$workers" "${extras[@]}" 2>&1 | tee "runs/$1/train_${MOCAP_TRAIN_QUALITY:-hr}.log"

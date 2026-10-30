@@ -14,7 +14,8 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 
 from mocap import layout
-from mocap.model import JointReader, decode
+from mocap.model import JointReader, decode, quality_at
+from mocap.quality_targets import synthetic_cutout, PROFILE as QUALITY_TARGET_PROFILE
 from mocap.reader_config import HIGH_RES_INPUT_SIZE, HIGH_RES_HEATMAP_SIZE, ReaderSpec
 from mocap.reader_geometry import Letterbox
 from mocap.reader_schedule import accumulation_group_size, optimizer_step_count
@@ -56,8 +57,10 @@ def photometric(img, rng):
 
 
 class Views(Dataset):
-    def __init__(self, metas, train, input_size=HIGH_RES_INPUT_SIZE):
+    def __init__(self, metas, train, input_size=HIGH_RES_INPUT_SIZE,
+                 quality_targets=False):
         self.metas, self.train, self.input_size = metas, train, input_size
+        self.quality_targets = quality_targets
 
     def __len__(self):
         return 2 * len(self.metas)
@@ -107,8 +110,18 @@ class Views(Dataset):
         kp = kp @ A[:, :2].T + A[:, 2]
         if self.train:
             out = photometric(out, rng)
+        visible = None
+        if self.quality_targets:
+            if self.train:
+                out, visible = synthetic_cutout(out, kp, rng)
+            else:
+                visible = np.ones(len(kp), dtype=np.float32)
         x = torch.from_numpy(np.ascontiguousarray(out)).permute(2, 0, 1).float() / 255
-        return x, torch.from_numpy(kp.astype(np.float32)), torch.tensor([ox, oy, side, s], dtype=torch.float32)
+        record = (x, torch.from_numpy(kp.astype(np.float32)),
+                  torch.tensor([ox, oy, side, s], dtype=torch.float32))
+        if self.quality_targets:
+            return record + (torch.from_numpy(visible),)
+        return record
 
 
 def heatmaps(kp, input_size, hm_size, sigma=2.0):
@@ -137,6 +150,8 @@ def main():
                         help="trade compute for lower DINOv2 activation memory")
     parser.add_argument("--freeze-backbone", action="store_true",
                         help="fallback: train only the heatmap head; may reduce accuracy")
+    parser.add_argument("--train-quality", action="store_true",
+                        help="new checkpoint with supervised synthetic cutout / localization error quality maps")
     args = parser.parse_args()
     spec = ReaderSpec(args.input_size, args.heatmap_size)
     if args.epochs < 1 or args.batch < 1 or args.workers < 0 or args.grad_accum < 1:
@@ -170,10 +185,12 @@ def main():
     print(f"{len(train)} train / {len(val)} val poses; {len(names)} joints; "
           f"render scale {next(iter(scales))}; blur profile {next(iter(profiles))}; "
           f"reader {spec.input_size}/{spec.heatmap_size}", flush=True)
-    vl = DataLoader(Views(val, False, spec.input_size),
+    vl = DataLoader(Views(val, False, spec.input_size,
+                          quality_targets=args.train_quality),
                     batch_size=args.batch, num_workers=args.workers, pin_memory=True)
     model = JointReader(len(names), input_size=spec.input_size,
-                        heatmap_size=spec.heatmap_size).cuda()
+                        heatmap_size=spec.heatmap_size,
+                        quality_head=args.train_quality).cuda()
     # Prefer memory-efficient PyTorch scaled dot-product attention.
     model.backbone.set_attn_implementation("sdpa")
     if args.freeze_backbone:
@@ -197,7 +214,9 @@ def main():
     step, t0, warm = 0, time.time(), 300
     for ep in range(args.epochs):
         train, _ = split()
-        dl = DataLoader(Views(train, True, spec.input_size), batch_size=args.batch,
+        dl = DataLoader(Views(train, True, spec.input_size,
+                              quality_targets=args.train_quality),
+                        batch_size=args.batch,
                         shuffle=True, num_workers=args.workers, pin_memory=True)
         if not len(dl):
             raise RuntimeError("empty training DataLoader")
@@ -208,15 +227,52 @@ def main():
             model.backbone.eval()
         opt.zero_grad(set_to_none=True)
         torch.cuda.reset_peak_memory_stats()
-        for bi_, (x, kp, _) in enumerate(dl):
+        for bi_, sample in enumerate(dl):
+            if args.train_quality:
+                x, kp, _, visible = sample
+            else:
+                x, kp, _ = sample
+                visible = None
             progress = (ep + (bi_ // args.grad_accum) / n_updates) / args.epochs
             f = 0.5 * (1 + math.cos(math.pi * progress)) * min(1, (step + 1) / warm)
             for g, b0 in zip(opt.param_groups, base):
                 g["lr"] = b0 * f
             x, kp = x.cuda(non_blocking=True), kp.cuda(non_blocking=True)
+            if visible is not None:
+                visible = visible.cuda(non_blocking=True)
             with torch.autocast("cuda", dtype=amp_dtype):
-                pred = model(x)
+                if args.train_quality:
+                    pred, quality = model(x, return_quality=True)
+                else:
+                    pred = model(x)
             loss = F.mse_loss(pred.float(), heatmaps(kp, spec.input_size, spec.heatmap_size)) * 1000
+            if args.train_quality:
+                kp_hm = kp * spec.heatmap_size / spec.input_size
+                vis_logits, log_error = quality_at(quality.float(), kp_hm)
+                # This is *synthetic patch visibility*, not ground truth
+                # self-occlusion. Negative labels are upweighted due to rarity.
+                # Rendered joints may project beyond the crop. Such
+                # targets cannot provide a valid visibility or pixel-error
+                # supervision signal in the Reader's input frame.
+                in_frame = ((kp_hm[..., 0] >= 0) &
+                            (kp_hm[..., 0] < spec.heatmap_size) &
+                            (kp_hm[..., 1] >= 0) &
+                            (kp_hm[..., 1] < spec.heatmap_size)).float()
+                vis_loss = F.binary_cross_entropy_with_logits(
+                    vis_logits, visible, reduction="none")
+                vis_loss = (vis_loss * torch.where(
+                    visible < .5, 3.0, 1.0) * in_frame).sum() / in_frame.sum().clamp(min=1)
+                with torch.no_grad():
+                    predicted_uv, _ = decode(pred.float().detach())
+                    residual = (predicted_uv-kp_hm).norm(dim=-1)
+                    log_target = torch.log1p(residual.clamp(max=128.0))
+                # The residual target is a training error proxy, not a
+                # confidence calibration. Do not use this prediction as a
+                # solver weight until validation against known 2D labels.
+                sigma_loss = (F.smooth_l1_loss(
+                    log_error.clamp(-1.0, 6.0), log_target,
+                    reduction="none") * in_frame).sum() / in_frame.sum().clamp(min=1)
+                loss = loss + .05 * (vis_loss + sigma_loss)
             divisor = accumulation_group_size(bi_, len(dl), args.grad_accum)
             scaler.scale(loss / divisor).backward()
             if (bi_ + 1) % args.grad_accum == 0 or bi_ + 1 == len(dl):
@@ -239,7 +295,8 @@ def main():
         model.eval()
         errs = {"front": [], "side": []}
         with torch.no_grad():
-            for bi, (x, kp, geo) in enumerate(vl):
+            for bi, sample in enumerate(vl):
+                x, kp, geo = sample[:3]
                 with torch.autocast("cuda", dtype=amp_dtype):
                     pred = model(x.cuda(non_blocking=True)).float()
                 uv, _ = decode(pred)
@@ -252,7 +309,14 @@ def main():
         msg = {v: float(np.mean(errs[v])) for v in errs}
         print(f"epoch {ep} val mean px error (layout pixels) front {msg['front']:.2f} side {msg['side']:.2f}", flush=True)
         torch.save({"state_dict": model.state_dict(), "names": names, "epoch": ep,
-                    "val": msg, "reader_spec": spec.checkpoint_metadata(),
+                    "val": msg,
+                    "reader_spec": dict(spec.checkpoint_metadata(),
+                                        quality_head=bool(args.train_quality)),
+                    "quality_spec": ({"version": 1,
+                                      "target": QUALITY_TARGET_PROFILE,
+                                      "error_unit": "heatmap_pixels",
+                                      "visibility_semantics": "synthetic_cutout_only"}
+                                     if args.train_quality else None),
                     "train_setup": {"batch": args.batch, "grad_accum": args.grad_accum,
                                     "gradient_checkpointing": args.gradient_checkpointing,
                                     "freeze_backbone": args.freeze_backbone,

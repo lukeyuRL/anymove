@@ -90,3 +90,58 @@ motion sequences.
 
 All experiments are opt-in until same-clip A/B and known-ground-truth
 motion comparisons demonstrate quality gains.
+
+
+### P2 implementation: experimental learned Reader quality head
+
+A **new, opt-in checkpoint type** adds two per-joint prediction maps to the
+DINOv2 Reader: a synthetic-cutout visibility logit and a log predicted
+localization-error scale. Existing 448 and 672 readers load with the exact
+original state_dict and are *not* modified.
+
+The training augmentation masks random rectangles near labeled 2D joints,
+and supplies supervised binary labels based on which keypoints that patch
+covers. Localization-error supervision comes from the Reader's detached
+actual 2D heatmap decode residual against the synthetic ground-truth
+coordinates. This *is* a learnable head, but is deliberately **NOT**
+called real Blender mesh self-occlusion visibility, Bayesian uncertainty or
+a calibrated probability. Real self-occlusion needs depth/surface-part
+annotation and held-out measurement later.
+
+Train a separate experimental quality Reader on the **existing** Dragon
+high-res dataset (the train script injects its own synthetic occlusion):
+
+```bash
+git pull --ff-only
+export PYTHON=python.exe
+MOCAP_TRAIN_QUALITY=1 bash tools/train.sh dragon \
+  20 2 672 192 runs/dragon/dataset_hr \
+  runs/dragon/reader_hr_quality.pt 0
+```
+
+An RTX 3070 8GB can be checked with batch 2 as in the earlier reader
+experiment. No VRAM estimate or live throughput is claimed for this new
+head until it runs on the user's GPU.
+
+Use `mocap.detect` with this checkpoint in a separate output NPZ. It
+automatically discovers `quality_spec.version=1` in the checkpoint.
+Extra optional outputs include
+`front_synthetic_visibility_score` / `side_synthetic_visibility_score`
+and `front_expected_error_px` / `side_expected_error_px`. Those scores
+are **not** passed into the current Solver weights, and the old required
+`front_uv`, `side_uv`, `front_conf`, `side_conf` remain unchanged.
+
+```bash
+export MOCAP_CREATURE=assets/dragon
+python.exe -m mocap.detect \
+  F:/anymove_test/dragon/01_clip/capture_dragon_ai_prompt_001/generated/h3max.mp4 \
+  runs/dragon/reader_hr_quality.pt runs/dragon/ref/ref.png \
+  runs/dragon/clips/hr_roar/det_quality.npz \
+  runs/dragon/clips/hr_roar/overlay_quality.mp4
+```
+
+Do NOT treat `synthetic_visibility_score` as calibrated occlusion
+probability. To promote this experiment, measure true known-mask AUC,
+held-out pixel-error calibration (e.g. expected-vs-actual error bins),
+and same-clip 3D foot motion with independent Ground Truth. A separate
+Blender body-part visibility mask is still an open item.

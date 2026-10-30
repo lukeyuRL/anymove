@@ -14,7 +14,7 @@ import numpy as np
 import torch
 
 from mocap import layout
-from mocap.model import JointReader, decode
+from mocap.model import JointReader, decode, quality_at
 from mocap.reader_config import LEGACY_INPUT_SIZE, spec_from_checkpoint
 from mocap.reader_geometry import Letterbox
 
@@ -61,7 +61,7 @@ def prep(view, size=LEGACY_INPUT_SIZE):
 
 
 @torch.no_grad()
-def run(model, views, bs=None):
+def run(model, views, bs=None, with_quality=False):
     size, hm_size = model.input_size, model.heatmap_size
     if bs is None:
         bs = int(os.environ.get("MOCAP_DETECT_BATCH", 1 if size > 448 else 32))
@@ -69,25 +69,49 @@ def run(model, views, bs=None):
         raise ValueError("MOCAP_DETECT_BATCH must be positive")
     device = next(model.parameters()).device
     uv_all, conf_all = [], []
+    visibility_all, expected_error_all = [], []
     for i in range(0, len(views), bs):
         batch = [prep(v, size) for v in views[i:i + bs]]
         x = torch.from_numpy(np.stack([b[0] for b in batch])).permute(0, 3, 1, 2).float().to(device) / 255
         context = torch.autocast("cuda", dtype=torch.bfloat16) if device.type == "cuda" else nullcontext()
         with context:
-            pred = model(x).float()
-        uv, conf = decode(pred)
-        uv = uv.cpu().numpy() * size / hm_size
-        for (_, geo), u in zip(batch, uv):
+            if with_quality:
+                pred, quality_map = model(x, return_quality=True)
+                pred, quality_map = pred.float(), quality_map.float()
+            else:
+                pred = model(x).float()
+        uv_hm, conf = decode(pred)
+        if with_quality:
+            vis_logit, log_error = quality_at(quality_map, uv_hm)
+            vis = torch.sigmoid(vis_logit).cpu().numpy()
+            error_hm = torch.expm1(log_error.clamp(0, 6)).cpu().numpy()
+        uv = uv_hm.cpu().numpy() * size / hm_size
+        for index, ((_, geo), u) in enumerate(zip(batch, uv)):
             uv_all.append(u * geo.side / size - np.array([geo.ox, geo.oy]))
+            if with_quality:
+                visibility_all.append(vis[index])
+                # The head predicts an uncalibrated localization residual
+                # in heatmap pixels. Undo geometry back to view layout pixels.
+                expected_error_all.append(error_hm[index] * geo.side / hm_size)
         conf_all.append(conf.cpu().numpy())
+    if with_quality:
+        return (np.array(uv_all), np.concatenate(conf_all),
+                np.array(visibility_all), np.array(expected_error_all))
     return np.array(uv_all), np.concatenate(conf_all)
 
 
 def load(model_path):
     ck = torch.load(model_path, map_location="cpu", weights_only=True)
     spec = spec_from_checkpoint(ck)
+    raw_quality = ck.get("quality_spec")
+    uses_quality = isinstance(raw_quality, dict) and raw_quality.get("version") == 1
+    if raw_quality is not None and not uses_quality:
+        raise ValueError("unsupported quality_spec checkpoint")
+    if bool((ck.get("reader_spec") or {}).get("quality_head", False)) != uses_quality:
+        raise ValueError("reader_spec quality_head mismatch")
     model = JointReader(len(ck["names"]), input_size=spec.input_size,
-                        heatmap_size=spec.heatmap_size).cuda().eval()
+                        heatmap_size=spec.heatmap_size,
+                        quality_head=uses_quality).cuda().eval()
     model.load_state_dict(ck["state_dict"])
     print(f"loaded reader {spec.input_size}x{spec.input_size} / heatmap {spec.heatmap_size}", flush=True)
     return model, ck["names"]
@@ -118,9 +142,25 @@ def main():
     print("calibration (video px -> layout px):", A.round(4).tolist())
     frames = np.array([cv2.warpAffine(f, A, (layout.W, layout.H), flags=cv2.INTER_AREA) for f in frames])
     model, names = load(model_path)
-    fuv, fconf = run(model, [f[:, :layout.W_FRONT] for f in frames])
-    suv, sconf = run(model, [f[:, layout.W_FRONT:] for f in frames])
-    np.savez(out, front_uv=fuv, side_uv=suv, front_conf=fconf, side_conf=sconf, fps=fps, names=np.array(names), calib=A)
+    front_result = run(model, [f[:, :layout.W_FRONT] for f in frames],
+                       with_quality=model.quality_head)
+    side_result = run(model, [f[:, layout.W_FRONT:] for f in frames],
+                      with_quality=model.quality_head)
+    fuv, fconf = front_result[:2]
+    suv, sconf = side_result[:2]
+    data = dict(front_uv=fuv, side_uv=suv, front_conf=fconf,
+                side_conf=sconf, fps=fps, names=np.array(names), calib=A)
+    if model.quality_head:
+        data.update({
+            "front_synthetic_visibility_score": front_result[2],
+            "side_synthetic_visibility_score": side_result[2],
+            "front_expected_error_px": front_result[3],
+            "side_expected_error_px": side_result[3],
+        })
+        print("optional synthetic-cutout quality head present; scores are "
+              "NOT calibrated real occlusion probabilities or validated "
+              "solver confidence weights", flush=True)
+    np.savez(out, **data)
     print(f"{len(frames)} frames at {fps:.2f} fps; raw heatmap peak means "
           f"front {fconf.mean():.2f} side {sconf.mean():.2f}; "
           f"ranges front [{fconf.min():.3g},{fconf.max():.3g}] "
