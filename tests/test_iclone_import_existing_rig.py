@@ -80,5 +80,29 @@ class ExistingRigImportTests(unittest.TestCase):
             build_rig_info(changed, camera_layout(self.bounds))
 
 
+    def test_uniform_Armature_rotation_and_scale(self):
+        from tools.import_existing_rig import ensure_similarity
+        matrix = [[0, -2, 0, 5],
+                  [2, 0, 0, 1],
+                  [0, 0, 2, 7],
+                  [0, 0, 0, 1]]
+        self.assertAlmostEqual(ensure_similarity(matrix, "Armature"), 2.0)
+
+    def test_reject_unsafe_nonuniform_or_reflected_Armature(self):
+        from tools.import_existing_rig import ensure_similarity
+        matrices = [
+            [[2, 0, 0, 0], [0, 1, 0, 0],
+             [0, 0, 1, 0], [0, 0, 0, 1]],
+            [[-1, 0, 0, 0], [0, 1, 0, 0],
+             [0, 0, 1, 0], [0, 0, 0, 1]],
+            [[1, .1, 0, 0], [0, 1, 0, 0],
+             [0, 0, 1, 0], [0, 0, 0, 1]],
+        ]
+        for matrix in matrices:
+            with self.subTest(matrix=matrix), self.assertRaises(ValueError):
+                ensure_similarity(matrix, "Armature")
+
+
+
 if __name__ == "__main__":
     unittest.main()
