@@ -52,7 +52,7 @@ letterboxed and sampled to 672x672.
 ## Train and compare like for like
 
 ```bash
-# New high-res reader, recommended initial GPU batch 8:
+# High-res reader on a GPU with enough VRAM:
 tools/train.sh dragon 20 8 672 192
 
 # A/B baseline on the SAME high-res synthetic poses, different output:
@@ -63,10 +63,67 @@ python -m unittest discover -s tests -p 'test_iclone_*.py' -v
 python -m compileall -q mocap blender tools iclone_adapter tests
 ```
 
-Use `--workers 0` in `python -m mocap.train` if Windows process spawning or
-RAM is problematic. Reduce batch from 8 to 4 or 2 if the 672-input training
-runs out of CUDA memory; actual throughput and VRAM have NOT been benchmarked
-here. Run Blender rendering before GPU training or limit concurrent renders.
+### RTX 3070 8GB / Windows Git Bash procedure
+
+The default batch 8 is inappropriate for 8GB VRAM. Use a **physical batch of
+1** with gradient accumulation 8 and DINOv2 gradient checkpointing. The latter
+trades additional compute for lower activation memory. The trainer forces
+`sdpa` attention when supported, selects BF16 on compatible CUDA hardware,
+or otherwise uses FP16 with GradScaler. Gradient accumulation is normalized
+for the last short group, and the log prints allocated peak GPU memory every
+50 optimizer updates. A physical batch 1 with gradient accumulation 8 has
+approximately the same effective batch as 8, but is not bitwise identical.
+
+If using Windows Git Bash, first set the Python and Blender paths to the
+executables installed on your own computer. The checked-in shell helper
+recognizes `PYTHON` and `BLENDER` environment variables. The project
+requires `assets/dragon/rigged/rigged.blend`; it is not tracked in Git.
+
+```bash
+# In Git Bash from the checked-out iClone_High_Res repo:
+export PYTHON="$(pwd)/.venv/Scripts/python.exe"
+# Export BLENDER only if blender is not already on PATH:
+# export BLENDER="/c/Program Files/Blender Foundation/<your-version>/blender.exe"
+"$PYTHON" -c "import torch; print(torch.__version__, torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'NO CUDA')"
+
+# 30 sample smoke dataset. Blender must finish and close before training.
+bash tools/dataset.sh dragon 30 1 500 1.0 runs/dragon/dataset_hr_smoke
+
+# 1 epoch smoke check, checkpointing+accumulation enabled:
+MOCAP_LOW_VRAM=1 bash tools/train.sh dragon 1 1 672 192 \
+    runs/dragon/dataset_hr_smoke runs/dragon/reader_hr_smoke.pt 0
+
+# Full dataset; do not reuse the smoke dataset output:
+bash tools/dataset.sh dragon 2200 1 500 1.0
+
+# 20-epoch complete train, with independent reader_hr.pt:
+MOCAP_LOW_VRAM=1 bash tools/train.sh dragon 20 1 672 192 \
+    runs/dragon/dataset_hr runs/dragon/reader_hr.pt 0
+```
+
+If the first 672 sample fails with `CUDA out of memory`, use the same
+full-resolution source dataset with one of these progressively smaller
+readers, each saved to its own checkpoint filename:
+
+```bash
+MOCAP_LOW_VRAM=1 bash tools/train.sh dragon 20 1 560 160 \
+    runs/dragon/dataset_hr runs/dragon/reader_560.pt 0
+MOCAP_LOW_VRAM=1 bash tools/train.sh dragon 20 1 448 128 \
+    runs/dragon/dataset_hr runs/dragon/reader_448_fulldataset.pt 0
+```
+
+As a fallback only, `MOCAP_FREEZE_BACKBONE=1` freezes DINOv2 and trains
+the heatmap head, reducing training memory substantially, but this changes
+the learning problem and may reduce accuracy. It requires its own validation.
+
+Do not confuse CPU RAM with GPU VRAM. `--workers 0` reduces Windows
+DataLoader process overhead, not DINOv2 activation VRAM. CUDA OOM with
+batch 1 after checkpointing requires lower resolution, freezing the
+backbone, or a GPU with more VRAM. For inference at input >448, the default
+`MOCAP_DETECT_BATCH` is 1 (set the environment variable to a higher value
+only if there is sufficient VRAM). No measured RTX 3070 throughput or
+memory result is implied by this source change.
+
 Source image resolution alone does not improve correctness without new training.
 
 The 4% held-out pose split is the same index-modulo-25 scheme as before.

@@ -6,6 +6,7 @@ from mocap.reader_config import (
     HIGH_RES_INPUT_SIZE, HIGH_RES_HEATMAP_SIZE, spec_from_checkpoint,
 )
 from mocap.reader_geometry import Letterbox
+from mocap.reader_schedule import accumulation_group_size, optimizer_step_count
 
 
 class ReaderMetadataTests(unittest.TestCase):
@@ -74,6 +75,27 @@ class LetterboxCoordinateTests(unittest.TestCase):
         for scale in (0, -0.6, float("nan"), float("inf")):
             with self.assertRaises(ValueError):
                 geo.to_layout(1, 2, scale)
+
+
+class LowVRAMScheduleTests(unittest.TestCase):
+    def test_optimizer_step_count(self):
+        self.assertEqual(optimizer_step_count(4224, 8), 528)
+        self.assertEqual(optimizer_step_count(11, 8), 2)
+        self.assertEqual(optimizer_step_count(1, 8), 1)
+
+    def test_last_partial_group_is_scaled_correctly(self):
+        self.assertEqual([accumulation_group_size(i, 11, 8) for i in range(11)],
+                         [8] * 8 + [3] * 3)
+        self.assertEqual([accumulation_group_size(i, 5, 8) for i in range(5)],
+                         [5] * 5)
+
+    def test_invalid_steps_fail_closed(self):
+        for bad in (0, -1, True):
+            with self.assertRaises(ValueError):
+                optimizer_step_count(20, bad)
+        for index in (-1, 4):
+            with self.assertRaises(ValueError):
+                accumulation_group_size(index, 4, 2)
 
 
 if __name__ == "__main__":

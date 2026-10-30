@@ -37,7 +37,10 @@ tools/train.sh <c> 20 8 672 192   # runs/<c>/reader_hr.pt; held-out error in lay
 ```
 
 The high-res checkpoint is new and does **not** overwrite the original `reader.pt`.
-The training batch defaults to 8 because ViT self-attention grows with resolution.
+The training batch defaults to 8 for GPUs with more memory. For 8GB GPUs,
+set `MOCAP_LOW_VRAM=1` and pass batch `1` / workers `0` to `tools/train.sh`.
+This activates gradient accumulation of 8 and gradient checkpointing; see
+`docs/HIGH_RES.md` for the exact Dragon smoke and full-run commands.
 The old `reader.pt` is still supported by `mocap.detect` at 448/128.
 Timing/memory from old 448 training must not be assumed to hold for 672.
 
