@@ -23,9 +23,16 @@ $PY -m mocap.detect "$video" "$reader" "runs/$c/ref/ref.png" "$out/det.npz" "$ou
 # The visibility-aware solver is experimental and stays disabled by default.
 # Use a NEW capture name when comparing, to preserve existing motion.json.
 solver_flags=()
+if [ "${MOCAP_SOLVER_VISIBILITY:-0}" = "1" ] && [ "${MOCAP_TEMPORAL_ASSOCIATION:-0}" = "1" ]; then
+  echo "Choose either visibility weighting or temporal association, not both" >&2; exit 2
+fi
 if [ "${MOCAP_SOLVER_VISIBILITY:-0}" = "1" ]; then
-  [ "$c" = "dragon" ] || { echo "visibility solver experiment supports Dragon only" >&2; exit 2; }
+  [ "$c" = "dragon" ] || { echo "visibility experiment supports Dragon only" >&2; exit 2; }
   solver_flags+=(--visibility-aware)
+fi
+if [ "${MOCAP_TEMPORAL_ASSOCIATION:-0}" = "1" ]; then
+  [ "$c" = "dragon" ] || { echo "temporal association supports Dragon only" >&2; exit 2; }
+  solver_flags+=(--temporal-association)
 fi
 $PY -m mocap.solve "$out/det.npz" "$rig/rig_info.json" "$out/motion.json" "${solver_flags[@]}" | grep -v "iter"
 $BLENDER -b -P blender/apply_motion.py -- "$rig/rigged.blend" "$rig/rig_info.json" "$out/motion.json" "$out/render" \

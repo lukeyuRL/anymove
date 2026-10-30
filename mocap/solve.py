@@ -1,8 +1,9 @@
 """Fit the rig to the joints read from both views: one pose per frame, smooth over time, inside the joint limits.
 
-python -m mocap.solve DETECTIONS.npz rig_info.json OUT.json [--visibility-aware]
-Experimental --visibility-aware is Dragon-only and opt-in, and lowers
-front hind-leg weights only when a 2D conflict suggests possible occlusion.
+python -m mocap.solve DETECTIONS.npz rig_info.json OUT.json [--temporal-association]
+Experimental --temporal-association is Dragon-only and opt-in. It uses a
+two-state Viterbi sequence model to reassign L/R side-view *whole hind chains*
+before fitting. Experimental --visibility-aware is a separate opt-in study.
 Before fitting, the side view's left and right legs are checked against the front view: a joint has the same height
 in both halves, so if swapping a pair of legs in the side view makes the heights agree better, the side reader
 mixed up the near and far leg and they are swapped back. The same height test gives the sync score: how far apart
@@ -400,6 +401,11 @@ def to_quat(Rm):
 
 def main():
     det_path, info_path, out = sys.argv[1:4]
+    temporal_mode = "--temporal-association" in sys.argv
+    # The old per-frame swap and experimental weighting have different
+    # assumptions. Do not stack effects without independent QA.
+    if temporal_mode and any(x in sys.argv for x in ("--fix-swaps", "--visibility-aware")):
+        raise ValueError("--temporal-association cannot be combined with --fix-swaps or --visibility-aware")
     raw = np.load(det_path)
     d = {k: raw[k].copy() for k in ("front_uv", "side_uv", "front_conf", "side_conf")}
     # The reader decodes raw (unbounded) linear heatmap peaks. Weights for
@@ -435,8 +441,28 @@ def main():
                   f"largest {np.abs(shift).max():.1f} frames (height gap down {gain:.0%})")
         else:
             print(f"views already in step (re-timing would only cut the height gap by {gain:.0%}); left as generated")
-    # painted legs make the reader's left/right labels trustworthy, so swaps are only fixed on request
+    # Painted limbs make labels *usually* reliable; do not force corrections
+    # by default. Temporal mode is exclusive with per-frame swaps.
     swapped = fix_swaps(d, names) if "--fix-swaps" in sys.argv else {}
+    association_audit = None
+    if temporal_mode:
+        if (active_layout.get("creature") != "dragon"
+                or active_layout.get("status") != "camera_layout_verified_for_rig"):
+            raise RuntimeError("--temporal-association requires verified Dragon camera layout")
+        from mocap.temporal_association import temporal_hind_association
+        aligned_paws_before = paw_agreement(d, names)
+        d, association_audit = temporal_hind_association(d, names)
+        association_audit["aligned_paw_agreement_before"] = aligned_paws_before
+        association_audit["aligned_paw_agreement_after"] = paw_agreement(d, names)
+        association_audit["raw_input_paw_agreement"] = paws
+        print("Temporal association:", association_audit["profile"],
+              "swapped frames", association_audit["accepted_swapped_frames"],
+              "segments", association_audit["accepted_segments"], flush=True)
+        print("Hind root-relative height MAE (px):",
+              association_audit["before_relative_hind_height_mae_px"], "->",
+              association_audit["after_relative_hind_height_mae_px"], flush=True)
+        print("Paw agreement remains from original detections for iClone QA",
+              flush=True)
     sync = sync_report(d)
     print("side-view leg swaps fixed (frames):", swapped)
     print(f"sync after: mean height gap {sync['mean_height_gap_px']:.1f} px, worst {sync['worst_frame_gap_px']:.1f} px")
@@ -475,8 +501,7 @@ def main():
     json.dump(motion, open(out, "w"))
     print("saved", out)
     if visibility_audit is not None:
-        # Separate sidecar; the existing motion.json/iClone import contract
-        # must stay byte-for-byte identical in keys and data shapes.
+        # Separate sidecar; the existing motion.json/iClone interface is not changed.
         from pathlib import Path
         report_path = Path(out).with_suffix(".visibility.json")
         visibility_audit["source_detections_sha256"] = det_sha.hexdigest()
@@ -484,6 +509,14 @@ def main():
         visibility_audit["motion_file"] = str(out)
         report_path.write_text(json.dumps(visibility_audit, indent=2), encoding="utf-8")
         print("visibility diagnostics:", report_path, flush=True)
+    if association_audit is not None:
+        from pathlib import Path
+        report_path = Path(out).with_suffix(".association.json")
+        association_audit["source_detections_sha256"] = det_sha.hexdigest()
+        association_audit["solver_reprojection_px"] = res["reproj_px"]
+        association_audit["motion_file"] = str(out)
+        report_path.write_text(json.dumps(association_audit, indent=2), encoding="utf-8")
+        print("temporal association diagnostics:", report_path, flush=True)
 
 
 if __name__ == "__main__":
