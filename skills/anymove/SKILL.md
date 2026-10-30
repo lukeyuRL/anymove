@@ -35,7 +35,7 @@ height, and together they pin the joint in 3D. The method is @CanItCode's; the L
    `.venv/bin/pip install -r requirements.txt`. Blender 5.x must be on PATH, or set `BLENDER=/path/to/blender`.
 3. For video generation and LoRA training, put `FAL_KEY=...` in `.env` (git ignores it) or export it. Never print it.
 4. Every command takes a creature name; its config is `assets/<c>/creature.json` and every output lands in
-   `runs/<c>/` (reference frame, dataset, `reader.pt`, videos, clips). The scripts set `MOCAP_CREATURE` for you; when
+   `runs/<c>/` (reference frame, `dataset_hr`, `reader_hr.pt` or legacy `reader.pt`, videos, clips). The scripts set `MOCAP_CREATURE` for you; when
    you run a `python -m mocap...` module by hand, set `MOCAP_CREATURE=assets/<c>` first, or the wolf's layout applies.
 
 ## Which step next
@@ -44,7 +44,7 @@ height, and together they pin the joint in 3D. The method is @CanItCode's; the L
   demon). New creature: anymove-rig.
 - No `assets/<c>/rigged/rigged.blend` or `runs/<c>/ref/ref.png`: `tools/prep.sh <c>` then `tools/rig.sh <c>`
   (anymove-rig).
-- No `runs/<c>/reader.pt`: anymove-reader (about 45 min on one RTX 4090), or `tools/fetch_examples.sh <c> --readers`.
+- No `runs/<c>/reader_hr.pt` or legacy `reader.pt`: anymove-reader (high-res runtime unbenchmarked), or `tools/fetch_examples.sh <c> --readers`.
 - No clip for the move: anymove-film (about $0.26 a 5 s clip).
 - A clip: anymove-capture, `tools/capture.sh <c> <video.mp4> <name>`.
 - Clips keep swapping limb colours or the halves drift apart: anymove-lora.
@@ -64,7 +64,7 @@ It prints the paw agreement (about 0.93) and the reprojection error per view; `m
 ## Costs and time (October 2026, one RTX 4090)
 
 - Tripo H3.1 mesh with HD texture: $0.40. MiniMax H3 Max clip: about $0.26 for 5 s (H3: $0.30).
-- Dataset of 2,200 poses: about 25 min. Reader training: 17-20 min. Reading a clip: 10 s. Fitting: under a minute.
+- Old 448-input dataset generation (0.6x renders) took about 25 min and Reader training 17-20 min. Full-resolution renders / 672 Reader have not been benchmarked; GPU VRAM and wall time must be measured. Reading a clip and fitting may also change.
 - A LoRA: $0.01 a training step, so 1,200 steps cost about $12 and take about 2 h on fal.
 
 Say what a step will cost before calling fal, and confirm with the person before spending on a batch.

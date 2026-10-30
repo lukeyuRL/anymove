@@ -37,8 +37,8 @@ it, every module falls back to the wolf's layout (420 + 860 px, 1.9 m of height 
 | reference frame | `blender/render_ref.py`, `tools/compose_ref.py` | rigged.blend | `runs/<c>/ref/ref.png` |
 | prompt | `tools/make_prompt.py` | creature.json + one action sentence | `prompts/<c>/<move>.txt` |
 | video | `mocap/generate.py` (fal queue client in `mocap/fal.py`) | ref.png + prompt | `runs/<c>/videos/<move>/s<seed>/<model>.mp4` |
-| dataset | `blender/render_dataset.py` | rigged.blend + rig_info.json | `runs/<c>/dataset/<i>_{front,side}.png`, `<i>_meta.json` (true joints in metres and layout px) |
-| reader | `mocap/model.py`, `mocap/train.py` | dataset | `runs/<c>/reader.pt` (state dict, joint names, held-out error) |
+| dataset | `blender/render_dataset.py` | rigged.blend + rig_info.json | `runs/<c>/dataset_hr/<i>_{front,side}.png`, `<i>_meta.json` (true joints in metres and layout px; original dataset remains available) |
+| reader | `mocap/model.py`, `mocap/train.py` | dataset | `runs/<c>/reader_hr.pt` (state dict, joint names, saved reader_spec, held-out error; old reader.pt supported) |
 | read | `mocap/detect.py` | clip + reader + ref.png | `det.npz`: `front_uv`, `side_uv` (T x J x 2, layout px), `front_conf`, `side_conf`, `fps`, `names`, `calib` |
 | fit | `mocap/solve.py` | det.npz + rig_info.json | `motion.json`: `bones`, `trans`, `root_quat`, `euler` (T x B x 3), `joints` (T x J x 3 m), `reproj_px`, `sync` (incl. `paw_agreement`) |
 | apply | `blender/apply_motion.py` | rigged.blend + motion.json | keyframed rig, `joints.json` (true joint positions from Blender), renders, `animation.glb` |

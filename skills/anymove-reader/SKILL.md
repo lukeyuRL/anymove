@@ -2,7 +2,7 @@
 name: anymove-reader
 description: Train the joint reader for one anymove creature - render about 2,200 random poses from both layout cameras with every joint's true position, fine-tune DINOv2 (ViT-B/14 with registers) plus a heatmap head on them, check the held-out error, and optionally run the exam (a made-up motion with known joints, read back and scored in centimetres). Use after anymove-rig and before anymove-capture, when a reader misses or swaps joints on real clips, or when planning GPU time for dataset rendering and training.
 license: Apache-2.0
-compatibility: NVIDIA GPU with CUDA (about 12 GB at batch 20, so a 24 GB card), Blender 5.x, Python 3.11 venv from requirements.txt. Downloads facebook/dinov2-with-registers-base on first use.
+compatibility: NVIDIA GPU with CUDA (672-input memory not yet measured; start batch 8 and lower if OOM), Blender 5.x, Python 3.11 venv from requirements.txt. Downloads facebook/dinov2-with-registers-base on first use.
 ---
 
 # anymove-reader: teach DINOv2 one creature
@@ -26,9 +26,9 @@ blur from a random velocity (video models smear fast limbs); lights, turn (Â±30Â
 airtime are random. Open `runs/<c>/dataset_samples.jpg`: dots must sit on the joints. Interrupted renders resume:
 samples that exist are skipped.
 
-GPU budget on a 24 GB card under WSL: a reader training (about 12 GB) plus more than two Blender Cycles renders fills
-the card and everything stalls. Render first, or train beside at most two renders. Blender uses CUDA (OptiX is
-unreliable under WSL).
+GPU budget: prior 12 GB observation was for 448 input and batch 20, NOT 672 input.
+Render first and train separately to avoid CUDA OOM; measure the 672/batch 8 peak on target hardware.
+Blender uses CUDA (OptiX has been unreliable under WSL).
 
 ## 2. Train at 672x672 input / 192x192 heatmap
 

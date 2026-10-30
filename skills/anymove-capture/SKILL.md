@@ -2,7 +2,7 @@
 name: anymove-capture
 description: Turn a two-camera AI clip into a game-ready animation with anymove - read every joint with the creature's trained reader, check that the two views agree, fit the rig in both views at once, and export a GLB with renders and a side-by-side comparison. Covers the quality gates (paw agreement, reprojection error), what to do when a fit fails, and three-quarter showcase renders. Use when someone has an anymove clip to capture, asks whether a capture is good, wants the GLB or renders of a move, or a fit looks wrong.
 license: Apache-2.0
-compatibility: NVIDIA GPU for reading (a few GB), CPU or GPU for the fit, Blender 5.x for the GLB and renders, Python 3.11 venv from requirements.txt. Needs runs/<c>/reader.pt (anymove-reader) and runs/<c>/ref/ref.png (anymove-rig).
+compatibility: NVIDIA GPU for reading (a few GB), CPU or GPU for the fit, Blender 5.x for the GLB and renders, Python 3.11 venv from requirements.txt. Needs runs/<c>/reader_hr.pt (preferred when present) or reader.pt (legacy fallback) and runs/<c>/ref/ref.png (anymove-rig).
 ---
 
 # anymove-capture: clip in, animation out

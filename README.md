@@ -84,13 +84,16 @@ legs, two arms, wings and a tail), put your mesh at `assets/<name>/model.glb`, a
 tools/prep.sh <name>              # set "prep" in creature.json first: real size, facing -Y
 # place joints in assets/<name>/rig.json on the grid views; check with: tools/rig.sh <name> preview
 tools/rig.sh <name>               # build, skin, paint, reference frame
-tools/dataset.sh <name>           # 2,200 random poses, about 25 min
-tools/train.sh <name>             # the joint reader, about 20 min
+tools/dataset.sh <name>           # 2,200 poses, full-resolution RGBA views -> dataset_hr
+tools/train.sh <name>             # DINOv2 672/192 -> reader_hr.pt (GPU memory/time varies)
 tools/film.sh <name> <move>       # after tools/make_prompt.py writes prompts/<name>/<move>.txt
 tools/capture.sh <name> runs/<name>/videos/<move>/s1/h3max.mp4 <move>
 ```
 
 The skills below walk an agent (or you) through each step, with the checks that tell a good capture from a bad one.
+The `iClone_High_Res` branch defaults to independent `dataset_hr` / `reader_hr.pt` artifacts,
+keeps the two-view video and iClone motion contracts unchanged, and supports legacy `reader.pt`.
+See [High-resolution reader workflow](docs/HIGH_RES.md) before training.
 
 ## agent skills.
 
@@ -132,8 +135,8 @@ studio and reads it back.
 |---|---|
 | a mesh, Tripo H3.1 with HD texture | $0.40 |
 | a 5 s two-camera clip, MiniMax H3 Max | about $0.26 (H3: $0.30) |
-| training renders, 2,200 poses x 2 views | about 25 min on one RTX 4090 |
-| the joint reader, 20 epochs | 17-20 min, 12 GB |
+| training renders, 2,200 poses x 2 views | historical 448-input / 0.6x data: about 25 min on RTX 4090; high-res not benchmarked |
+| the joint reader, 20 epochs | historical 448-input: 17-20 min, 12 GB; **672-input not benchmarked** |
 | reading a clip / fitting it | 10 s / under a minute (20 s for the dragon's roar on a CPU) |
 | the H3 LoRA, 1,200 steps on fal | about $12, about 2 h |
 
