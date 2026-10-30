@@ -40,6 +40,13 @@ The dataset metadata still records 2D joint coordinates in *unscaled camera
 layout pixels*. The reader multiplies these by the stored render scale to map
 to the actual training image. A sample is only resumed if metadata matches the
 requested scale and both view PNGs exist; mixed scales are rejected by training.
+All output paths are resolved to absolute paths **before** opening the Blender rig,
+and each image is checked before its JSON metadata is written. In Windows,
+`F:/anymove/runs/dragon/dataset_hr_smoke` should contain 00000_front.png,
+00000_side.png, and 00000_meta.json in the same directory. If an older version
+accidentally saved PNGs under C:, update this branch and rerun the same
+`tools/dataset.sh` command. Existing metadata with missing PNGs will be
+re-rendered rather than skipped; do not manually move unrelated C: files.
 The output directory is separate to avoid silently skipping old low-res images.
 If the rig/joints change, delete or use a new dataset directory; checking
 render scale does NOT detect a changed rig.
