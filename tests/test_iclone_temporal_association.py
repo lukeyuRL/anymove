@@ -55,7 +55,9 @@ class TemporalAssociationTests(unittest.TestCase):
         }
         return data, names
 
-    def swap_side(self, d, names, begin, end, stems=STEMS):
+    def swap_side(self, d, names, begin, end, stems=None):
+        if stems is None:
+            stems = STEMS
         ix = {n: i for i, n in enumerate(names)}
         for stem in stems:
             L, R = ix[f"{stem}_L"], ix[f"{stem}_R"]
