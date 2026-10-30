@@ -1,18 +1,26 @@
 #!/bin/bash
-# Once per creature, step 3: render COUNT random poses inside the joint limits from both cameras, with the true pixel
-# position of every joint, in PROCS Blender processes; then a contact sheet of the first samples.
-# tools/dataset.sh CREATURE [count=2200] [procs=3] [seed=500]     -> runs/CREATURE/dataset
-# About 25 min for 2,200 poses on one RTX 4090. Don't run more than 2 Blender processes beside a reader training.
+# High-res dataset: one RGBA render per view at full layout scale (default 1.0).
+# tools/dataset.sh CREATURE [count=2200] [procs=3] [seed=500] [scale=1.0] [out=runs/CREATURE/dataset_hr]
+# Keeps original runs/CREATURE/dataset untouched. Do not mix scale values in a resumable dataset.
 set -euo pipefail
 source "$(dirname "$0")/_env.sh"
 need_creature "${1:-}"
-a=assets/$1; n=${2:-2200}; p=${3:-3}; seed=${4:-500}
+a=assets/$1; n=${2:-2200}; p=${3:-3}; seed=${4:-500}; scale=${5:-1.0}
+out=${6:-runs/$1/dataset_hr}
+if (( n < 1 || p < 1 )); then echo "count and procs must be positive" >&2; exit 2; fi
 per=$(( (n + p - 1) / p ))
-mkdir -p "runs/$1/dataset"
+mkdir -p "$out"
+pids=()
 for k in $(seq 0 $((p - 1))); do
-  $BLENDER -b -P blender/render_dataset.py -- "$a/rigged/rigged.blend" "$a/rigged/rig_info.json" "runs/$1/dataset" \
-    $((k * per)) "$per" "$seed" > "runs/$1/dataset_$k.log" 2>&1 &
+  start=$((k * per))
+  (( start < n )) || break
+  take=$((n - start))
+  (( take > per )) && take=$per
+  "$BLENDER" -b -P blender/render_dataset.py -- "$a/rigged/rigged.blend" "$a/rigged/rig_info.json" "$out" "$start" "$take" "$seed" "$scale" > "runs/$1/dataset_hr_$k.log" 2>&1 &
+  pids+=("$!")
 done
-wait
-$PY tools/show_samples.py "runs/$1/dataset" "runs/$1/dataset_samples.jpg" 8
-echo "$(ls "runs/$1/dataset" | grep -c _meta.json) samples; true joints drawn in runs/$1/dataset_samples.jpg"
+status=0
+for pid in "${pids[@]}"; do wait "$pid" || status=1; done
+if (( status != 0 )); then echo "Blender render failed; inspect runs/$1/dataset_hr_*.log" >&2; exit 1; fi
+"$PY" tools/show_samples.py "$out" "runs/$1/dataset_hr_samples.jpg" 8
+echo "$(find "$out" -name '*_meta.json' | wc -l) complete pose metadata files in $out"

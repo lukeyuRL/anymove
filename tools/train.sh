@@ -1,9 +1,11 @@
 #!/bin/bash
-# Once per creature, step 4: teach the joint reader (DINOv2 ViT-B/14 + a heatmap head) this one creature.
-# tools/train.sh CREATURE [epochs=20] [batch=20]     -> runs/CREATURE/reader.pt, log in runs/CREATURE/train.log
-# About 20 min and 12 GB of GPU memory at batch 20. Prints the held-out error in layout pixels after each epoch.
+# Train the 672/192 high-res reader; original reader.pt is never overwritten.
+# tools/train.sh CREATURE [epochs=20] [batch=8] [input=672] [heatmap=192] [dataset=runs/CREATURE/dataset_hr] [out=runs/CREATURE/reader_hr.pt] [workers=4]
+# For a controlled 448/128 baseline, use the same dataset but a distinct output .pt.
 set -euo pipefail
 source "$(dirname "$0")/_env.sh"
 need_creature "${1:-}"
-$PY -m mocap.train "runs/$1/dataset" "assets/$1/rigged/rig_info.json" "runs/$1/reader.pt" "${2:-20}" "${3:-20}" \
-  2>&1 | tee "runs/$1/train.log" | grep --line-buffered -E "val mean|saved|Error"
+epochs=${2:-20}; batch=${3:-8}; size=${4:-672}; heatmap=${5:-192}
+data=${6:-runs/$1/dataset_hr}; out=${7:-runs/$1/reader_hr.pt}; workers=${8:-4}
+[ -d "$data" ] || { echo "missing dataset: $data; run tools/dataset.sh first" >&2; exit 1; }
+"$PY" -m mocap.train "$data" "assets/$1/rigged/rig_info.json" "$out" "$epochs" "$batch" --input-size "$size" --heatmap-size "$heatmap" --workers "$workers" 2>&1 | tee "runs/$1/train_hr.log"

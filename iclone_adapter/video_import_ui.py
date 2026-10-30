@@ -188,7 +188,7 @@ class VideoCaptureCoordinator:
             reader=None
             reference=None
             if path.lower().endswith(".mp4"):
-                reader=REPO/"runs"/"dragon"/"reader.pt"
+                reader=(REPO/"runs"/"dragon"/"reader_hr.pt" if (REPO/"runs"/"dragon"/"reader_hr.pt").is_file() else REPO/"runs"/"dragon"/"reader.pt")
                 reference=REPO/"runs"/"dragon"/"ref"/"ref.png"
                 if not reader.is_file():
                     chosen,_=self.widgets.QFileDialog.getOpenFileName(
@@ -274,7 +274,7 @@ class VideoCaptureCoordinator:
             return
         try:
             # Actor-independent video generation/solving; validate on import.
-            reader=REPO/"runs"/"dragon"/"reader.pt"
+            reader=(REPO/"runs"/"dragon"/"reader_hr.pt" if (REPO/"runs"/"dragon"/"reader_hr.pt").is_file() else REPO/"runs"/"dragon"/"reader.pt")
             reference=REPO/"runs"/"dragon"/"ref"/"ref.png"
             if not reader.is_file():
                 chosen,_=self.widgets.QFileDialog.getOpenFileName(

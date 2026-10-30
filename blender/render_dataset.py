@@ -1,6 +1,6 @@
 """Render the creature in random poses from both layout cameras, with the true pixel position of every joint.
 
-blender -b -P blender/render_dataset.py -- rigged.blend rig_info.json out_dir start count seed [scale]
+blender -b -P blender/render_dataset.py -- rigged.blend rig_info.json out_dir start count seed [scale=1.0]
 Each sample i writes out_dir/{i:05d}_front.png, _side.png (RGBA) and _meta.json (joints in metres and in
 full-size layout pixels for both views, plus the pose). About half the samples carry motion blur from a random
 velocity, the way a video model smears fast limbs. Lights, turn, position and airtime are random too.
@@ -17,7 +17,9 @@ import common  # noqa: E402
 args = sys.argv[sys.argv.index("--") + 1:]
 blend, info_path, out = args[:3]
 start, count, seed = int(args[3]), int(args[4]), int(args[5])
-scale = float(args[6]) if len(args) > 6 else 0.6
+scale = float(args[6]) if len(args) > 6 else 1.0
+if not math.isfinite(scale) or scale <= 0:
+    raise ValueError("dataset render scale must be finite and > 0")
 out = pathlib.Path(out)
 out.mkdir(parents=True, exist_ok=True)
 
@@ -30,6 +32,7 @@ lim = {b["name"]: np.radians(np.array(b["limits_deg"], float)) for b in info["bo
 for pb in rig.pose.bones:
     pb.rotation_mode = "XYZ"
 common.studio(scene, samples=16)
+scene.render.resolution_percentage = 100  # do not inherit saved .blend's render percentage
 scene.cycles.use_adaptive_sampling = True
 scene.cycles.denoising_use_gpu = True  # OIDN on the GPU; on the CPU it was the bottleneck
 scene.render.threads_mode = "FIXED"
@@ -92,8 +95,14 @@ def joints_world():
 rng = np.random.default_rng(seed + start)
 for i in range(start, start + count):
     stem = out / f"{i:05d}"
-    if (out / f"{i:05d}_meta.json").exists():
-        continue
+    meta_file = out / f"{i:05d}_meta.json"
+    if meta_file.exists():
+        saved = json.loads(meta_file.read_text())
+        if not math.isclose(float(saved.get("scale", -1)), scale, rel_tol=0, abs_tol=1e-9):
+            raise RuntimeError(f"{meta_file}: existing dataset uses scale {saved.get('scale')}, requested {scale}. "
+                               "Use a separate output directory; do not mix training scales.")
+        if all((out / f"{i:05d}_{view}.png").is_file() for view in ("front", "side")):
+            continue  # only resume complete samples at the requested scale
     rig.animation_data_clear()
     for a in list(bpy.data.actions):
         bpy.data.actions.remove(a)
@@ -139,7 +148,9 @@ for i in range(start, start + count):
         scene.render.filepath = f"{stem}_{name.split('_')[1]}.png"
         bpy.ops.render.render(write_still=True)
     meta = {"joints_world": jw.round(5).tolist(), "front_uv": front.round(3).tolist(), "side_uv": side.round(3).tolist(),
-            "scale": scale, "blur": blur, "yaw": yaw, "root": list(loc),
+            "scale": scale, "render_size": {"front": [round(common.W_FRONT * scale), round(H * scale)],
+                                             "side": [round(common.W_SIDE * scale), round(H * scale)]},
+            "blur": blur, "yaw": yaw, "root": list(loc),
             "pose": {n: np.round(a, 5).tolist() for n, a in pose.items()}}
     (out / f"{i:05d}_meta.json").write_text(json.dumps(meta))
     print("sample", i, flush=True)
