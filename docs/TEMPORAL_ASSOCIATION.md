@@ -280,3 +280,77 @@ new 3D seam test is specifically designed to quarantine a change of
 3.06→7.78 cm/frame. This is checked as a controlled synthetic test,
 not yet as a live rerun of the user's private 124-frame `det.npz`;
 that original file is only on the user's Windows computer.
+
+
+## v3: avoid treating persistent projection geometry as occlusion
+
+**Field finding (124-frame high-resolution Dragon roar):** The first v2
+front-overlap proxy assigned very low weight to most knees, hocks and paws
+for almost the entire clip, not just during the questionable frames:
+
+- `knee_L`: 118/124 frames below 0.6
+- `hock_L`: 124/124 frames below 0.6
+- `hpaw_L`: 121/124 frames below 0.6
+- `hock_R` and `hpaw_R`: 124/124 frames below 0.6
+
+This is systematic downweighting, likely confounded by the fixed two-camera
+anatomy/projection. v2 then produced **zero** 2D candidates, which meant
+there was no 3D seam trial. Its status field `all_candidates_passed` was
+misleading: an empty list trivially passed. This result was **not** an
+empirical validation of the continuity guard.
+
+v3 only treats Front foreleg proximity as an *occlusion hypothesis* if the
+hind landmark **temporarily becomes substantially closer** than its own
+typical Front foreleg separation within the clip. A per-joint 85th-percentile
+reference and a minimum separation spread are used; persistent static
+overlap no longer triggers near-universal suppression. Side-view separation
+must still strengthen the hypothesis. This is deliberately not a true
+occlusion model and does not establish which camera is right.
+
+The Association JSON now records each joint's reference separation, temporal
+spread, number of transient overlap frames and the resulting weights.
+`unweighted_2d_reference` records what the historical unweighted 2D
+Viterbi would have proposed *on the same detections* (diagnostic only).
+The main algorithm **does not apply the unweighted proposal** unless it
+independently passes its own visibility-aware 2D stage and the 3D seam gate.
+
+For **no 2D candidates**, the continuity result now explicitly says
+`not_run_no_candidates`, with `continuity_checks_run: 0` and
+`validation_skipped_reason: no_2d_candidates`. Never interpret it as
+a successful 3D safety validation.
+
+Use a fresh filename; preserve the previous v1 and v2 experiments:
+
+```bash
+git pull --ff-only
+export MOCAP_CREATURE=assets/dragon
+
+python.exe -m mocap.solve \
+  runs/dragon/clips/hr_roar/det.npz \
+  assets/dragon/rigged/rig_info.json \
+  runs/dragon/clips/hr_roar/motion_temporal_v3.json \
+  --temporal-association
+```
+
+Inspect `motion_temporal_v3.association.json`:
+
+```bash
+python.exe - <<'PY'
+import json
+p = 'runs/dragon/clips/hr_roar/motion_temporal_v3.association.json'
+x = json.load(open(p))
+print('2D candidate segments:', x['pre_3d_candidate_segments'])
+print('Unweighted 2D reference:', x.get('unweighted_2d_reference'))
+print('3D guard result:', x['continuity_validation']['status'])
+print('3D checks:', x['continuity_validation']['checks'])
+print('Applied frames:', x['accepted_swapped_frames'])
+for joint in ('knee_L','hock_L','hpaw_L','knee_R','hock_R','hpaw_R'):
+    print(joint, x['visibility_diagnostics']['joint_summary'][joint])
+PY
+```
+
+The original 12-frame candidate from v1 had an identified
+40→41 seam increase from 3.06 to 7.78 cm/frame, a change targeted by
+the existing 3D continuity gate. v3 may propose **different** intervals or
+none at all; only a real solver run can establish which candidates survive
+both stages. This test still does not prove 3D anatomical correctness.

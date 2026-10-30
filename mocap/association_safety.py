@@ -11,6 +11,13 @@ HIND = ("hip", "knee", "hock", "hpaw", "htoe")
 FORE = ("elbow", "wrist", "fpaw", "ftoe")
 MAX_VALIDATION_SEGMENTS = 4
 FRONT_MIN_WEIGHT = 0.25
+# Detect *transient* new overlap, not the dragon's permanent projection
+# geometry. Fixed spatial proximity alone confounded the first 124-frame
+# field run, suppressing the knee/hock/paw throughout most of the clip.
+FRONT_SEPARATION_REFERENCE_QUANTILE = 85.0
+MIN_SEPARATION_DYNAMIC_RANGE_PX = 10.0
+DYNAMIC_OVERLAP_DROP_START_PX = 6.0
+DYNAMIC_OVERLAP_DROP_FULL_PX = 24.0
 OVERLAP_CLOSE_PX = 12.0
 OVERLAP_FAR_PX = 40.0
 SIDE_SEPARATION_MARGIN_PX = 8.0
@@ -32,11 +39,14 @@ SEAM_ROOT_ROTATION_STEP_ADDED_DEG = 4.0
 def front_hind_reliability(d, names):
     """Return (T,J) weights independent of Front/Side assignment state.
 
-    Front hind joints near front legs *and* distinct from forelegs in Side
-    are suspected of being visually ambiguous. The cue is independent of
-    which hind-side identity the association algorithm selects: it uses
-    each view only internally. No inference from a discrepancy between the
-    two possible Side identity assignments is used to compute this weight.
+    Only a *transient* increase in Front foreleg/hind-leg overlap, compared
+    with that same hind joint's normal separation over the current clip,
+    counts as a visibility event. A hind joint that remains near a front
+    leg throughout the clip is anatomically/projection-ambiguous, but is
+    NOT automatically tagged as occluded for every frame. The Side view
+    must also show greater foreleg separation for the proxy to engage.
+    No inference from a discrepancy between the possible L/R assignments
+    is used in the weight.
 
     Raw heatmap peak amplitudes are not calibrated visibility probabilities.
     """
@@ -68,7 +78,23 @@ def front_hind_reliability(d, names):
             side_distinct = np.clip(
                 (side_separation-front_separation-SIDE_SEPARATION_MARGIN_PX) /
                 SIDE_SEPARATION_RANGE_PX, 0, 1)
-            ambiguity = crowded * side_distinct
+            # Only discount when there is evidence of *new* overlap relative
+            # to the joint's own usual spacing. Global fixed 2D proximity
+            # is not proof of occlusion; the original v2 proxy downweighted
+            # almost every rear paw frame in the dragon roar example.
+            reference = float(np.percentile(
+                front_separation, FRONT_SEPARATION_REFERENCE_QUANTILE))
+            spread = float(np.percentile(front_separation, 90) -
+                           np.percentile(front_separation, 10))
+            if spread >= MIN_SEPARATION_DYNAMIC_RANGE_PX:
+                drop = reference - front_separation
+                transient_overlap = np.clip(
+                    (drop-DYNAMIC_OVERLAP_DROP_START_PX) /
+                    (DYNAMIC_OVERLAP_DROP_FULL_PX-DYNAMIC_OVERLAP_DROP_START_PX),
+                    0, 1)
+            else:
+                transient_overlap = np.zeros_like(front_separation)
+            ambiguity = crowded * side_distinct * transient_overlap
             # A five-frame median avoids a one-frame false-occlusion spike.
             pad = np.pad(ambiguity, (2, 2), mode="edge")
             ambiguity = np.median(
@@ -78,13 +104,23 @@ def front_hind_reliability(d, names):
             per_joint[name] = {
                 "mean_weight": round(float(weight.mean()), 5),
                 "min_weight": round(float(weight.min()), 5),
-                "frames_below_0_6": int((weight < 0.6).sum())
+                "frames_below_0_6": int((weight < 0.6).sum()),
+                "reference_front_fore_separation_px": round(reference, 4),
+                "front_fore_separation_p90_minus_p10_px": round(spread, 4),
+                "transient_overlap_active_frames": int(
+                    (transient_overlap > 0.1).sum()),
+                "persistent_overlap_not_treated_as_occlusion": bool(
+                    spread < MIN_SEPARATION_DYNAMIC_RANGE_PX),
             }
     return w, {
-        "profile": "front_hind_foreleg_overlap_side_separation_v1",
+        "profile": "front_hind_transient_foreleg_overlap_v2",
         "is_true_occlusion_probability": False,
         "parameters": {
             "min_weight": FRONT_MIN_WEIGHT,
+            "reference_separation_quantile": FRONT_SEPARATION_REFERENCE_QUANTILE,
+            "minimum_dynamic_range_px": MIN_SEPARATION_DYNAMIC_RANGE_PX,
+            "transient_drop_start_px": DYNAMIC_OVERLAP_DROP_START_PX,
+            "transient_drop_full_px": DYNAMIC_OVERLAP_DROP_FULL_PX,
             "front_close_px": OVERLAP_CLOSE_PX,
             "front_far_px": OVERLAP_FAR_PX,
             "side_separation_margin_px": SIDE_SEPARATION_MARGIN_PX,
@@ -92,7 +128,10 @@ def front_hind_reliability(d, names):
             "median_filter_frames": 5,
             "min_acceptable_segment_visibility": VISIBILITY_MIN_SEGMENT_MEAN,
         },
-        "joint_summary": per_joint
+        "joint_summary": per_joint,
+        "warning": ("Persistent Front/Side projection overlap is not treated "
+                    "as direct occlusion evidence. Reduced weights are a "
+                    "heuristic only, not calibrated visibility probabilities.")
     }
 
 
@@ -257,10 +296,14 @@ def gated_temporal_fit(base_d, candidate_d, association, names, fit_fn):
                 new_states[start:end] = 1
     return accepted_d, accepted_fit, {
         "profile": "dragon_temporal_3d_continuity_gate_v1",
-        "status": "all_candidates_passed" if np.array_equal(new_states, states) else
-                  ("all_candidates_quarantined" if not new_states.any() else "partially_applied"),
+        "status": ("not_run_no_candidates" if not states.any() else
+                   "all_candidates_passed" if np.array_equal(new_states, states) else
+                   "all_candidates_quarantined" if not new_states.any() else
+                   "partially_applied"),
         "candidate_swapped_frames": int(states.sum()),
         "accepted_swapped_frames": int(new_states.sum()),
+        "continuity_checks_run": int(len(segments)) if len(segments) <= MAX_VALIDATION_SEGMENTS else 0,
+        "validation_skipped_reason": "no_2d_candidates" if not states.any() else None,
         "applied_state_by_frame": new_states.tolist(),
         "checks": checks,
         "parameters": {

@@ -17,7 +17,7 @@ from mocap.association_safety import (
     front_hind_reliability, VISIBILITY_MIN_SEGMENT_MEAN
 )
 
-PROFILE = "dragon_temporal_hind_association_v2_visibility_guard"
+PROFILE = "dragon_temporal_hind_association_v3_transient_visibility_3d_guard"
 STEMS = ("hip", "knee", "hock", "hpaw", "htoe")
 STEM_WEIGHTS = np.array((0.35, 1.0, 1.2, 1.65, 0.65), dtype=np.float64)
 HEIGHT_CLIP_PX = 48.0
@@ -266,4 +266,19 @@ def temporal_hind_association(d, names, visibility_aware=True):
             "Passing 2D Viterbi association is NOT permission to apply to 3D; a separate continuity gate may reject it.",
         ],
     }
+    if visibility_aware:
+        # Diagnostic counterfactual: report how many frames the original
+        # unweighted 2D algorithm would have proposed on these same tracks.
+        # This reveals accidental global evidence suppression without ever
+        # applying those proposals to the Solver or bypassing 3D QA.
+        _, unweighted = temporal_hind_association(
+            d, names, visibility_aware=False)
+        audit["unweighted_2d_reference"] = {
+            "profile": unweighted["profile"],
+            "candidate_swapped_frames": unweighted["candidate_swapped_frames"],
+            "accepted_swapped_frames": unweighted["accepted_swapped_frames"],
+            "accepted_segments": unweighted["accepted_segments"],
+            "note": ("Diagnostic only; unweighted candidates are not applied "
+                     "or passed to the 3D Solver."),
+        }
     return corrected, audit

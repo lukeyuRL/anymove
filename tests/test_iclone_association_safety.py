@@ -60,6 +60,23 @@ class AssociationSafetyTests(unittest.TestCase):
         self.assertNotEqual(float(prior["front_uv"][20, target, 0]),
                             float(baseline["front_uv"][20, target, 0]))
 
+    def test_persistent_front_anatomical_overlap_is_not_occlusion(self):
+        # Regression against the 124-frame field report in which 109-124
+        # frames were downweighted for six rear knee/hock/paw joints.
+        # Anatomical/camera projection proximity is not per-frame
+        # evidence of a transient visual obstruction.
+        d, names = self.fixture()
+        idx = {name: k for k, name in enumerate(names)}
+        rear, fore = idx["hpaw_L"], idx["fpaw_L"]
+        d["front_uv"][:, rear, :] = d["front_uv"][:, fore, :]
+        d["side_uv"][:, rear, 0] = 500.0
+        weights, report = front_hind_reliability(d, names)
+        self.assertTrue(np.all(weights[:, rear] == 1.0))
+        self.assertEqual(report["joint_summary"]["hpaw_L"][
+            "transient_overlap_active_frames"], 0)
+        self.assertTrue(report["joint_summary"]["hpaw_L"][
+            "persistent_overlap_not_treated_as_occlusion"])
+
     def test_same_position_in_both_views_does_not_fake_occlusion(self):
         d, names = self.fixture()
         i = {name: j for j, name in enumerate(names)}
@@ -74,8 +91,11 @@ class AssociationSafetyTests(unittest.TestCase):
         adjusted, report = temporal_hind_association(d, names)
         self.assertIn("visibility_diagnostics", report)
         self.assertEqual(report["visibility_diagnostics"]["profile"],
-                         "front_hind_foreleg_overlap_side_separation_v1")
+                         "front_hind_transient_foreleg_overlap_v2")
         self.assertEqual(report["accepted_swapped_frames"], 0)
+        self.assertIn("unweighted_2d_reference", report)
+        self.assertEqual(report["unweighted_2d_reference"][
+            "accepted_swapped_frames"], 0)
         np.testing.assert_array_equal(adjusted["side_uv"], d["side_uv"])
 
     def test_real_report_like_3d_seam_is_quarantined(self):
@@ -175,6 +195,10 @@ class AssociationSafetyTests(unittest.TestCase):
         }, names, solve)
         self.assertEqual(len(counter), 1)
         self.assertEqual(report["accepted_swapped_frames"], 0)
+        self.assertEqual(report["status"], "not_run_no_candidates")
+        self.assertEqual(report["continuity_checks_run"], 0)
+        self.assertEqual(report["validation_skipped_reason"], "no_2d_candidates")
+        self.assertEqual(report["checks"], [])
 
     def test_root_rotation_jump_at_swap_boundary_is_quarantined(self):
         _, names = self.fixture()
