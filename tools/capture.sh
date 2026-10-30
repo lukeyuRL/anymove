@@ -19,7 +19,14 @@ rig=assets/$c/rigged; out=runs/$c/clips/$name
 # the 3/4 showcase camera: creature.json "camera" (frame it to the creature's biggest move; see anymove-capture)
 read -r cam target lens < <($PY -c "import json; c = json.load(open('assets/$c/creature.json')).get('camera', {}); print(c.get('cam', '-3.2,-3.0,1.6'), c.get('target', '0,0,0.5'), c.get('lens', 50))")
 mkdir -p "$out"
-$PY -m mocap.detect "$video" "$reader" "runs/$c/ref/ref.png" "$out/det.npz" "$out/overlay.mp4" | tail -1
+# Optional P1 Temporal Joint Tracking: keep the raw Reader detections
+# separately and write the refined tracks as det.npz for the existing Solver.
+if [ "${MOCAP_TEMPORAL_TRACKING:-0}" = "1" ]; then
+  $PY -m mocap.detect "$video" "$reader" "runs/$c/ref/ref.png" "$out/det_reader.npz" "$out/overlay.mp4" | tail -1
+  "$PY" -m mocap.track "$video" "$out/det_reader.npz" "$out/det.npz"
+else
+  $PY -m mocap.detect "$video" "$reader" "runs/$c/ref/ref.png" "$out/det.npz" "$out/overlay.mp4" | tail -1
+fi
 # The visibility-aware solver is experimental and stays disabled by default.
 # Use a NEW capture name when comparing, to preserve existing motion.json.
 solver_flags=()

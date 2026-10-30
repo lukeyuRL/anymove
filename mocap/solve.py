@@ -417,6 +417,20 @@ def main():
               (name,peak_stats["raw_min"],peak_stats["raw_max"],
                peak_stats["clipped_samples"],peak_stats["total_samples"]),
               flush=True)
+    # Optional independent LK tracking evidence, not an extra heatmap score.
+    # These keys only exist in a separate tracked detection file. Keep
+    # historical raw peaks/inputs unchanged and fail on invalid weights.
+    for view in ("front", "side"):
+        name = view + "_track_weight"
+        if name in raw.files:
+            w = np.asarray(raw[name], dtype=np.float64)
+            if (w.shape != d[view + "_conf"].shape
+                    or not np.isfinite(w).all()
+                    or np.any(w < 0) or np.any(w > 1)):
+                raise ValueError("invalid " + name + " in tracked detections")
+            d[view + "_conf"] *= w
+            print("tracking weights", view, "mean", round(float(w.mean()), 4),
+                  "downweighted", int(np.count_nonzero(w < 1)), flush=True)
     info = json.load(open(info_path))
     # Fail before optimization if imported rig and camera settings disagree.
     # Without MOCAP_CREATURE, mocap.layout silently defaults to Wolf.
