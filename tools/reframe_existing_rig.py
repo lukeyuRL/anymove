@@ -73,9 +73,18 @@ def reframe(asset_dir):
         "source": "existing_rig_import_report_bounds",
     }
     report["framing_updated"] = True
+    if isinstance(report.get("mesh_names"), list):
+        # The renderer now resolves single-Mesh Armatures by modifier,
+        # independent of original FBX Object names.
+        report["current_dataset_loader_compatible"] = (
+            len(report["mesh_names"]) == 1)
     report.setdefault("warnings", [])
     if not isinstance(report["warnings"], list):
         raise ValueError("rig_import_report.json warnings must be a list")
+    report["warnings"] = [
+        text for text in report["warnings"]
+        if not text.startswith("Existing render_dataset.py needs ONE Mesh 'body'")
+    ]
     warning = ("Camera layout changed: previous Dataset images, reference "
                "frames, detections and trained Reader are not compatible. "
                "Use a NEW dataset folder and regenerate all dependent artifacts.")

@@ -28,7 +28,12 @@ class ReframeTests(unittest.TestCase):
             report = {
                 "bounds_min": [-2.0444216728, -7.3383641243, -.0268925745],
                 "bounds_max": [2.0446081161, 8.6281785965, 5.9318022728],
-                "warnings": ["prior issue"],
+                "warnings": [
+                    "prior issue",
+                    "Existing render_dataset.py needs ONE Mesh 'body' and Armature 'rig'; prepare a COPY",
+                ],
+                "mesh_names": ["Dinosaur_Geo"],
+                "current_dataset_loader_compatible": False,
             }
             names = ["creature.json", "rigged/rig_info.json", "rigged/rig_import_report.json"]
             for path, value in zip(names, (creature, info, report)):
@@ -46,6 +51,10 @@ class ReframeTests(unittest.TestCase):
             self.assertEqual(revised_info["bones"], info["bones"])
             self.assertEqual(revised_info["keypoints"], info["keypoints"])
             self.assertLess(revised["layout"]["M_PER_PX"], .027)
+            new_report = json.loads((rigged / "rig_import_report.json").read_text())
+            self.assertTrue(new_report["current_dataset_loader_compatible"])
+            self.assertFalse(any("needs ONE Mesh 'body'" in w
+                                 for w in new_report["warnings"]))
             self.assertEqual(len(result["backups"]), 3)
             self.assertTrue(all(Path(p).is_file() for p in result["backups"]))
             again = reframe(root)
