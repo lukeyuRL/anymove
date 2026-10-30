@@ -164,3 +164,33 @@ This does not make the tall/long animal fill its full portrait-height
 view. That would require a different image/video layout or independent
 camera scales, which would also require reworking the Solver contract.
 Inspect actual full-body visibility before launching the 2,200-sample run.
+
+
+## Update ONLY camera layout for a previously exported Rig
+
+If you already exported metadata and edited paint/feet/rotation limits,
+do NOT run import_existing_rig.py --overwrite just to fix image occupancy.
+
+Instead run this lightweight Python 3.14 command from PowerShell:
+
+    cd F:\anymove
+    git switch iClone_High_Res
+    git pull --ff-only origin iClone_High_Res
+    py -3.14 tools/reframe_existing_rig.py assets/dino
+
+The tool uses rig_import_report.json's existing Mesh bounds. It updates
+rig_info.json.layout, creature.json.layout, and the optional Dataset yaw
+limit while preserving every Bone, joint label, limit, paint group, and
+other custom creature metadata. It creates timestamped .before_reframe_*
+backups for all three files before making any changes.
+
+The source rigged.blend is NOT read or edited; if model geometry has
+changed since the report was created, rerun the Blender importer instead.
+
+Then from Git Bash render fresh images:
+
+    bash tools/dataset.sh dino 8 1 500 1.0 runs/dino/dataset_framed_smoke
+
+Do NOT reuse the old Dataset directory. Metadata now prevents accidental
+resumption of stale camera/rig projections. Check the new rendered front
+and side views before training.
