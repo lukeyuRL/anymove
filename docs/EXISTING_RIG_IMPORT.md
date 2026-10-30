@@ -51,3 +51,41 @@ After verifying the JSONs, rig orientation, body/rig names, and limits,
 from Git Bash run:
 
     bash tools/dataset.sh dinosaur 4 1 500 1.0 runs/dinosaur/dataset_smoke
+
+
+## FBX Armature Object transform is not identity
+
+This is common when importing FBX (Object rotation, scale or location).
+It does not imply bad Skin Weights. Do not Apply Transform directly on the
+original character.
+
+Use the new opt-in normalization mode:
+
+    & "C:\Program Files\Blender Foundation\Blender 5.0\blender.exe" -b -P tools/import_existing_rig.py -- assets/dino/rigged/rigged.blend --prepare-copy
+
+It saves a completely separate asset:
+
+    assets/dino_prepared/
+      creature.json
+      rigged/
+        rigged.blend
+        rig_info.json
+        rig_import_report.json
+
+The original assets/dino/rigged/rigged.blend is never saved or overwritten.
+The prepared Blender file bakes the *uniform positive* Armature Object
+rotation, scale and translation into the rest bones; world transforms and
+scene units are baked into skinned Mesh vertices. Existing Vertex Groups
+and Skin Weights remain intact, and sample Rest vertices plus all Bone
+head/tail positions are checked against the original world coordinates.
+
+The tool refuses to bake a nonuniform, sheared, mirrored or zero-scale
+Armature, and refuses an already posed skeleton. Such cases need manual
+diagnosis on a COPY before trying again. A multi-Mesh character produces
+JSON drafts but the current one-Mesh dataset renderer still needs changes.
+
+This validates REST coordinates, not the full animation skin deformation.
+Compare the prepared mesh appearance to the original, and check the
+first four training samples plus labels before full training.
+
+    bash tools/dataset.sh dino_prepared 4 1 500 1.0 runs/dino_prepared/dataset_smoke
