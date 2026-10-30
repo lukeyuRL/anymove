@@ -201,6 +201,7 @@ def main():
         if args.freeze_backbone:
             model.backbone.eval()
         opt.zero_grad(set_to_none=True)
+        torch.cuda.reset_peak_memory_stats()
         for bi_, (x, kp, _) in enumerate(dl):
             progress = (ep + (bi_ // args.grad_accum) / n_updates) / args.epochs
             f = 0.5 * (1 + math.cos(math.pi * progress)) * min(1, (step + 1) / warm)
@@ -225,6 +226,10 @@ def main():
                     print(f"ep {ep} optimizer_step {step} loss {loss.item():.4f} "
                           f"lr_factor {f:.3f} peak_vram_allocated {used:.2f}GiB "
                           f"elapsed {time.time()-t0:.0f}s", flush=True)
+        print(f"epoch {ep} training peak GPU allocated "
+              f"{torch.cuda.max_memory_allocated() / (1024**3):.2f}GiB; "
+              f"peak reserved {torch.cuda.max_memory_reserved() / (1024**3):.2f}GiB",
+              flush=True)
         model.eval()
         errs = {"front": [], "side": []}
         with torch.no_grad():
