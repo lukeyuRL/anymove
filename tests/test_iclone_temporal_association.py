@@ -13,7 +13,8 @@ except ImportError:
 
 if np is not None:
     from mocap.temporal_association import (
-        STEMS, PROFILE, temporal_hind_association, MIN_SWAPPED_SEGMENT_FRAMES
+        STEMS, PROFILE, temporal_hind_association,
+        root_relative_paw_correlations, MIN_SWAPPED_SEGMENT_FRAMES
     )
 
 
@@ -185,6 +186,24 @@ class TemporalAssociationTests(unittest.TestCase):
                "segments": report["accepted_segments"],
                "raw_mae": report["before_relative_hind_height_mae_px"],
                "new_mae": report["after_relative_hind_height_mae_px"]})
+
+    def test_root_relative_paw_report_uses_final_applied_tracks(self):
+        # Reproduces the real v3 diagnostic bug: a candidate is rejected,
+        # but the final 'after' metric incorrectly described the candidate.
+        baseline, names = self.fixture(124)
+        original = {key: val.copy() for key, val in baseline.items()}
+        ref = root_relative_paw_correlations(baseline, names)
+        variant = {key: val.copy() for key, val in baseline.items()}
+        self.swap_side(variant, names, 42, 53)
+        candidate = root_relative_paw_correlations(variant, names)
+        self.assertNotEqual(ref, candidate)
+        # The continuity gate rejected all swaps, so finalized tracks are
+        # the untouched baseline; candidate metrics remain audit-only.
+        actual = root_relative_paw_correlations(baseline, names)
+        self.assertEqual(actual, ref)
+        self.assertNotEqual(actual, candidate)
+        for key in baseline:
+            np.testing.assert_array_equal(baseline[key], original[key])
 
     def test_audit_json_and_state_contract(self):
         import json

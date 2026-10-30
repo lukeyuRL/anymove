@@ -354,3 +354,33 @@ The original 12-frame candidate from v1 had an identified
 the existing 3D continuity gate. v3 may propose **different** intervals or
 none at all; only a real solver run can establish which candidates survive
 both stages. This test still does not prove 3D anatomical correctness.
+
+
+## v3 audit correction: candidate vs applied paw correlation
+
+The real high-res 124-frame v3 report found one 2D candidate
+`[42,53)` and correctly quarantined it on 3D step/velocity continuity
+grounds (11 candidate frames; zero applied frames). It also exposed an
+**audit-only error**: `after_root_relative_paw_correlation` had retained
+the discarded 2D candidate's values even though its final motion and
+other applied statistics used the original tracks.
+
+The corrected report explicitly distinguishes:
+
+- `pre_3d_candidate_root_relative_paw_correlation`: correlations of the
+  proposed 2D association before the 3D continuity gate
+- `after_root_relative_paw_correlation`: recomputed from the tracks
+  **actually applied** after the 3D gate
+- `aligned_paw_agreement_after`: likewise describes only applied tracks
+- `raw_input_paw_agreement`: original Readout and unchanged iClone QA
+  gate input; do **not** overwrite it with a candidate score
+
+When all 11 frames are quarantined, the applied root-relative paw
+correlations should equal the original values (subject to the same
+in-memory input); the proposed correlations remain in the
+`pre_3d_candidate_...` field for diagnosis. This is reporting integrity
+only: it does NOT alter the temporal decisions, 3D Solver motion, or the
+existing 3D continuity thresholds.
+
+To regenerate the corrected sidecar, use a NEW output filename or explicitly
+re-run the v3 solve from the same original `det.npz`.

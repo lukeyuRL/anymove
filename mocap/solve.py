@@ -449,7 +449,8 @@ def main():
         if (active_layout.get("creature") != "dragon"
                 or active_layout.get("status") != "camera_layout_verified_for_rig"):
             raise RuntimeError("--temporal-association requires verified Dragon camera layout")
-        from mocap.temporal_association import temporal_hind_association
+        from mocap.temporal_association import (
+            temporal_hind_association, root_relative_paw_correlations)
         candidate_d, association_audit = temporal_hind_association(
             d, names, visibility_aware=True)
         association_audit["raw_input_paw_agreement"] = paws
@@ -462,6 +463,8 @@ def main():
             candidate_d, names)
         association_audit["pre_3d_candidate_relative_hind_height_mae_px"] = (
             association_audit["after_relative_hind_height_mae_px"])
+        association_audit["pre_3d_candidate_root_relative_paw_correlation"] = (
+            association_audit["after_root_relative_paw_correlation"])
         print("Temporal 2D candidate:", association_audit["profile"],
               "frames", association_audit["accepted_swapped_frames"],
               "segments", association_audit["accepted_segments"], flush=True)
@@ -519,6 +522,10 @@ def main():
         side_h = d["side_uv"][:, hind_idx, 1] - d["side_uv"][:, hips_i, 1:2]
         association_audit["after_relative_hind_height_mae_px"] = round(
             float(np.mean(np.abs(front_h-side_h))), 4)
+        # Always calculate the "after" correlation from applied tracks,
+        # not from an earlier hypothesis that failed the 3D guard.
+        association_audit["after_root_relative_paw_correlation"] = (
+            root_relative_paw_correlations(d, names))
         print("Temporal 3D continuity gate:", gate["status"],
               "candidate frames", gate["candidate_swapped_frames"],
               "applied frames", gate["accepted_swapped_frames"], flush=True)

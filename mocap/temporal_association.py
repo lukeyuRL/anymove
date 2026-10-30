@@ -78,6 +78,29 @@ def _correlation(a, b):
     return round(float(np.corrcoef(a, b)[0, 1]), 5)
 
 
+def root_relative_paw_correlations(d, names):
+    """Correlations on the tracks ACTUALLY supplied by the caller.
+
+    Used for candidate and applied association separately, so quarantined
+    2D hypotheses cannot be mislabeled as the finalized 3D solution's
+    post-association consistency.
+    """
+    index = {name: i for i, name in enumerate(names)}
+    if len(index) != len(names) or not all(k in index for k in
+                                           ("hips", "hpaw_L", "hpaw_R")):
+        raise ValueError("root-relative paw correlations require unique Dragon paw/hips names")
+    hips = index["hips"]
+    out = {}
+    for side in ("L", "R"):
+        j = index["hpaw_" + side]
+        front = np.asarray(d["front_uv"][:, j, 1] -
+                           d["front_uv"][:, hips, 1], dtype=np.float64)
+        other = np.asarray(d["side_uv"][:, j, 1] -
+                           d["side_uv"][:, hips, 1], dtype=np.float64)
+        out["hpaw_" + side] = _correlation(front, other)
+    return out
+
+
 def _state_costs(front, side, fc, sc, pairs, hips, visibility):
     # Hips subtraction independently per camera removes body/root vertical
     # translation, which can otherwise make *opposite* limb tracks correlate.
@@ -214,10 +237,6 @@ def temporal_hind_association(d, names, visibility_aware=True):
     original_s = side[:, pairs, 1] - side[:, hips, 1, None, None]
     corrected_side = corrected["side_uv"][:, pairs, 1] - \
                      corrected["side_uv"][:, hips, 1, None, None]
-    def paw_correlations(s):
-        return {name: _correlation(f[:, side_n, 3], s[:, side_n, 3])
-                for side_n, name in enumerate(("hpaw_L", "hpaw_R"))}
-
     segments = []
     for first, last in _segments(states):
         segments.append({
@@ -245,8 +264,8 @@ def temporal_hind_association(d, names, visibility_aware=True):
         "support_stem_votes_by_frame": votes.tolist(),
         "before_relative_hind_height_mae_px": round(float(np.abs(f-original_s).mean()), 4),
         "after_relative_hind_height_mae_px": round(float(np.abs(f-corrected_side).mean()), 4),
-        "before_root_relative_paw_correlation": paw_correlations(original_s),
-        "after_root_relative_paw_correlation": paw_correlations(corrected_side),
+        "before_root_relative_paw_correlation": root_relative_paw_correlations(d, names),
+        "after_root_relative_paw_correlation": root_relative_paw_correlations(corrected, names),
         "parameters": {
             "hind_stems": list(STEMS),
             "switch_penalty": SWITCH_PENALTY,
