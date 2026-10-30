@@ -201,3 +201,71 @@ This branch has NOT switched the video generator or solver to N-view.
 
 No CUDA training, paid video generation or live iClone import is implied by
 committing this source. GPU/Blender/iClone checks require the actual runtime.
+
+## Experimental Dragon visibility-aware solver (opt-in)
+
+The 672px Reader reduced synthetic validation error but did not uniformly
+improve reprojection on the generated Dragon roar clip. Front hind paws are
+often hidden behind the body/forelegs; their cross-view height correlations
+were negative despite well-synchronized front paws. This is still a
+hypothesis, **not verified occlusion ground truth**.
+
+The optional solver computes a **reliability proxy** from already detected
+Front/Side joint tracks. The only target joints are `knee_L/R`,
+`hock_L/R`, `hpaw_L/R`, and `htoe_L/R`. It requires a discrepancy in
+Front-versus-Side pixel heights above 6 px; a nearby same-side front-leg
+landmark strengthens the penalty. Height discrepancy reaches maximum
+strength at 24 px, and the risk is median-filtered over five frames. The
+Front reliability multiplier remains between 0.35 and 1.0; **every Side
+weight and all other Front joint weights remain unchanged**.
+
+The multiplier affects the Front reprojection loss and the Front contribution
+to height during initial triangulation. It is *not* a trained visibility
+classifier, an occlusion probability, or proof that the Side estimate is
+correct. Cases where both views are equally wrong cannot be detected from
+this signal alone.
+
+**The default solver remains unchanged.** For an A/B comparison on the same
+already-produced 124-frame high-res `det.npz`, with no extra paid video
+generation and without re-running DINOv2:
+
+```bash
+git pull --ff-only
+export MOCAP_CREATURE=assets/dragon
+export PYTHON="$(pwd)/.venv/Scripts/python.exe"
+
+DET=runs/dragon/clips/hr_roar/det.npz
+RIG=assets/dragon/rigged/rig_info.json
+BASE=runs/dragon/clips/hr_roar/motion.json
+VIS=runs/dragon/clips/hr_roar/motion_visibility.json
+
+"$PYTHON" -m mocap.solve "$DET" "$RIG" "$VIS" --visibility-aware
+"$PYTHON" tools/compare_visibility.py "$BASE" "$VIS"
+```
+
+A sidecar named `motion_visibility.visibility.json` is written next to
+`motion_visibility.json`. It contains a profile ID, thresholds,
+per-frame weights for eight hind joints, affected-frame summaries,
+reprojection errors, and the detection SHA-256 for traceability. The
+`motion.json` fields, bone order, 24-FPS root coordinates, iClone
+Reader/Writer interfaces and original `det.npz` remain unchanged.
+
+For an optional *full* capture with the same source video, use a NEW clip
+name to preserve old results:
+
+```bash
+MOCAP_SOLVER_VISIBILITY=1 bash tools/capture.sh dragon \
+  F:/anymove_test/dragon/01_clip/capture_dragon_ai_prompt_001/generated/h3max.mp4 \
+  hr_roar_visibility
+```
+
+The iClone UI does not turn on this experimental mode automatically. The
+existing Motion Import and Root Flight code are untouched.
+
+**Important:** The paw-agreement score is computed from the reader's raw
+Front/Side detections *before* weighting. It will remain around 0.36 for
+the provided high-res roar clip and still fails the iClone quality threshold
+of 0.5. Do not suppress that gate. Better or worse reprojection error also
+does not establish 3D correctness; before adopting this solver, compare
+hind paw trajectories, wing motion, root Z and scale in a clean iClone
+scene, and run a Blender known-ground-truth 3D joint test.

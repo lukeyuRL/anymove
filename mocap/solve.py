@@ -1,6 +1,8 @@
 """Fit the rig to the joints read from both views: one pose per frame, smooth over time, inside the joint limits.
 
-python -m mocap.solve DETECTIONS.npz rig_info.json OUT.json
+python -m mocap.solve DETECTIONS.npz rig_info.json OUT.json [--visibility-aware]
+Experimental --visibility-aware is Dragon-only and opt-in, and lowers
+front hind-leg weights only when a 2D conflict suggests possible occlusion.
 Before fitting, the side view's left and right legs are checked against the front view: a joint has the same height
 in both halves, so if swapping a pair of legs in the side view makes the heights agree better, the side reader
 mixed up the near and far leg and they are swapped back. The same height test gives the sync score: how far apart
@@ -215,7 +217,7 @@ def project(J):
     return f, s
 
 
-def triangulate(d, front_height_weight=0.25):
+def triangulate(d, front_height_weight=0.25, front_visibility=None):
     """Joints in metres: x from the front view, y from the side view, height mostly from the side view."""
     fx = (d["front_uv"][..., 0] - layout.W_FRONT / 2) * layout.M_PER_PX
     sy = -(d["side_uv"][..., 0] - layout.W_SIDE / 2) * layout.M_PER_PX
@@ -223,6 +225,13 @@ def triangulate(d, front_height_weight=0.25):
     sz = layout.Z_CENTER + (layout.H / 2 - d["side_uv"][..., 1]) * layout.M_PER_PX
     w1, w2 = (front_height_weight * d["front_conf"].clip(1e-3, 1.0),
               d["side_conf"].clip(1e-3, 1.0))
+    if front_visibility is not None:
+        front_visibility = np.asarray(front_visibility, dtype=np.float64)
+        if (front_visibility.shape != w1.shape or not np.isfinite(front_visibility).all()
+                or np.any(front_visibility < 0) or np.any(front_visibility > 1)):
+            raise ValueError("invalid front visibility weights in triangulation")
+        # Affects only Front's height contribution, never the Side data.
+        w1 = w1 * front_visibility
     return np.stack([fx, sy, (fz * w1 + sz * w2) / (w1 + w2)], -1)
 
 
@@ -303,7 +312,8 @@ def ik_init(tri, root_aa, info, rig):
     return eul
 
 
-def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25):
+def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
+        front_visibility=None):
     rig = Rig(info, dev)
     names = rig.kp_names
     T = len(d["front_uv"])
@@ -311,7 +321,15 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25):
     s_obs = torch.tensor(d["side_uv"], dtype=torch.float64, device=dev)
     f_c = torch.tensor(d["front_conf"], dtype=torch.float64, device=dev).clamp(0, 1) ** 2
     s_c = torch.tensor(d["side_conf"], dtype=torch.float64, device=dev).clamp(0, 1) ** 2
-    tri_np = triangulate(d, front_height_weight)
+    if front_visibility is not None:
+        front_visibility = np.asarray(front_visibility, dtype=np.float64)
+        if (front_visibility.shape != tuple(f_c.shape)
+                or not np.isfinite(front_visibility).all()
+                or np.any(front_visibility < 0) or np.any(front_visibility > 1)):
+            raise ValueError("invalid front visibility weights in solver")
+        # Only the corresponding Front reprojection terms are downweighted.
+        f_c = f_c * torch.tensor(front_visibility, dtype=torch.float64, device=dev)
+    tri_np = triangulate(d, front_height_weight, front_visibility)
     tri = torch.tensor(tri_np, dtype=torch.float64, device=dev)
     hips = names.index(info["bones"][0]["head_joint"])
     trans = (tri[:, hips] - rig.rest_kp[hips]).clone().requires_grad_(True)
@@ -425,7 +443,20 @@ def main():
     sync["before"] = {k: v for k, v in before.items() if k != "per_frame_gap_px"}
     sync["paw_agreement"] = paws
     sync["front_shift_frames"] = None if shift is None else shift.round(2).tolist()
-    res = fit(d, info, dev="cuda" if torch.cuda.is_available() else "cpu")
+    front_visibility, visibility_audit = None, None
+    if "--visibility-aware" in sys.argv:
+        # Do not enable on other creatures or unverified layout mappings.
+        if (active_layout.get("creature") != "dragon"
+                or active_layout.get("status") != "camera_layout_verified_for_rig"):
+            raise RuntimeError("--visibility-aware requires verified Dragon camera layout")
+        from mocap.visibility import front_hind_weights
+        front_visibility, visibility_audit = front_hind_weights(d, names)
+        print("experimental front-hind visibility proxy:",
+              visibility_audit["profile"],
+              "affected joints:", visibility_audit["affected_joint_count"],
+              "(not an observed occlusion mask)", flush=True)
+    res = fit(d, info, dev="cuda" if torch.cuda.is_available() else "cpu",
+              front_visibility=front_visibility)
     print("reprojection error px:", {k: round(v, 2) for k, v in res["reproj_px"].items()})
     # Preserve the exact detection file and camera Layout provenance.
     # These two values prevent the old "same 124 frames / same 50 names"
@@ -443,6 +474,16 @@ def main():
               "source_detections_sha256": det_sha.hexdigest()}
     json.dump(motion, open(out, "w"))
     print("saved", out)
+    if visibility_audit is not None:
+        # Separate sidecar; the existing motion.json/iClone import contract
+        # must stay byte-for-byte identical in keys and data shapes.
+        from pathlib import Path
+        report_path = Path(out).with_suffix(".visibility.json")
+        visibility_audit["source_detections_sha256"] = det_sha.hexdigest()
+        visibility_audit["reprojection_px"] = res["reproj_px"]
+        visibility_audit["motion_file"] = str(out)
+        report_path.write_text(json.dumps(visibility_audit, indent=2), encoding="utf-8")
+        print("visibility diagnostics:", report_path, flush=True)
 
 
 if __name__ == "__main__":

@@ -20,7 +20,14 @@ rig=assets/$c/rigged; out=runs/$c/clips/$name
 read -r cam target lens < <($PY -c "import json; c = json.load(open('assets/$c/creature.json')).get('camera', {}); print(c.get('cam', '-3.2,-3.0,1.6'), c.get('target', '0,0,0.5'), c.get('lens', 50))")
 mkdir -p "$out"
 $PY -m mocap.detect "$video" "$reader" "runs/$c/ref/ref.png" "$out/det.npz" "$out/overlay.mp4" | tail -1
-$PY -m mocap.solve "$out/det.npz" "$rig/rig_info.json" "$out/motion.json" | grep -v "iter"
+# The visibility-aware solver is experimental and stays disabled by default.
+# Use a NEW capture name when comparing, to preserve existing motion.json.
+solver_flags=()
+if [ "${MOCAP_SOLVER_VISIBILITY:-0}" = "1" ]; then
+  [ "$c" = "dragon" ] || { echo "visibility solver experiment supports Dragon only" >&2; exit 2; }
+  solver_flags+=(--visibility-aware)
+fi
+$PY -m mocap.solve "$out/det.npz" "$rig/rig_info.json" "$out/motion.json" "${solver_flags[@]}" | grep -v "iter"
 $BLENDER -b -P blender/apply_motion.py -- "$rig/rigged.blend" "$rig/rig_info.json" "$out/motion.json" "$out/render" \
   --views "$views" --samples 24 --cam "$cam" --target "$target" --lens "$lens" --glb > "$out/blender.log" 2>&1
 $PY -m mocap.showcase "$video" "$out/det.npz" "$out/render" "$out/showcase.mp4" "$c $name"
