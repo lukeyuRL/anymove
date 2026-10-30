@@ -116,3 +116,51 @@ To re-export an identity-transform original .blend:
 
 If Armature Object has non-identity transform, use the separate
 --prepare-copy workflow above. Do not modify the original asset.
+
+
+## Long dinosaur appearing too small in Front/Side images
+
+The initial 640/640 front/side layout limits the entire 16-metre long
+dinosaur to about 160 pixels of its 720-pixel image height. In particular,
+simply reducing M_PER_PX causes the long tail to clip.
+
+The Existing Rig exporter now detects animals that are at least 2.5x
+longer along Y than they are wide along X. For these, it optimizes the
+1280px split between the two cameras, keeping the same M_PER_PX in both.
+The optimization considers the rest Mesh bounding box at yaw -10,0,+10
+degrees, XY translation augmentation, air time and framing margins.
+
+For the current 16-metre Dinosaur, the proposed split is about 400px
+front + 880px side with 0.025 metres per layout pixel. This increases
+visible body height from about 24% to about 34% of the 720px frame while
+retaining the complete tail in the side camera.
+
+creature.json gains dataset.yaw_max_deg=10.0. The high-resolution Dataset
+renderer uses this rather than its legacy +/-30 and +/-70 degree random
+yaw choices. The old yaw policy remains unchanged for other creatures.
+
+Dataset _meta.json now carries a framing_signature over the rest rig,
+joint names and geometry, layout and yaw policy. If the source JSON
+changes, attempting to resume old images raises an error. Use a NEW
+dataset output folder; do not mix old and new labels or view dimensions.
+
+Recommended Windows PowerShell re-export (back up manual metadata edits):
+
+    cd F:\anymove
+    git switch iClone_High_Res
+    git pull --ff-only origin iClone_High_Res
+    & "C:\Program Files\Blender Foundation\Blender 5.0\blender.exe" -b -P tools/import_existing_rig.py -- assets/dino/rigged/rigged.blend --overwrite
+
+Then from Git Bash:
+
+    bash tools/dataset.sh dino 8 1 500 1.0 runs/dino/dataset_framed_smoke
+
+If using the separate normalized dino_prepared rig, regenerate that
+metadata instead, by rerunning the prepare-copy import using a new
+destination or an explicit --overwrite after backing up prior artifacts.
+Use the same creature directory consistently for images, model and JSONs.
+
+This does not make the tall/long animal fill its full portrait-height
+view. That would require a different image/video layout or independent
+camera scales, which would also require reworking the Solver contract.
+Inspect actual full-body visibility before launching the 2,200-sample run.

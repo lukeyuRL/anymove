@@ -16,6 +16,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 import common  # noqa: E402
 import dataset_paths  # noqa: E402
 import dataset_blur  # noqa: E402
+import dataset_framing  # noqa: E402
 
 args = sys.argv[sys.argv.index("--") + 1:]
 blend, info_path, out = dataset_paths.resolve_render_inputs(*args[:3])
@@ -31,6 +32,12 @@ print(f"dataset output directory: {out}", flush=True)
 bpy.ops.wm.open_mainfile(filepath=str(blend))
 scene = bpy.context.scene
 info = json.load(open(info_path))
+creature_file = (pathlib.Path(common.CREATURE) / "creature.json") if common.CREATURE else None
+creature = json.loads(creature_file.read_text()) if creature_file and creature_file.is_file() else {}
+yaw_max_deg = dataset_framing.validate_yaw_limit(
+    creature.get("dataset", {}).get("yaw_max_deg"))
+framing_signature = dataset_framing.framing_signature(
+    info, common.LAYOUT, yaw_max_deg)
 rig, body = common.skinned_character_objects()
 bones = [b["name"] for b in info["bones"]]
 lim = {b["name"]: np.radians(np.array(b["limits_deg"], float)) for b in info["bones"]}
@@ -101,6 +108,11 @@ for i in range(start, start + count):
     meta_file = dataset_paths.sample_file(out, i, "meta")
     if meta_file.exists():
         saved = json.loads(meta_file.read_text())
+        if not dataset_framing.same_framing(saved, framing_signature):
+            raise RuntimeError(
+                f"{meta_file}: camera/framing, rest skeleton or joint labels changed. "
+                "Use a NEW dataset output folder; mixing old and new metadata "
+                "silently corrupts Reader training.")
         if not dataset_blur.scale_matches(saved, scale):
             raise RuntimeError(f"{meta_file}: existing dataset uses scale {saved.get('scale')}, requested {scale}. "
                                "Use a separate output directory; do not mix training scales.")
@@ -118,8 +130,7 @@ for i in range(start, start + count):
     for pb in rig.pose.bones:
         pb.location = (0, 0, 0)
     pose = sample_pose(rng)
-    r = rng.random()
-    yaw = math.radians(rng.uniform(-30, 30) if r < 0.75 else rng.uniform(-70, 70) if r < 0.85 else 0)
+    yaw = math.radians(dataset_framing.choose_yaw_degrees(rng, yaw_max_deg))
     loc = Vector((rng.uniform(-0.08, 0.08), rng.uniform(-0.25, 0.25), 0))
     apply(pose, loc, yaw, None)
     bpy.context.view_layer.update()
@@ -168,6 +179,7 @@ for i in range(start, start + count):
                                              "side": [round(common.W_SIDE * scale), round(H * scale)]},
             "blur": blur, "blur_shutter": shutter,
             "blur_profile": dataset_blur.BLUR_PROFILE,
+            "framing_signature": framing_signature,
             "sample_seed": seed + i, "yaw": yaw, "root": list(loc),
             "pose": {n: np.round(a, 5).tolist() for n, a in pose.items()}}
     meta_file.write_text(json.dumps(meta))

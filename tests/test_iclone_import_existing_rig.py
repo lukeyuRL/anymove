@@ -112,6 +112,36 @@ class ExistingRigImportTests(unittest.TestCase):
                          info["bones"][4]["head_joint"])
         self.assertEqual(len(info["keypoints"]),
                          len(set(k["name"] for k in info["keypoints"])))
+    def test_elongated_dinosaur_uses_more_side_width(self):
+        bounds = [
+            [-2.0444216728, -7.3383641243, -.0268925745],
+            [2.0446081161, 8.6281785965, 5.9318022728],
+        ]
+        layout = camera_layout(bounds)
+        self.assertEqual(layout["W_FRONT"] + layout["W_SIDE"], 1280)
+        self.assertEqual((layout["W_FRONT"], layout["W_SIDE"]), (400, 880))
+        self.assertLess(layout["M_PER_PX"], .027)
+        self.assertGreater(5.95 / layout["M_PER_PX"], 220)
+        draft = creature_draft("dino", bounds, layout)
+        self.assertEqual(draft["dataset"]["yaw_max_deg"], 10.0)
+        # Check XY projections stay inside the permitted split at +/-10deg.
+        import math
+        corners = [(x, y) for x in (-2.0444216728, 2.0446081161)
+                   for y in (-7.3383641243, 8.6281785965)]
+        for angle in (-10, 0, 10):
+            co, si = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+            for x, y in corners:
+                xp, yp = x*co - y*si, x*si + y*co
+                self.assertLess(abs(xp) + .08,
+                                layout["M_PER_PX"] * layout["W_FRONT"] / 2)
+                self.assertLess(abs(yp) + .25,
+                                layout["M_PER_PX"] * layout["W_SIDE"] / 2)
+
+    def test_wide_and_balanced_creatures_keep_legacy_layout(self):
+        bounds = [[-3, -1, 0], [3, 1, 2]]
+        layout = camera_layout(bounds)
+        self.assertEqual((layout["W_FRONT"], layout["W_SIDE"]), (640, 640))
+        self.assertNotIn("dataset", creature_draft("dragon", bounds, layout))
 
 
 if __name__ == "__main__":

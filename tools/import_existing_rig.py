@@ -106,22 +106,60 @@ def build_rig_info(records, layout):
 
 
 def camera_layout(bounds):
-    """Calculate metres/pixel for high-res FRONT/SIDE from actual world bounds."""
+    """Plan one shared world metres/pixel for the existing 1280x720 two-view film.
+
+    Elongated -Y/+Y animals should not get the same 640px side allocation as
+    their much narrower front view. Search valid split points, accounting for
+    the yaw used by the synthetic Dataset and a padding envelope. Never
+    introduce separate per-camera physical pixel scales: Solver triangulation
+    requires the SAME scale in both views.
+    """
     pts = [xyz(v) for v in bounds]
     if not pts:
         raise ValueError("missing skinned Mesh bounds")
     x, y, z = zip(*pts)
     if max(z) - min(z) < 1e-5:
         raise ValueError("zero-height Mesh bounds")
-    # Cameras in this branch are fixed at X=Y=0, floor at Z=0.
-    mpp = max(
-        2 * max(map(abs, x)) / (FRONT - 96),
-        2 * max(map(abs, y)) / (SIDE - 96),
-        max(z) / (GROUND - 48),
-        1e-5,
-    ) * 1.15
+    xspan, yspan = max(x) - min(x), max(y) - min(y)
+    elongated = yspan >= 2.5 * max(xspan, 1e-6)
+    if elongated:
+        # Keep small yaw augmentation; the original +/-70-degree poses would
+        # otherwise clip a long tail inside the narrower front view.
+        yaw_deg = 10.0
+        corners = [(xx, yy) for xx in (min(x), max(x))
+                   for yy in (min(y), max(y))]
+        rotated = []
+        for degrees in (-yaw_deg, 0.0, yaw_deg):
+            angle = math.radians(degrees)
+            co, si = math.cos(angle), math.sin(angle)
+            rotated.extend((abs(xx*co - yy*si), abs(xx*si + yy*co))
+                           for xx, yy in corners)
+        half_front = max(v[0] for v in rotated)
+        half_side = max(v[1] for v in rotated)
+        # 44px padding, root XY jitter (+/-0.08, +/-0.25m),
+        # up-to-0.45m airborne root motion, plus a 7% articulation buffer.
+        # The ground stays at pixel row GROUND in both views.
+        candidates = []
+        for wf in range(320, FRONT + 1, 40):
+            ws = FRONT + SIDE - wf
+            mpp = max(
+                (half_front + .08) / (wf / 2 - 44),
+                (half_side + .25) / (ws / 2 - 44),
+                (max(z) + .45) / (GROUND - 44),
+                1e-5,
+            ) * 1.07
+            candidates.append((mpp, wf, ws))
+        mpp, wf, ws = min(candidates)
+    else:
+        wf, ws = FRONT, SIDE
+        mpp = max(
+            2 * max(map(abs, x)) / (wf - 96),
+            2 * max(map(abs, y)) / (ws - 96),
+            max(z) / (GROUND - 48),
+            1e-5,
+        ) * 1.15
     return {
-        "H": HEIGHT, "W_FRONT": FRONT, "W_SIDE": SIDE,
+        "H": HEIGHT, "W_FRONT": wf, "W_SIDE": ws,
         "M_PER_PX": mpp, "GROUND_V": GROUND,
         "Z_CENTER": (GROUND - HEIGHT / 2) * mpp,
         "Y_CENTER": 0.0, "X_CENTER": 0.0,
@@ -132,7 +170,7 @@ def creature_draft(name, bounds, layout):
     x, y, z = zip(*[xyz(v) for v in bounds])
     size = max(max(x)-min(x), max(y)-min(y), max(z)-min(z), 1.0)
     centre_z = (min(z) + max(z)) / 2.0
-    return {
+    draft = {
         "name": name, "noun": "dinosaur",
         "prep": {"length_m": max(y)-min(y), "rotz_deg": 0, "axis": "y"},
         "layout": {k: layout[k] for k in
@@ -148,6 +186,10 @@ def creature_draft(name, bounds, layout):
             "lens": 40,
         },
     }
+    if layout["W_FRONT"] != FRONT:
+        draft["dataset"] = {"yaw_max_deg": 10.0,
+                            "camera_policy": "elongated_creature_v1"}
+    return draft
 
 
 def ensure_similarity(matrix, label):
@@ -392,6 +434,10 @@ def main(argv=None):
         "bounds_min": [min(bx), min(by), min(bz)],
         "bounds_max": [max(bx), max(by), max(bz)],
         "current_dataset_loader_compatible": len(meshes) == 1,
+        "framing": {"front_width_px": layout["W_FRONT"],
+                    "side_width_px": layout["W_SIDE"],
+                    "estimated_rest_height_px": (max(bz)-min(bz))/layout["M_PER_PX"],
+                    "dataset_yaw_max_deg": creature.get("dataset", {}).get("yaw_max_deg")},
         "warnings": warnings,
     }
     # Saving is opt-in and ALWAYS to a different path.
