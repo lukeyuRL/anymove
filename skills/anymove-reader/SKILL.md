@@ -21,9 +21,11 @@ with the high-resolution 1.0x renders. On Dragon, each view is 640x720, saved as
 RGBA. The 1280x720 two-view video layout is **not** changed.
 For more detail and full regression steps, see `docs/HIGH_RES.md`.
 
-Half the poses spread uniformly over the limits, half stay near rest; the pelvis sometimes rears; half carry motion
-blur from a random velocity (video models smear fast limbs); lights, turn (±30°, sometimes ±70°), position and
-airtime are random. Open `runs/<c>/dataset_samples.jpg`: dots must sit on the joints. Interrupted renders resume:
+Half the poses spread uniformly over the limits, half stay near rest; the pelvis sometimes rears.
+About 20% carry light motion blur (shutter 0.2-0.4 frames); about 80% are unblurred.
+Lights, turn (±30°, sometimes ±70°), position and airtime are random.
+Changing the blur profile causes existing dataset samples to be re-rendered
+when running tools/dataset.sh; use a separate dataset directory to preserve old images. Open `runs/<c>/dataset_samples.jpg`: dots must sit on the joints. Interrupted renders resume:
 samples that exist are skipped.
 
 GPU budget: prior 12 GB observation was for 448 input and batch 20, NOT 672 input.

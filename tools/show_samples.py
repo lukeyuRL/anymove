@@ -22,7 +22,9 @@ for m in metas:
     for (u, v), (us, vs) in zip(meta["front_uv"], meta["side_uv"]):
         dr.ellipse([u - 3, v - 3, u + 3, v + 3], fill=(255, 255, 0))
         dr.ellipse([us + layout.W_FRONT - 3, vs - 3, us + layout.W_FRONT + 3, vs + 3], fill=(255, 255, 0))
-    dr.text((8, 8), f"{m.stem} blur={meta['blur']}", fill=(255, 255, 255))
+    shutter = meta.get("blur_shutter")
+    blur_label = f"blur={shutter:.2f}" if shutter is not None else "sharp"
+    dr.text((8, 8), f"{m.stem} {blur_label}", fill=(255, 255, 255))
     tiles.append(img.resize((640, 360)))
 cols = 2
 sheet = Image.new("RGB", (640 * cols, 360 * ((len(tiles) + cols - 1) // cols)))

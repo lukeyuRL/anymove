@@ -2,8 +2,9 @@
 
 blender -b -P blender/render_dataset.py -- rigged.blend rig_info.json out_dir start count seed [scale=1.0]
 Each sample i writes out_dir/{i:05d}_front.png, _side.png (RGBA) and _meta.json (joints in metres and in
-full-size layout pixels for both views, plus the pose). About half the samples carry motion blur from a random
-velocity, the way a video model smears fast limbs. Lights, turn, position and airtime are random too.
+full-size layout pixels for both views, plus the pose). About 20% of samples
+carry light motion blur (0.2-0.4-frame shutter), simulating fast video-model
+limbs while preserving sharper training references. Lights, turn, position and airtime are random too.
 """
 import json, math, pathlib, sys
 
@@ -14,6 +15,7 @@ from mathutils import Euler, Vector
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 import common  # noqa: E402
 import dataset_paths  # noqa: E402
+import dataset_blur  # noqa: E402
 
 args = sys.argv[sys.argv.index("--") + 1:]
 blend, info_path, out = dataset_paths.resolve_render_inputs(*args[:3])
@@ -95,17 +97,21 @@ def joints_world():
     return np.array(pts)
 
 
-rng = np.random.default_rng(seed + start)
 for i in range(start, start + count):
     meta_file = dataset_paths.sample_file(out, i, "meta")
     if meta_file.exists():
         saved = json.loads(meta_file.read_text())
-        if not math.isclose(float(saved.get("scale", -1)), scale, rel_tol=0, abs_tol=1e-9):
+        if not dataset_blur.scale_matches(saved, scale):
             raise RuntimeError(f"{meta_file}: existing dataset uses scale {saved.get('scale')}, requested {scale}. "
                                "Use a separate output directory; do not mix training scales.")
-        if all(dataset_paths.is_written(dataset_paths.sample_file(out, i, view))
-               for view in ("front", "side")):
-            continue  # only resume complete samples at the requested scale
+        if (dataset_blur.profile_matches(saved)
+                and all(dataset_paths.is_written(dataset_paths.sample_file(out, i, view))
+                        for view in ("front", "side"))):
+            continue  # resume only complete samples from the current blur profile
+        print(f"rerender sample {i}: incomplete images or outdated blur profile", flush=True)
+    # Each pose gets its own deterministic RNG. Skipping completed samples or
+    # changing the number of Blender workers must not change later poses.
+    rng = np.random.default_rng(seed + i)
     rig.animation_data_clear()
     for a in list(bpy.data.actions):
         bpy.data.actions.remove(a)
@@ -118,8 +124,8 @@ for i in range(start, start + count):
     apply(pose, loc, yaw, None)
     bpy.context.view_layer.update()
     loc.z = -lowest_z() + (rng.uniform(0.05, 0.45) if rng.random() < 0.2 else 0)
-    blur = rng.random() < 0.5
-    if blur:  # key the pose at frames 0, 1, 2 along a random velocity; render frame 1 with motion blur
+    blur, shutter = dataset_blur.choose_blur(rng)
+    if blur:  # key at frames 0/1/2 along random velocity; render frame 1 with mild blur
         vel = {n: rng.normal(0, math.radians(6 if any(k in n for k in ("arm", "meta", "shin", "thigh", "paw", "tail")) else 2.5), 3) for n in bones}
         vloc = Vector(rng.normal(0, 0.015, 3).tolist())
         vyaw = rng.normal(0, math.radians(3))
@@ -127,7 +133,7 @@ for i in range(start, start + count):
             apply({n: pose[n] + s * vel[n] for n in bones}, loc + s * vloc, yaw + s * vyaw, f)
         scene.frame_set(1)
         scene.render.use_motion_blur = True
-        scene.render.motion_blur_shutter = rng.uniform(0.5, 1.0)
+        scene.render.motion_blur_shutter = shutter
     else:
         apply(pose, loc, yaw, None)
         scene.render.use_motion_blur = False
@@ -149,6 +155,9 @@ for i in range(start, start + count):
         scene.camera = cam
         scene.render.resolution_x, scene.render.resolution_y = round(w * scale), round(H * scale)
         image_path = dataset_paths.sample_file(out, i, name.split("_")[1])
+        # Remove stale images so a failed render cannot mistakenly pass the
+        # post-render is_written() check using an earlier version's PNG.
+        image_path.unlink(missing_ok=True)
         # Absolute path, not a Blender-relative render output. This must be
         # in the *same directory* as the corresponding _meta.json.
         scene.render.filepath = str(image_path)
@@ -157,7 +166,9 @@ for i in range(start, start + count):
     meta = {"joints_world": jw.round(5).tolist(), "front_uv": front.round(3).tolist(), "side_uv": side.round(3).tolist(),
             "scale": scale, "render_size": {"front": [round(common.W_FRONT * scale), round(H * scale)],
                                              "side": [round(common.W_SIDE * scale), round(H * scale)]},
-            "blur": blur, "yaw": yaw, "root": list(loc),
+            "blur": blur, "blur_shutter": shutter,
+            "blur_profile": dataset_blur.BLUR_PROFILE,
+            "sample_seed": seed + i, "yaw": yaw, "root": list(loc),
             "pose": {n: np.round(a, 5).tolist() for n, a in pose.items()}}
     meta_file.write_text(json.dumps(meta))
     print("sample", i, flush=True)

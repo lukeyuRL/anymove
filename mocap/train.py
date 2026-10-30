@@ -156,14 +156,20 @@ def main():
     train, val = split()
     if not train or not val:
         raise ValueError("dataset must include both train and held-out samples")
-    scales = set()
+    scales, profiles = set(), set()
     for m in train + val:
         metadata = json.loads(m.read_text())
         scales.add(float(metadata["scale"]))
+        # Legacy datasets remain trainable, but must not mix with new soft-blur
+        # samples: otherwise "rerender 30" can silently create mixed domains.
+        profiles.add(metadata.get("blur_profile", "legacy_unversioned"))
     if len(scales) != 1:
         raise ValueError(f"mixed dataset render scales {sorted(scales)}; use a fresh dataset_hr directory")
+    if len(profiles) != 1:
+        raise ValueError(f"mixed dataset blur profiles {sorted(profiles)}; rerender all poses with tools/dataset.sh")
     print(f"{len(train)} train / {len(val)} val poses; {len(names)} joints; "
-          f"render scale {next(iter(scales))}; reader {spec.input_size}/{spec.heatmap_size}", flush=True)
+          f"render scale {next(iter(scales))}; blur profile {next(iter(profiles))}; "
+          f"reader {spec.input_size}/{spec.heatmap_size}", flush=True)
     vl = DataLoader(Views(val, False, spec.input_size),
                     batch_size=args.batch, num_workers=args.workers, pin_memory=True)
     model = JointReader(len(names), input_size=spec.input_size,

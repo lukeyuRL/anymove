@@ -47,6 +47,23 @@ and each image is checked before its JSON metadata is written. In Windows,
 accidentally saved PNGs under C:, update this branch and rerun the same
 `tools/dataset.sh` command. Existing metadata with missing PNGs will be
 re-rendered rather than skipped; do not manually move unrelated C: files.
+The default rendering policy now produces approximately **80% unblurred**
+poses and **20% light motion blur**, with a randomized shutter of
+**0.2-0.4 frames** for the blurred samples. This is a provisional training
+configuration, not a proven optimal setting. The Meta JSON includes
+`blur`, `blur_shutter` (null for unblurred samples), `blur_profile`,
+and `sample_seed`. The contact sheet displays `sharp` or the shutter value.
+Each pose's random seed depends only on its index so resuming an interrupted
+render or changing the Blender process count does not alter later poses.
+
+When reusing the same dataset directory after this change, samples with
+the *old* blur policy (which have no `blur_profile`) are **automatically
+re-rendered**, even if both PNGs already exist. This applies to the existing
+30-pose smoke dataset: pull the branch, then rerun exactly the same command.
+It overwrites that dataset's old samples; use a new directory to retain an
+old-policy dataset for a controlled comparison. The trainer rejects datasets
+mixing different blur-profile versions.
+
 The output directory is separate to avoid silently skipping old low-res images.
 If the rig/joints change, delete or use a new dataset directory; checking
 render scale does NOT detect a changed rig.
