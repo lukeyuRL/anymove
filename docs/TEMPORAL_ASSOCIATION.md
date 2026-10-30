@@ -114,3 +114,66 @@ synthetic clean and deliberately swapped sequences: full-clip and partial
 swaps, short flicker, confidence handling, whole-chain grouping, unrelated
 joint immutability, root-relative comparison and JSON metadata. This does
 not replace a real 124-frame clip test or a 3D ground-truth accuracy test.
+
+
+## Frame-by-frame 3D diagnostics for 41–52 association result
+
+For the specific 124-frame `hr_roar` example, the first accepted candidate
+reassigns the Side hind chains in frames `[41, 53)`. This means two
+potentially sensitive **transitions**: frame 40→41 and frame 52→53.
+The average A/B joint difference alone can hide a large difference in only a
+few hind joints or frames.
+
+The new tool measures *actual solved joint position differences*, split
+between hind joints and the other 40 joints, as well as Root Translation,
+Root Quaternion angular changes, and first/second finite differences at
+association boundaries. It is not a 3D ground-truth or visual quality metric.
+
+From the checked-out `iClone_High_Res` branch in Git Bash:
+
+```bash
+git pull --ff-only
+
+python.exe tools/diagnose_temporal_motion.py \
+  runs/dragon/clips/hr_roar/motion.json \
+  runs/dragon/clips/hr_roar/motion_temporal.json
+```
+
+The tool reads `motion_temporal.association.json` automatically. It fails
+closed for mismatched FPS, joint order, source detection SHA or camera layout.
+It does **not** modify either input motion or the association report.
+
+Outputs in `runs/dragon/clips/hr_roar/motion_temporal_diagnostics/`:
+
+- `temporal_3d_report.json`: summary, top changed joints and frames,
+  Root peak frame, and seam-transition velocity/acceleration comparisons
+- `temporal_3d_by_frame.csv`: 124 frame rows, Root/whole-skeleton/hind
+  position deltas, and step-vector differences
+- `temporal_3d_by_joint.csv`: for each named joint, mean/P95/P99/max
+  delta, frame of maximum, inside-vs-outside swapped interval
+- `temporal_3d_by_joint_frame.csv`: all 124×50 joint/frame records,
+  position, step and acceleration differences
+- `temporal_3d_plot.png`: overlay of hind vs other joints, Root
+  differences and per-step hind-joint changes; requires matplotlib
+
+The frames and time markers are **zero-based**, 24 FPS. The swap begins
+at 41/24 = 1.7083s and ends at 53/24 = 2.2083s. The frame samples selected
+in the accepted region are 41 through 52 inclusive. Inspect their neighbors
+because the switch-back changes the step from 52 to 53.
+
+To run with an explicit association file or output directory:
+
+```bash
+python.exe tools/diagnose_temporal_motion.py \
+  runs/dragon/clips/hr_roar/motion.json \
+  runs/dragon/clips/hr_roar/motion_temporal.json \
+  --association runs/dragon/clips/hr_roar/motion_temporal.association.json \
+  --out-dir runs/dragon/clips/hr_roar/temporal_ab_report
+```
+
+**Interpretation:** A spike at frame 41 or 53 is evidence of a *candidate*
+solver seam discontinuity, not proof it is visually wrong; compare the
+original and temporal animations and, where possible, a known true motion.
+The report does not count lower reprojection error as accuracy improvement.
+Avoid promoting temporal association into the default iClone workflow until
+its root and hind-limb trajectories are visually and quantitatively checked.
