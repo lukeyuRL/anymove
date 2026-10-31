@@ -34,17 +34,25 @@ def validate_motion(motion, skeleton):
     if motion.get("space") != "iclone_fk_layer_xyz_radians":
         raise ContractError("requires explicit iClone FK layer channel space")
 
-    # The only permitted experimental extension is a Pelvis root motion
-    # component, with mandatory root-specific metadata and an existing XYZ
-    # rotation track. No arbitrary bone positions or opaque transforms.
+    # Experimental single root-layer position/rotation, with explicit
+    # source identity and XYZ channel semantics. The original pelvis_layer
+    # remains supported for the already validated Dragon profile.
     positions=motion.get("position_tracks")
     root=motion.get("root_motion")
     if (positions is not None or root is not None):
-        if not isinstance(root,dict) or root.get("mode")!="pelvis_layer":
-            raise ContractError("position/root track requires explicit pelvis_layer metadata")
+        if not isinstance(root,dict) or root.get("mode") not in ("pelvis_layer","root_layer"):
+            raise ContractError("position/root track requires explicit root-layer metadata")
         rid=root.get("target_bone_id")
-        if rid not in tracks or rid not in known or root.get("source_root")!="pelvis":
-            raise ContractError("root Pelvis rotation track/identity missing")
+        source_root=root.get("source_root")
+        if rid not in tracks or rid not in known:
+            raise ContractError("root rotation track/identity missing")
+        if root["mode"]=="pelvis_layer":
+            if source_root!="pelvis":
+                raise ContractError("root Pelvis rotation track/identity missing")
+        elif (not isinstance(source_root,str) or not source_root or
+              not any(b.get("id")==rid and b.get("name")==source_root
+                      for b in skeleton["bones"])):
+            raise ContractError("generic root target Bone name/identity mismatch")
         if root.get("calibrated") is not False:
             raise ContractError("experimental root must remain calibrated=false")
         components=root.get("components")

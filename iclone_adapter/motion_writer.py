@@ -89,7 +89,19 @@ def _readback(motion, controls, fps, rlpy):
                     "readback channel %d failed: %s" % (axis_index, exc))
         evidence[bone_id] = row
     if not any_nonzero:
-        raise ContractError("motion has no nonconstant rotation; cannot test animation")
+        positions=motion.get("position_tracks") or {}
+        any_nonzero=any(
+            any(max(row[axis] for row in track)-
+                min(row[axis] for row in track)>1e-6
+                for axis in range(3))
+            for track in positions.values())
+        if not any_nonzero:
+            raise ContractError("motion has no varying FK or root Position tracks")
+        # For a translation-only action, inspect the frame with maximum root
+        # travel instead of comparing the unchanged rotation at frame zero.
+        peak=max(range(motion["frame_count"]),key=lambda f:
+                 max(abs(track[f][axis]-track[0][axis])
+                     for track in positions.values() for axis in range(3)))
     return peak, evidence
 
 
@@ -317,7 +329,7 @@ def write_selected(motion, fps_confirmed=False, rlpy=None):
                   "fk_keys_verified_pose_unchecked")
         warnings = []
         if motion.get("root_motion"):
-            warnings.append("EXPERIMENTAL Root Motion: Pelvis Layer convention and "
+            warnings.append("EXPERIMENTAL Root Motion: root Layer convention and "
                             "Position unit multiplier are not calibrated; visually "
                             "verify matching Blender frames in a clean project.")
         if changed is False:

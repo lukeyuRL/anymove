@@ -2,6 +2,22 @@
 
 Target branch: `iClone`. The original Blender/AnyMove pipeline stays untouched.
 
+## Generic Creature same-rig preview (new, experimental)
+
+The `iClone_High_Res` branch has a **single data-driven source/target
+converter** for Dragon, Dino and new AnyMove rigs. It matches a selected
+iClone `skeleton.json` snapshot against the source Rig, checks every
+Bone's name/parent/rest transform, and prepares a hash-guarded
+`creature_fk.json` for the existing **Write FK motion to selected avatar**
+command. It no longer assumes 42 Bones, a pelvis root, 24 FPS or 100x
+scene scale. Root translation is **experimental and requires an explicit
+calibrated-by-testing scale**, never guessed.
+
+See [Generic Creature Adapter](../docs/GENERIC_CREATURE_ADAPTER.md) for
+step-by-step commands, safety limits and live acceptance gates.
+**Do not use Dragon's one-click direct import for Dino**; that path
+remains Dragon-specific until real Dino runtime calibration passes.
+
 ## Status (do not treat this as end-to-end capture)
 
 - **P0 built:** read one selected rigged Avatar/Prop's Skin Bone hierarchy, native current-pose local/world transforms, supported SDK flags and export JSON. Skin Bone identities are hierarchical paths; non-unique `RINode.GetID()` values are reported as diagnostics rather than blocking export.

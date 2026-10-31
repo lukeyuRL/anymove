@@ -40,11 +40,16 @@ def _rotate_vector(q, v):
 
 
 def convert_pelvis_root(motion,info,target_bone_id,mode="rotation",
-                        position_scale=None,position_space="armature"):
+                        position_scale=None,position_space="armature",
+                        source_root="pelvis"):
     if mode not in ("rotation","full"):
         raise ContractError("root mode requires rotation or full")
-    if position_space not in ("armature","pelvis_local"):
-        raise ContractError("root position_space must be armature or pelvis_local")
+    if position_space not in ("armature","pelvis_local","root_local"):
+        raise ContractError("root position_space must be armature, pelvis_local or root_local")
+    if source_root != "pelvis" and position_space == "pelvis_local":
+        raise ContractError("pelvis_local is reserved for the original pelvis root")
+    if not isinstance(source_root,str) or not source_root:
+        raise ContractError("source root Bone name required")
     if mode!="full" and position_space!="armature":
         raise ContractError("root position_space is only relevant with root mode full")
     if not isinstance(target_bone_id,str) or not target_bone_id:
@@ -58,7 +63,7 @@ def convert_pelvis_root(motion,info,target_bone_id,mode="rotation",
                         not math.isfinite(position_scale) or
                         position_scale<=0 or position_scale>10000):
         raise ContractError("root Translation requires explicit positive --root-position-scale (experimental)")
-    basis=root_rest_basis(info)
+    basis=root_rest_basis(info, name=source_root)
     inv=qinverse_unit(basis)
     angles=[]
     previous=None
@@ -88,10 +93,10 @@ def convert_pelvis_root(motion,info,target_bone_id,mode="rotation",
                 raise ContractError("root translation outside safe experimental magnitude")
             positions.append(row)
     metadata={
-        "mode":"pelvis_layer",
+        "mode":("pelvis_layer" if source_root=="pelvis" else "root_layer"),
         "components":("rotation_and_translation" if mode=="full" else
                       "rotation_only"),
-        "source_root":"pelvis",
+        "source_root":source_root,
         "target_bone_id":target_bone_id,
         "root_rest_basis_wxyz":basis,
         "root_position_scale":(float(position_scale) if mode=="full" else None),
@@ -100,10 +105,10 @@ def convert_pelvis_root(motion,info,target_bone_id,mode="rotation",
         "translation_rule":(
             ("source_armature_xyz * explicitly_configured_scale"
              if position_space=="armature" else
-             "transpose(R_rest_pelvis) @ source_armature_xyz * "
+             "transpose(R_rest_root) @ source_armature_xyz * "
              "explicitly_configured_scale")
             if mode=="full" else "excluded"),
         "calibrated":False,
-        "warning":"EXPERIMENT ONLY: root Layer axis/position units are NOT runtime calibrated.",
+        "warning":"EXPERIMENT ONLY: source root Layer axis/position units are NOT runtime calibrated.",
     }
     return angles,positions,metadata

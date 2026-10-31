@@ -359,6 +359,10 @@ def verify_fk_manifest_for_writer(motion_path,motion=None):
     if meta is None:
         return {"status":"legacy_FK_json_no_bundle_manifest",
                 "note":"Use import_pipeline prepare for source provenance."}
+    if isinstance(meta,dict) and meta.get("schema_version")==\
+            "anymove.iclone.generic_same_rig/1":
+        from .generic_creature import verify_generic_fk
+        return verify_generic_fk(path,current)
     if not isinstance(meta,dict) or meta.get("schema_version")!=BUNDLE_VERSION:
         raise ContractError("unknown embedded FK import pipeline metadata")
     if path.name!=OUTPUT_MOTION:

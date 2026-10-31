@@ -54,7 +54,7 @@ def show():
                 ("Save raw Skin Bone diagnostics (no export)", self.debug_bones),
                 ("Inspect existing motion clips / FK key counts", self.inspect_clips),
                 ("Create visible 48-frame FK motion (30 deg)", self.synthetic),
-                ("Write FK motion to selected avatar (modifies scene)", self.import_motion),
+                ("Write FK motion to selected avatar (Dragon/Creature; modifies scene)", self.import_motion),
                 ("Validate Dragon FK animation vs preview (read-only)", self.validate_dragon),
                 ("Audit iClone 8 FK Bone IDs / Keys (read-only)", self.audit_motion_bones),
                 ("Inspect Pelvis FK Root Position controls (read-only)", self.inspect_root),
@@ -719,17 +719,22 @@ def show():
                 self.out.appendPlainText("Import blocked before write: "+
                                          type(exc).__name__+": "+str(exc))
                 return
+            generic_preview = (
+                (motion.get("pipeline") or {}).get("schema_version") ==
+                "anymove.iclone.generic_same_rig/1"
+            )
             preview_notice = ""
-            if str(motion.get("calibration_status","")).startswith("unverified_"):
+            if str(motion.get("calibration_status", "")).startswith("unverified_"):
                 preview_notice = (
-                    "\nEXPERIMENTAL DRAGON PREVIEW: FK channel axes are not "
+                    "\nEXPERIMENTAL %s PREVIEW: FK channel axes are not "
                     "production calibrated. Strict unposed-scene guard will "
                     "reject reused animation projects.\n"
+                    % ("GENERIC SAME-RIG CREATURE" if generic_preview else "DRAGON")
                 )
             root=motion.get("root_motion")
             if root:
                 preview_notice += (
-                    "\nUNVERIFIED Pelvis ROOT MOTION: mode %s, position "
+                    "\nUNVERIFIED ROOT MOTION: mode %s, position "
                     "scale %s, position space %s. Test only; Root Translation "
                     "units and channel space are not yet calibrated.\n" %
                     (root.get("components"),root.get("root_position_scale"),
@@ -741,10 +746,11 @@ def show():
             )
             message += (
                 "Use a disposable TEST project only.\n"
-                "Experimental Dragon clips require a matching unposed "
+                "Experimental %s clips require a matching unposed "
                 "reference and no existing animation.\n"
-                "Use a clean project; this writer will not append a Dragon "
-                "preview over previous clips.\n"
+                "Use a clean project; this writer will not append an "
+                "uncalibrated preview over previous clips.\n" %
+                ("generic same-rig creature" if generic_preview else "Dragon")
                 "The playhead moves to the peak test pose."
             )
             message += preview_notice + (

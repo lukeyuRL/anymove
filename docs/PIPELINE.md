@@ -19,6 +19,15 @@ Every stage agrees on one 1280 x 720 layout (`mocap/layout.py`, mirrored in `ble
 `MOCAP_CREATURE=assets/<c>` selects a creature; its `creature.json` sets the layout, the paint and the feet. Without
 it, every module falls back to the wolf's layout (420 + 860 px, 1.9 m of height in frame).
 
+## Generic same-rig iClone bridge
+
+`iclone_adapter/generic_creature.py` now prepares a common rest-validated,
+source/target-checked iClone FK preview for Dragon, Dino and other rigs.
+The existing Dragon 42-Bone direct-import profile is retained as the known
+reference. See [Generic Creature Adapter](GENERIC_CREATURE_ADAPTER.md).
+A good Reader or Blender motion is NOT proof that arbitrary skeletons are
+iClone-calibrated: each new source/target rig must pass FK/Root Runtime tests.
+
 ## Files a creature brings
 
 | file | written by | holds |

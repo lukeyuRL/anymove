@@ -45,15 +45,30 @@ def audit_rig(source_info, target, max_component_error=0.002,
         by_name.setdefault(b["name"], []).append(b)
     missing = [name for name in source_names if name not in by_name]
     ambiguous = [name for name in source_names if len(by_name.get(name, [])) > 1]
+    # Match parent identities, not hard-coded Dragon's external "rig" node.
+    # A source root may sit under any imported FBX helper/armature parent;
+    # it must not be parented to another source animation Bone.
     parents_wrong = []
-    for i, bone in enumerate(src):
+    target_by_id = {bone["id"]: bone for bone in target["bones"]}
+    matched_ids = {by_name[name][0]["id"] for name in source_names
+                   if len(by_name.get(name, [])) == 1}
+    for bone in src:
         matches = by_name.get(bone["name"], [])
         if len(matches) != 1:
             continue
-        expected = src[bone["parent"]]["name"] if bone["parent"] >= 0 else "rig"
         p = matches[0].get("parent_id")
-        actual = p.rsplit("/", 1)[-1] if p else None
-        if actual != expected:
+        actual_node = target_by_id.get(p)
+        actual = actual_node.get("name") if actual_node is not None else None
+        if bone["parent"] < 0:
+            good_parent = p not in matched_ids
+            expected = "(outside source animation skeleton)"
+        else:
+            parent_name = src[bone["parent"]]["name"]
+            parent_matches = by_name.get(parent_name, [])
+            good_parent = (len(parent_matches) == 1 and
+                           p == parent_matches[0]["id"])
+            expected = parent_name
+        if not good_parent:
             parents_wrong.append({"bone": bone["name"],
                                   "expected_parent": expected,
                                   "actual_parent": actual})
