@@ -749,10 +749,9 @@ def show():
                 "Experimental %s clips require a matching unposed "
                 "reference and no existing animation.\n"
                 "Use a clean project; this writer will not append an "
-                "uncalibrated preview over previous clips.\n" %
-                ("generic same-rig creature" if generic_preview else "Dragon")
+                "uncalibrated preview over previous clips.\n"
                 "The playhead moves to the peak test pose."
-            )
+            ) % ("generic same-rig creature" if generic_preview else "Dragon")
             message += preview_notice + (
                 "\nBundle integrity check: %s\nContinue?" %
                 bundle_check["status"])
