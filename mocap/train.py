@@ -5,7 +5,7 @@ python -m mocap.train DATASET_DIR rig_info.json OUT.pt [epochs] [batch]
 Renders may be at a different (known) scale from the 1280x720 camera layout;
 all validation errors are reported back in the unscaled layout pixel space.
 """
-import argparse, json, math, pathlib, time
+import argparse, json, math, pathlib, time, os
 
 import cv2
 import numpy as np
@@ -19,6 +19,7 @@ from mocap.quality_targets import synthetic_cutout, PROFILE as QUALITY_TARGET_PR
 from mocap.reader_config import HIGH_RES_INPUT_SIZE, HIGH_RES_HEATMAP_SIZE, ReaderSpec
 from mocap.reader_geometry import Letterbox
 from mocap.reader_schedule import accumulation_group_size, optimizer_step_count
+from mocap.training_checkpoint import EpochCheckpoints, atomic_torch_save, metadata_fingerprint
 
 
 def backdrop(h, w, ground, rng):
@@ -211,8 +212,29 @@ def main():
           f"effective batch {args.batch * args.grad_accum}; "
           f"gradient_checkpointing {args.gradient_checkpointing}; "
           f"freeze_backbone {args.freeze_backbone}", flush=True)
-    step, t0, warm = 0, time.time(), 300
-    for ep in range(args.epochs):
+    # Optional persistent backup and exact optimizer/scaler resume.
+    # The dataset fingerprint covers annotation metadata (not the PNG bytes).
+    checkpointer = EpochCheckpoints(
+        os.environ.get("MOCAP_RESUME_DIR"), args.output,
+        keep_last=int(os.environ.get("MOCAP_KEEP_CHECKPOINTS", "3")),
+    )
+    resume_config = {
+        "dataset": str(pathlib.Path(args.dataset_dir).resolve()),
+        "names": names,
+        "epochs": args.epochs,
+        "batch": args.batch,
+        "grad_accum": args.grad_accum,
+        "input_size": spec.input_size,
+        "heatmap_size": spec.heatmap_size,
+        "freeze_backbone": args.freeze_backbone,
+        "gradient_checkpointing": args.gradient_checkpointing,
+        "train_quality": args.train_quality,
+        "amp_dtype": str(amp_dtype),
+        "metadata_sha256": metadata_fingerprint(train + val),
+    }
+    start_epoch, step = checkpointer.restore(model, opt, scaler, resume_config)
+    t0, warm = time.time(), 300
+    for ep in range(start_epoch, args.epochs):
         train, _ = split()
         dl = DataLoader(Views(train, True, spec.input_size,
                               quality_targets=args.train_quality),
@@ -308,7 +330,7 @@ def main():
                     errs[("front", "side")[(bi * args.batch + r) % 2]].append(e[r].numpy())
         msg = {v: float(np.mean(errs[v])) for v in errs}
         print(f"epoch {ep} val mean px error (layout pixels) front {msg['front']:.2f} side {msg['side']:.2f}", flush=True)
-        torch.save({"state_dict": model.state_dict(), "names": names, "epoch": ep,
+        atomic_torch_save({"state_dict": model.state_dict(), "names": names, "epoch": ep,
                     "val": msg,
                     "reader_spec": dict(spec.checkpoint_metadata(),
                                         quality_head=bool(args.train_quality)),
@@ -321,6 +343,7 @@ def main():
                                     "gradient_checkpointing": args.gradient_checkpointing,
                                     "freeze_backbone": args.freeze_backbone,
                                     "amp_dtype": str(amp_dtype)}}, args.output)
+        checkpointer.save_epoch(ep, step, model, opt, scaler, resume_config, msg)
     print("saved", args.output)
 
 

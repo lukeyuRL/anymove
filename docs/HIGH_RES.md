@@ -159,6 +159,11 @@ For a fair A/B, run multiple seeds and avoid selecting hyperparameters on the
 held-out test data. The current randomly augmented train batches are not
 bitwise deterministic.
 
+The standard trainer also supports opt-in full-state epoch checkpointing,
+persistent backup, best-reader selection, and resuming on Runpod/Colab.
+See [Reader training resume guide](TRAIN_RESUME.md). Keep the repository on
+local storage and the completed checkpoint files on persistent storage.
+
 ## Detection and downstream
 
 ```bash
