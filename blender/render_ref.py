@@ -10,9 +10,14 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent))
 import common  # noqa: E402
 
 args = sys.argv[sys.argv.index("--") + 1:]
-out = pathlib.Path(args[1])
+# Blender may resolve a relative scene.render.filepath against the current
+# .blend file (or a different drive on Windows) after opening a project.
+# Resolve both CLI paths before open_mainfile changes Blender's file context.
+blend = pathlib.Path(args[0]).expanduser().resolve(strict=True)
+out = pathlib.Path(args[1]).expanduser().resolve()
 out.mkdir(parents=True, exist_ok=True)
-bpy.ops.wm.open_mainfile(filepath=args[0])
+print("Reference output directory:", out, flush=True)
+bpy.ops.wm.open_mainfile(filepath=str(blend))
 rig, body = common.skinned_character_objects()
 for pb in rig.pose.bones:
     pb.rotation_mode = "XYZ"
