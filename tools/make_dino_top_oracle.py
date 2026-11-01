@@ -49,12 +49,18 @@ def make(raw,rig,truth,camera,scope):
                 or np.asarray(raw[v+"_conf"]).shape!=(T,92)):
             raise ValueError("original two-view Reader detections do not match GT")
     camera_uv=project_top_numpy(xyz,camera)
+    # Rotation +90deg: world +Y maps to image +U and world +X
+    # maps to image +V. Length must use Top's 880px wide dimension.
     simple=np.stack([
-        TOP_WIDTH/2+xyz[...,0]/layout.M_PER_PX,
-        TOP_HEIGHT/2-xyz[...,1]/layout.M_PER_PX],axis=-1)
+        TOP_WIDTH/2+xyz[...,1]/layout.M_PER_PX,
+        TOP_HEIGHT/2+xyz[...,0]/layout.M_PER_PX],axis=-1)
     err=np.linalg.norm(camera_uv-simple,axis=-1)
     if err.max()>.001:
         raise ValueError("Blender Top camera coordinates inconsistent with independent layout geometry")
+    outside=(camera_uv[...,0]<0)|(camera_uv[...,0]>=TOP_WIDTH)|(
+        camera_uv[...,1]<0)|(camera_uv[...,1]>=TOP_HEIGHT)
+    if outside.any():
+        raise ValueError("Synced Top view crops Dino GT joints; refuse unusable oracle")
     selected=np.array([
         (classify_joint(n)=="tail" if scope=="tail_only" else True)
         for n in names],bool)
