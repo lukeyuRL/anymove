@@ -120,6 +120,59 @@ Inspect `worst_joint_mean_deltas_cm`, `max_root_difference_frame`,
 `root_dynamics`, and the P1 tracking counts (especially `flow_only`,
 `outlier_flagged`, and `flow_seed_rejected`).
 
+#### P1 v2 opt-in guard for large uncertain Flow/Reader disagreements
+
+The 124-frame Dino report found maximum 2D adjustments of **169.18 px**
+(Front Tail07, frame 12) and **76.15 px** (Side L_LeftToe03, frame 82),
+and a maximum 3D inter-solution joint deviation of **47.95 cm**
+(R_RightToe03). Root differed most at frame 82 (**4.715 cm**).
+These are *between-solution distances*, not 3D ground-truth errors.
+The same-raw-Reader reprojection means worsened slightly in both views.
+The root maximum and side toe maximum sharing frame 82 is a correlation,
+**not established causation**.
+
+P1 v1's low-peak recovery may replace the raw Reader point with LK flow
+irrespective of how far the candidates disagree, even beyond 100px.
+This is the only path that can produce very large UV changes: the normal
+Reader/LK agreement branch moves <= 0.35 * 9 = 3.15px, and the
+high-peak-disagreement branch retains the raw Reader UV. A reliable
+forward/backward LK check is not a semantic identity guarantee.
+
+P1 v2 is an **opt-in** `--guard-large-disagreements` mode. When a low-peak
+reader and flow-only prediction differ by >30 layout pixels, it leaves
+the original Reader coordinate but reduces that observation's Solver
+weight multiplier to **0.10**, records `quarantined_large_disagreement`,
+and resets the flow-only streak. Both 30px and 0.1 are conservative
+engineering hypotheses, not optimized Dino thresholds. Importantly, the
+raw Reader *may also be wrong*; the guard is an abstention, not a
+claimed tracking improvement.
+
+It does not change P1 v1's existing results. On the exact same video,
+create distinct artifacts and compare to the original baseline + P1:
+
+```bash
+export MOCAP_CREATURE=assets/dino
+VIDEO=runs/dino/videos/test_walk/s1/h3max.mp4
+CLIP=runs/dino/clips/REPLACE_WITH_CAPTURE_NAME
+python.exe -m mocap.track "$VIDEO" "$CLIP/det.npz" \
+  "$CLIP/det_tracked_p1_guarded.npz" --guard-large-disagreements
+
+python.exe -m mocap.solve "$CLIP/det_tracked_p1_guarded.npz" \
+  assets/dino/rigged/rig_info.json "$CLIP/motion_tracked_p1_guarded.json"
+
+python.exe -m tools.diagnose_dino_tracking \
+  "$CLIP/det.npz" "$CLIP/det_tracked_p1_guarded.npz" \
+  "$CLIP/motion.json" "$CLIP/motion_tracked_p1_guarded.json" \
+  assets/dino/rigged/rig_info.json \
+  --out "$CLIP/p1_dino_guarded_diagnostics.json"
+```
+
+Verify the v2 `.tracking.json` contains a nonzero quarantine count
+for the problematic candidates and assess whether max 2D change and Root
+difference change. If no candidates are quarantined, the hypothesized
+outlier path was not the cause. Neither a lower reprojection error nor a
+smaller between-solution distance certifies better 3D motion.
+
 #### Separate coordinate and weight contributions
 
 If Root changes look substantial, use the four-way factorial test:
