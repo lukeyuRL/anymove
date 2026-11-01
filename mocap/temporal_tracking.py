@@ -11,6 +11,10 @@ import numpy as np
 PROFILE = "anymove_lk_reader_temporal_fusion_v1"
 MAX_FB_ERROR_PX = 2.0
 MAX_FLOW_STEP_PX = 45.0
+# LK is measured at the RAW previous-frame joint. Once fusion diverges
+# from that raw seed, a subsequent raw-seeded displacement is not a valid
+# continuation of the corrected trajectory.
+MAX_FLOW_SEED_OFFSET_PX = 7.0
 MAX_READER_FLOW_AGREEMENT_PX = 9.0
 LOW_PEAK_THRESHOLD = 0.50  # Heuristic raw peak, NOT a probability.
 MAX_FLOW_ONLY_STREAK = 3
@@ -42,15 +46,20 @@ def fuse_tracks(raw_uv, raw_peak, flow_next, flow_valid, fb_error,
     weights = np.ones((T, J), np.float32)
     streak = np.zeros(J, np.int32)
     counts = {"reader_retained": 0, "fused": 0, "flow_only": 0,
-              "outlier_flagged": 0, "flow_rejected": 0}
+              "outlier_flagged": 0, "flow_rejected": 0,
+              "flow_seed_rejected": 0}
     for t in range(1, T):
         delta = next_uv[t] - uv[t-1]
         step = np.linalg.norm(delta, axis=-1)
         prediction = adjusted[t-1] + delta
         in_bounds = ((prediction[:, 0] >= 0) & (prediction[:, 0] < view_width) &
                      (prediction[:, 1] >= 0) & (prediction[:, 1] < view_height))
+        seed_offset = np.linalg.norm(adjusted[t-1] - uv[t-1], axis=-1)
+        usable_seed = seed_offset <= MAX_FLOW_SEED_OFFSET_PX
         trustworthy = (valid[t] & (err[t] <= MAX_FB_ERROR_PX) &
-                       (step <= MAX_FLOW_STEP_PX) & in_bounds)
+                       (step <= MAX_FLOW_STEP_PX) & in_bounds &
+                       usable_seed)
+        counts["flow_seed_rejected"] += int(np.sum(valid[t] & ~usable_seed))
         discrepancy = np.linalg.norm(prediction - uv[t], axis=-1)
         for j in range(J):
             if not trustworthy[j]:
@@ -88,6 +97,7 @@ def fuse_tracks(raw_uv, raw_peak, flow_next, flow_valid, fb_error,
             np.linalg.norm(adjusted-uv, axis=-1).max()), 4),
         "mean_solver_weight": round(float(weights.mean()), 4),
         "unmodified_reader_peak_scores": True,
+        "flow_seed_max_offset_px": MAX_FLOW_SEED_OFFSET_PX,
         "note": ("LK point tracking is image evidence only, not joint identity "
                  "or a calibrated occlusion/uncertainty estimate.")
     }
