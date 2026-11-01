@@ -43,6 +43,7 @@ jobs:
       - run: bash -n tools/capture.sh
       - run: bash -n tools/eval_dino_p2.sh
       - run: bash -n tools/eval_dino_full_body.sh
+      - run: bash -n tools/eval_dino_view_reliability.sh
       - run: python -m tools.audit_dino_gt_camera --help
       - run: python -m tools.evaluate_dino_full_body --help
       # Both direct-file and -m invocations must locate sibling mocap/
