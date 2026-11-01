@@ -6,6 +6,7 @@ Does NOT rerun DINOv2, change the source detection, or infer a new identity.
 Produces an opt-in det.npz with the same existing Reader/Solver keys, plus
 track_weights and a separate JSON audit. The extra keys are optional.
 """
+import argparse
 import hashlib
 import json
 import pathlib
@@ -15,7 +16,7 @@ import cv2
 import numpy as np
 
 from mocap import layout
-from mocap.temporal_tracking import lk_measurements, fuse_tracks
+from mocap.temporal_tracking import lk_measurements, fuse_tracks, PROFILE, GUARDED_PROFILE
 
 
 def _sha256(path):
@@ -47,10 +48,17 @@ def video_frames(video, transform, expected):
 
 
 def main(argv=None):
-    args = sys.argv[1:] if argv is None else list(argv)
-    if len(args) != 3:
-        raise SystemExit("usage: python -m mocap.track VIDEO.mp4 IN_DET.npz OUT_DET.npz")
-    video, source, target = [pathlib.Path(v) for v in args]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("video")
+    parser.add_argument("source_detection")
+    parser.add_argument("target_detection")
+    parser.add_argument("--guard-large-disagreements", action="store_true",
+                        help="opt-in P1 v2: quarantine low-peak Flow/Reader disagreements >30px, weight unresolved reader at 0.1")
+    args = parser.parse_args(argv)
+    video, source, target = [
+        pathlib.Path(v) for v in
+        (args.video, args.source_detection, args.target_detection)
+    ]
     if source.resolve() == target.resolve():
         raise ValueError("must not overwrite source detections")
     if target.exists():
@@ -72,7 +80,8 @@ def main(argv=None):
     images, fps = video_frames(video, affine, T)
     if abs(float(data["fps"]) - fps) > 0.05:
         raise ValueError("video fps differs from detection fps")
-    details = {"profile": "anymove_lk_reader_temporal_fusion_v1",
+    details = {"profile": GUARDED_PROFILE if args.guard_large_disagreements else PROFILE,
+               "guard_large_disagreements": bool(args.guard_large_disagreements),
                "source_detection_sha256": _sha256(source),
                "source_video": str(video),
                "fps": fps, "views": {}}
@@ -82,7 +91,8 @@ def main(argv=None):
         frames = images[:, :, x0:x0+width, :]
         flow, ok, error = lk_measurements(frames, raw_uv)
         uv, weight, summary = fuse_tracks(
-            raw_uv, data[view+"_conf"], flow, ok, error, width, layout.H)
+            raw_uv, data[view+"_conf"], flow, ok, error, width, layout.H,
+            guard_large_disagreements=args.guard_large_disagreements)
         data[view+"_uv_reader"] = data[view+"_uv"].copy()
         data[view+"_uv"] = uv
         data[view+"_track_weight"] = weight
