@@ -14,8 +14,8 @@ set -euo pipefail
 source "$(dirname "$0")/_env.sh"
 need_creature dino
 
-base=\${1:?usage: bash tools/eval_dino_view_reliability.sh EXISTING_GT_RUN_DIR [NEW_OUTPUT_DIR]}
-target=\${2:-"$base/view_reliability_half_v1"}
+base=${1:?usage: bash tools/eval_dino_view_reliability.sh EXISTING_GT_RUN_DIR [NEW_OUTPUT_DIR]}
+target=${2:-"$base/view_reliability_half_v1"}
 rig=assets/dino/rigged/rig_info.json
 for path in "$rig" "$base/gt_render/joints.json" "$base/gt_motion.json" \
             "$base/det_baseline.npz" "$base/motion_baseline.json" \
@@ -42,8 +42,8 @@ variants=(--variant "baseline=$base/motion_baseline.json")
 detections=(--detection "baseline=$base/det_baseline.npz")
 
 for profile in tail_front_half toes_side_half combined_half; do
-  det="$target/det_\${profile}.npz"
-  motion="$target/motion_\${profile}.json"
+  det="$target/det_${profile}.npz"
+  motion="$target/motion_${profile}.json"
   "$PY" -m tools.make_dino_view_ablations \
     "$base/det_baseline.npz" "$rig" "$det" --profile "$profile"
   "$PY" -m mocap.solve "$det" "$rig" "$motion" --no-align
@@ -54,7 +54,7 @@ done
 "$PY" -m tools.evaluate_dino_full_body \
   "$base/gt_render/joints.json" "$rig" \
   "$target/full_body_quality" \
-  "\${variants[@]}" "\${detections[@]}" \
+  "${variants[@]}" "${detections[@]}" \
   --source-motion "$base/gt_motion.json"
 
 echo "DINO JOINT VIEW RELIABILITY A/B COMPLETE"
