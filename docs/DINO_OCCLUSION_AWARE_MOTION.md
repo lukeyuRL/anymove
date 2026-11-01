@@ -247,3 +247,56 @@ smoke Seed. First add a credible source of unique X-axis constraints
 and test independently on Seed 11 + natural Dino motion. A mere
 smoother curve or missing keyframe interpolation cannot substitute
 for a trained Motion Prior or synchronized additional camera.
+
+
+## Independent Seed 11 / 124-frame source-selection validation
+
+**Completed on the authorized user's computer** with the same frozen Dino
+Reader and independent Blender animation Seed 11, 124 frames, 24 FPS.
+No additional 3D mask solve was run because the Seed 7 full-body
+mask/Oracle A/B already failed its initial acceptance gate.
+This run evaluates only source-selection consistency, not Motion quality.
+
+Blender evaluated mesh geometry is saved in
+\`runs/dino/gt_experiments/seed11_full_124/occlusion_sources_v1/\`,
+with \`mesh_geometry.npz\`, SHA-bound geometry sidecar,
+\`source_selection_report.json\` and the complete Blender raycast log.
+
+Post-hoc high 2D error >=10 layout px selection audit:
+
+| View / predictor | Flagged | True >=10px errors | True positives | Precision | Recall |
+|---|---:|---:|---:|---:|---:|
+| Front mesh crossing proxy | 1654 | 193 | 88 | **5.32%** | 45.60% |
+| Front P2 expected error | 166 | 193 | 142 | **85.54%** | **73.58%** |
+| Side mesh crossing proxy | 3147 | 18 | 13 | **0.41%** | 72.22% |
+| Side P2 expected error | 29 | 18 | 0 | **0%** | 0% |
+
+The very low Side high-error selection precision demonstrates that
+mesh obstruction is a **different target variable** than localization
+error. It MUST NOT be mistaken for anatomical visibility classification
+accuracy; a keypoint can lie behind surface layers yet still be read
+correctly by the network. Neither target has actual labeled,
+human-verified Dino mesh self-occlusion GT in these experiments.
+
+Special cases:
+- Tail08 nearest mesh distance 1.05369m, **Unknown all 124 frames**;
+  geometric proxy never marks it occluded in either view.
+- Tail07 has 30 Front geometrically blocked frames, none in Side.
+- LeftToe03 has 95 Side geometric blocked frames even though only
+  **8 total >=10px Side errors** exist across *all 34 toe joints*.
+- Front Tail GT error remains the dominant high-error region. P2
+  flagged 160 Front Tail joint-frames, 142 actually >=10px (precision
+  88.75%; recall 74.74% of 190 GT high-error Tail cases).
+
+Safety validation executed (not just unit-tested): 
+\`mocap.solve\` refused a mask-bearing NPZ with no
+\`--experimental-masked-observations\`, and independently refused a
+\`oracle_gt\` mask lacking explicit \`--allow-gt-oracle\`;
+neither command wrote a motion file. Regressions and Video QA outputs
+remain in the isolated clone.
+
+**Go/no-go:** P1 guard OFF, mesh occlusion hard mask OFF,
+P2 hard mask OFF. Keep P2 error output for diagnostics and future
+joint-specific robust weighting; next substantive work is independent
+dynamic 3D constraints (synchronized Top or learned motion prior) rather
+than deleting additional 2D/animation observations.
