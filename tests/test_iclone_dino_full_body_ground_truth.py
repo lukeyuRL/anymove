@@ -110,6 +110,23 @@ class DinoFullBodyGroundTruthTests(unittest.TestCase):
         for n in [x["name"] for x in rig["keypoints"]]:
             self.assertIn(classify_joint(n), GROUPS)
 
+    def test_actual_dino_calvicle_index_mid_are_forelimbs(self):
+        for name in (
+            "joint:CC_Dinosaur_L_Calvicle:head",
+            "joint:CC_Dinosaur_L_Calvicle:tail",
+            "joint:CC_Dinosaur_R_Index01:head",
+            "joint:CC_Dinosaur_L_Index02:tail",
+            "joint:CC_Dinosaur_R_Mid01:head",
+            "joint:CC_Dinosaur_L_Mid02:tail",
+        ):
+            self.assertEqual(classify_joint(name), "forelimbs")
+        # A syntactic bone endpoint suffix MUST NOT make any limb a Tail.
+        self.assertEqual(
+            classify_joint("joint:CC_Dinosaur_R_LeftToe03:tail"),
+            "feet_toes")
+        self.assertEqual(
+            classify_joint("joint:CC_Dinosaur_Tail07:tail"), "tail")
+
     def test_unknown_group_remains_visible_not_dropped(self):
         truth, rig, base, _ = self.make_example()
         report, rows, _ = evaluate(truth, rig, {"base": base})
