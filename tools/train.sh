@@ -12,6 +12,10 @@ extras=()
 if [ "${MOCAP_LOW_VRAM:-0}" = "1" ]; then
   extras+=(--grad-accum "${MOCAP_GRAD_ACCUM:-8}" --gradient-checkpointing)
 fi
+if [ -n "${MOCAP_INIT_READER:-}" ]; then
+  [ -f "$MOCAP_INIT_READER" ] || { echo "missing warm-start Reader: $MOCAP_INIT_READER" >&2; exit 2; }
+  extras+=(--init-reader "$MOCAP_INIT_READER")
+fi
 if [ "${MOCAP_FREEZE_BACKBONE:-0}" = "1" ]; then
   extras+=(--freeze-backbone)
 fi
