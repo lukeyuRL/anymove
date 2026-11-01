@@ -44,6 +44,8 @@ jobs:
       - run: bash -n tools/eval_dino_p2.sh
       - run: bash -n tools/eval_dino_full_body.sh
       - run: bash -n tools/eval_dino_view_reliability.sh
+      - run: bash -n tools/eval_dino_occlusion.sh
+      - run: python -m tools.make_dino_occlusion_ablations --help
       - run: python -m tools.audit_dino_gt_camera --help
       - run: python -m tools.evaluate_dino_full_body --help
       # Both direct-file and -m invocations must locate sibling mocap/
@@ -64,6 +66,7 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_iclone_dino_ground_truth_camera.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_dino_full_body_ground_truth.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_dino_view_reliability.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_dino_occlusion_observations.py' -v
       - run: python -m tools.make_dino_view_ablations --help
       - run: python -m unittest discover -s tests -p 'test_iclone_dino_tracking_diagnostics.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_tracking_ablation.py' -v
