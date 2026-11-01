@@ -110,7 +110,22 @@ def main(argv=None):
     quality=evaluate(uv,conf,truth_uv,names)
     quality["profile"]="anymove.dino_real_rendered_top_reader_2d_audit_v1"
     quality["source_model_label"]=a.label
-    quality["warning"]="Evaluation against Blender GT, not model training. Existing Front/Side checkpoint is NOT trained for Top and cannot be used for production Top Motion."
+    # Read model metadata, not a guessed filename or user label, to avoid
+    # describing a newly fine-tuned Top checkpoint as the original Reader.
+    import torch
+    saved=torch.load(ck,map_location="cpu",weights_only=True)
+    top_train=saved.get("top_view_training") or {}
+    trained=bool(isinstance(top_train,dict)
+                 and top_train.get("trained_views")==["top"])
+    quality["trained_for_top_camera"]=trained
+    quality["top_training_profile"]=top_train.get("profile") if trained else None
+    quality["top_training_smoke_only"]=top_train.get("smoke_only") if trained else None
+    quality["warning"]=(
+        "Fine-tuned Top Reader checkpoint; if trained on the 30-pose smoke, "
+        "this is NOT production quality. Video 3D GT is required."
+        if trained else
+        "Original Front/Side Reader has NOT been fine-tuned for Top. "
+        "This is an image-transfer negative control, NOT production inference.")
     quality["provenance_sha256"]={
         "checkpoint":digest(ck),"rig":digest(rigpath),
         "gt":digest(gtpath),"cam_top":digest(render/"cam_top.json")}
