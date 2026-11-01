@@ -29,7 +29,11 @@ mkdir -p "$out"
 # separately and write the refined tracks as det.npz for the existing Solver.
 if [ "${MOCAP_TEMPORAL_TRACKING:-0}" = "1" ]; then
   $PY -m mocap.detect "$video" "$reader" "runs/$c/ref/ref.png" "$out/det_reader.npz" "$out/overlay.mp4" | tail -1
-  "$PY" -m mocap.track "$video" "$out/det_reader.npz" "$out/det.npz"
+  tracking_flags=()
+  if [ "${MOCAP_TEMPORAL_TRACKING_GUARDED:-0}" = "1" ]; then
+    tracking_flags+=(--guard-large-disagreements)
+  fi
+  "$PY" -m mocap.track "$video" "$out/det_reader.npz" "$out/det.npz" "${tracking_flags[@]}"
 else
   $PY -m mocap.detect "$video" "$reader" "runs/$c/ref/ref.png" "$out/det.npz" "$out/overlay.mp4" | tail -1
 fi
