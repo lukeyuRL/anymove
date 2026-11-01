@@ -374,8 +374,14 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
         wc = strength**2
         fx_conf = np.clip(np.asarray(d["front_conf"],float),0,1)**2
         sy_conf = np.clip(np.asarray(d["side_conf"],float),0,1)**2
-        top_x=(uv[...,0]-cam_spec["cx"])/cam_spec["f"]
-        top_y=(cam_spec["cy"]-uv[...,1])/cam_spec["f"]
+        # Invert the *actual* exported Top camera XY rotation. For
+        # +90deg Blender Top: image U tracks world Y and image V tracks
+        # world X. Never assume Top U measures X (that crops long tails).
+        local_xy=np.stack([
+            (uv[...,0]-cam_spec["cx"])/cam_spec["f"],
+            (cam_spec["cy"]-uv[...,1])/cam_spec["f"]],axis=-1)
+        xy=(local_xy-cam_spec["t"][:2]) @ cam_spec["R"][:2,:2]
+        top_x,top_y=xy[...,0],xy[...,1]
         tri_np[...,0] = (tri_np[...,0]*fx_conf+top_x*wc)/(fx_conf+wc+1e-9)
         tri_np[...,1] = (tri_np[...,1]*sy_conf+top_y*wc)/(sy_conf+wc+1e-9)
     elif top_camera is not None:
