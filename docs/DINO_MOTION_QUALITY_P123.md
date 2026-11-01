@@ -147,7 +147,13 @@ engineering hypotheses, not optimized Dino thresholds. Importantly, the
 raw Reader *may also be wrong*; the guard is an abstention, not a
 claimed tracking improvement.
 
-It does not change P1 v1's existing results. On the exact same video,
+It does not change P1 v1's existing results. For a **new** complete
+capture (including Solver/Blender import preview), the same optional gate
+is reachable through `MOCAP_TEMPORAL_TRACKING=1
+MOCAP_TEMPORAL_TRACKING_GUARDED=1 bash tools/capture.sh dino ...`.
+Use a new capture name and preserve the old baseline files.
+
+On the exact same video,
 create distinct artifacts and compare to the original baseline + P1:
 
 ```bash
