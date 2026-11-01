@@ -2,10 +2,11 @@
 
 The two-view AnyMove Front/Side layout remains unchanged. For a separately
 rendered orthographic Top camera at z=30m, Blender camera local -Z looks down
-toward world -Z and local image up is +Y:
+toward world -Z and the +Y (head-to-tail) dinosaur axis runs HORIZONTALLY
+through its 880px image width, so the long tail is never clipped:
 
-    u = W_TOP/2 + X/M_PER_PX
-    v = H/2 - Y/M_PER_PX
+    u = W_TOP/2 + Y/M_PER_PX
+    v = H/2 + X/M_PER_PX
 
 All camera data MUST also match Blender's exported cam_top.json. Inference
 must never synthesize Top detections from Front/Side or Blender ground truth.
@@ -33,8 +34,9 @@ def validate_top_camera(camera):
             not np.isfinite(r).all() or not np.isfinite(t).all() or
             not np.isfinite([f,cx,cy]).all()):
         raise ValueError("invalid Top camera projection fields")
-    if not np.allclose(r, np.eye(3), atol=1e-5, rtol=0):
-        raise ValueError("Top camera must look down -Z with X right and +Y up")
+    expected=np.array([[0.,1.,0.],[-1.,0.,0.],[0.,0.,1.]])
+    if not np.allclose(r, expected, atol=1e-5, rtol=0):
+        raise ValueError("Top camera must be rotated +90deg, with Dino long Y axis on horizontal image U")
     if not np.isclose(f, 1/layout.M_PER_PX, rtol=0, atol=1e-4):
         raise ValueError("Dino Top camera scale differs from fixed layout")
     if abs(cx - TOP_WIDTH/2) > 1e-4 or abs(cy - TOP_HEIGHT/2) > 1e-4:
