@@ -41,6 +41,7 @@ jobs:
       - run: python -m pip install numpy opencv-python-headless
       - run: python -m mocap.track --help
       - run: bash -n tools/capture.sh
+      - run: bash -n tools/eval_dino_p2.sh
       # Both direct-file and -m invocations must locate sibling mocap/
       - run: python tools/diagnose_dino_tracking.py --help
       - run: python -m tools.diagnose_dino_tracking --help
