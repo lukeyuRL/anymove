@@ -120,6 +120,9 @@ def main(argv=None):
                         top_conf=conf.astype(np.float32),
                         names=np.array(names),
                         fps=float(gt["fps"]))
+    # Bind the actual pixel-inference NPZ to this independent GT report.
+    # This provenance is NOT a GT input to Solver.
+    quality["top_reader_detections_sha256"]=digest(out/"top_reader_detections.npz")
     (out/"top_reader_2d_gt_report.json").write_text(
         json.dumps(quality,indent=2),encoding="utf-8")
     print(json.dumps(quality,indent=2))
