@@ -465,7 +465,7 @@ def main():
             print("tracking weights", view, "mean", round(float(w.mean()), 4),
                   "downweighted", int(np.count_nonzero(w < 1)), flush=True)
     info = json.load(open(info_path))
-    masked_observation_audit, masked_masks = None, None
+    masked_observation_audit, masked_masks, masked_provenance = None, None, None
     masked_strength = 0.0
     if "--masked-temporal-strength" in sys.argv:
         i = sys.argv.index("--masked-temporal-strength")
@@ -473,6 +473,11 @@ def main():
             raise ValueError("--masked-temporal-strength requires a float")
         masked_strength = float(sys.argv[i+1])
     if any(k in raw.files for k in ("front_visible_mask", "side_visible_mask")):
+        if "--experimental-masked-observations" not in sys.argv:
+            raise PermissionError("mask data is experimental; pass --experimental-masked-observations explicitly")
+        from mocap.occlusion_observations import verify_mask_provenance
+        masked_provenance=verify_mask_provenance(
+            det_path, allow_oracle="--allow-gt-oracle" in sys.argv)
         if "--no-align" not in sys.argv:
             raise ValueError("masked Solver requires --no-align: masks cannot be silently re-timed")
         if any(flag in sys.argv for flag in ("--fix-swaps", "--temporal-association", "--visibility-aware")):
@@ -481,8 +486,9 @@ def main():
         d, masked_masks, masked_observation_audit = prepare_masked_solver_input(d, raw, info)
         print("masked per-view observations:",
               masked_observation_audit["views"], flush=True)
-    elif masked_strength:
-        raise ValueError("--masked-temporal-strength requires a masked detection input")
+    elif (masked_strength or "--experimental-masked-observations" in sys.argv
+          or "--allow-gt-oracle" in sys.argv):
+        raise ValueError("masked observation flags require a masked detection with provenance")
     # Fail before optimization if imported rig and camera settings disagree.
     # Without MOCAP_CREATURE, mocap.layout silently defaults to Wolf.
     from mocap.layout_guard import verify_layout_for_rig
@@ -633,6 +639,7 @@ def main():
         from pathlib import Path
         report_path = Path(out).with_suffix(".occlusion.json")
         masked_observation_audit["source_detections_sha256"] = det_sha.hexdigest()
+        masked_observation_audit["source_provenance"] = masked_provenance
         masked_observation_audit["masked_temporal_strength"] = masked_strength
         masked_observation_audit["reprojection_warning"] = (
             "The masked Solver's per-run reported reprojection uses "
