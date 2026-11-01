@@ -148,3 +148,102 @@ the unique 3D X coordinate lost when Front is discarded.
 **These are controlled synthetic results, not natural Dino AI video
 visibility accuracy or real-world Motion Quality.** Do not infer that
 a high synthetic-cutout AUC validates real self-occlusion labels.
+
+
+## Completed Seed 7 / 24-frame missing-observation A/B results
+
+**Actually run** in isolated authorized Windows clone with Blender 5.0,
+local Dino rig, 24fps Seed 7 joint GT, the same stable P2 Reader snapshot.
+All 92 joints and all 24 animation frames are retained for each variant.
+Nothing in the source F:\anymove project or Reader training is modified.
+
+### True 3D world-position errors (Blender GT)
+
+| Variant | Full body mean (cm) | Full body P95 (cm) | Tail mean (cm) | Head/neck mean (cm) |
+|---|---:|---:|---:|---:|
+| Baseline | **3.35111** | 9.37482 | **6.41011** | 4.02197 |
+| Mesh crossing mask | 6.49171 | 18.10352 | 7.96891 | 14.94065 |
+| P2 predicted error >=10px hard omission | 3.35614 | **9.26248** | 6.51207 | 4.01389 |
+| P2 hard omission + local temporal acceleration ×2 | 3.43522 | 9.50044 | 7.33965 | 4.01683 |
+| Blender GT error>=10px oracle omission | 3.36494 | 9.23340 | 6.69437 | **3.97410** |
+
+All scores use the **identical independent Blender ground truth**, not
+the masked Solver's own reprojection, which may include imputed UV.
+
+**Conclusion**: Neither mesh proxy, calibrated-ish P2 error threshold,
+extra local acceleration penalty, nor even a 2D-ground-truth Oracle
+improved overall mean 3D reconstruction. P2 hard masking did slightly
+lower global P95, but Tail worsened. The Oracle is an unattainable
+GT-leakage diagnostic and still worsened overall/Tail mean, so the
+primary problem now is 3D information recovery under absent camera-axis
+observations, not merely improving occlusion classification.
+
+### Actual observation-selection precision vs known large 2D error
+
+All "precision/recall" values here use *actual 2D position error >=10px*
+as a diagnostic target, **NOT true mesh self-occlusion**:
+
+| View, mask | Excluded | Actually >=10px | Correct exclusions | Precision | Recall |
+|---|---:|---:|---:|---:|---:|
+| Front, Blender mesh proxy | 303 | 57 | 24 | 7.92% | 42.11% |
+| Side, Blender mesh proxy | 598 | 2 | 1 | 0.17% | 50% |
+| Front, P2 error proxy | 48 | 57 | 41 | **85.42%** | **71.93%** |
+| Side, P2 error proxy | 1 | 2 | 0 | 0% | 0% |
+
+The mesh proxy has terrible *high-localization-error selection
+precision*, especially in Side. In particular the Side geometry proxy
+rejected **329 foot/toe observations** despite **zero** corresponding
+>=10px position errors. This explains why a naively correct "ray
+intersects skin" heuristic can destroy reliable motion evidence.
+Do NOT relabel this as an anatomical visibility metric.
+
+### Tail08 geometry and missing-X diagnosis
+
+The Tail08 bone tip lacks a matching skinned Vertex Group and is
+~1.05m away from the nearest Dino mesh surface, so a mesh-based
+per-joint occlusion tag is **Unknown** for it, not "visible" or
+"masked." It was never identified as blocked by the mesh gate.
+
+In independent Seed 11 124-frame GT, Frame 47 Tail08:
+- Baseline 3D error decomposes into X -66.77 cm, Y +9.08 cm,
+  Z -18.18 cm (69.79 cm norm).
+- P2 soft-weighted X error worsened to -73.63 cm (76.33cm norm).
+- Front uniquely provides direct X information under current camera
+  geometry. Removing its observation without another way to estimate
+  X (synchronized Top/elevated camera, verified dynamic prior) cannot
+  be assumed to reconstruct the true Tail08 lateral trajectory.
+
+### Explicit opt-in and leakage safety gates
+
+A masked detection NPZ requires:
+- a matching SHA-256-bound \`*.occlusion_input.json\` file;
+- \`--experimental-masked-observations --no-align\` in the Solver;
+- GT oracle additionally requires \`--allow-gt-oracle\`, **NEVER**
+  in production AI-video captures.
+
+The experiment runner sets these flags only in its isolated QA modes.
+The ordinary Reader/Solver/iClone path is unchanged. Source
+detections/motions are never overwritten; no animation key gets deleted.
+
+### Files created and QA
+
+Under
+\`F:\anymove_gt_eval_20261101\runs\dino\gt_experiments\seed7_smoke_24\occlusion_mask_v1\`:
+
+- \`mesh_geometry.npz\` / \`mesh_geometry.mesh_geometry.json\`
+  (deformed Blender raycast and per-joint skin support, provenance SHA)
+- \`det_{mesh,p2_error,p2_error_temporal,oracle_gt}.npz\`
+  (input Reader UV/peaks unchanged, boolean observation masks)
+- \`motion_*.json\` / \`motion_*.occlusion.json\`
+  (all 24 frames with masked observation provenance)
+- \`mask_review_mesh.mp4\` and \`mask_review_p2.mp4\`
+  (green kept 2D observations; red X omitted; purple ring skin UNKNOWN)
+- \`source_selection_report.json\` (post-hoc 2D GT selection audit)
+- \`ground_truth_comparison/full_body_report.json\`,
+  \`by_joint.csv\`, \`by_frame.csv\` (ground-truth 3D comparison)
+
+**Next acceptance gate:** do not optimize thresholds against this one
+smoke Seed. First add a credible source of unique X-axis constraints
+and test independently on Seed 11 + natural Dino motion. A mere
+smoother curve or missing keyframe interpolation cannot substitute
+for a trained Motion Prior or synchronized additional camera.
