@@ -1,10 +1,15 @@
 """No-ML/GPU tests for held-out Dino localization uncertainty audits."""
 import unittest
-import numpy as np
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
-from mocap.quality_metrics import error_calibration_report, PROFILE
+if np is not None:
+    from mocap.quality_metrics import error_calibration_report, PROFILE
 
 
+@unittest.skipUnless(np is not None, "NumPy optional in lightweight CI")
 class QualityMetricsTests(unittest.TestCase):
     def test_perfect_mean_calibration_has_zero_gap(self):
         expected = np.arange(1., 41.).reshape(10, 4)
