@@ -2,25 +2,25 @@
 
 Status: **受控 Blender 實測完成；目前所有 Occlusion Mask 都維持 opt-in，未通過啟用驗收**。
 
-Last verified: 2026-11-01, desktop \`LukeYu-2024\`, isolated clone
-\`F:\anymove_gt_eval_20261101\`.
-Working tree \`F:\anymove\`, original Reader / P2 checkpoints, Blender Dino mesh,
-original \`motion.json\`, and all 2,200 static-pose samples were not overwritten.
+Last verified: 2026-11-01, desktop `LukeYu-2024`, isolated clone
+`F:\anymove_gt_eval_20261101`.
+Working tree `F:\anymove`, original Reader / P2 checkpoints, Blender Dino mesh,
+original `motion.json`, and all 2,200 static-pose samples were not overwritten.
 
 ## 1. Precisely what was tested
 
 - Controlled Blender ground truth: **Seed 7, 24 frames, 24fps, 92 keypoints, 67 bones**.
 - Same frozen 672/192 original Reader, same raw front+side video and known Blender evaluated 3D joint positions.
 - Independent Blender ray intersections for Mesh mask. A joint is *blocked-proxy* if its ray crosses **at least two** mesh surfaces AND the joint is within 0.5m of its closest skinned surface.
-- P2 head snapshot: \`85d51371b8667eb7a2fd465cc85bfb3e28a6398285b78611e66f854dde289458\`. P2 *expected error* threshold = 10 layout px, **not** synthetic-cutout visibility probability.
-- New \`mocap/occlusion_observations.py\` and opt-in \`mocap.solve\`: masked per-view 2D data term receives zero weight, missing pixel UV only interpolated to initialize IK; no animation frames or final FK Keys deleted. No P1/P2 tracking weights stacked with missing masks.
-- \`p2_error_temporal\`: same mask plus 2× additional local acceleration penalty around missing observations. This is *not* a learned Motion Prior.
-- \`oracle_gt\`: mask only 2D measurements whose error against Blender 2D GT is >=10px. **This arm leaks GT and cannot be deployed.** It tests this one rule's performance given ideal erroneous-measurement selection; it is **not** the optimal possible 3D reconstruction Oracle.
+- P2 head snapshot: `85d51371b8667eb7a2fd465cc85bfb3e28a6398285b78611e66f854dde289458`. P2 *expected error* threshold = 10 layout px, **not** synthetic-cutout visibility probability.
+- New `mocap/occlusion_observations.py` and opt-in `mocap.solve`: masked per-view 2D data term receives zero weight, missing pixel UV only interpolated to initialize IK; no animation frames or final FK Keys deleted. No P1/P2 tracking weights stacked with missing masks.
+- `p2_error_temporal`: same mask plus 2× additional local acceleration penalty around missing observations. This is *not* a learned Motion Prior.
+- `oracle_gt`: mask only 2D measurements whose error against Blender 2D GT is >=10px. **This arm leaks GT and cannot be deployed.** It tests this one rule's performance given ideal erroneous-measurement selection; it is **not** the optimal possible 3D reconstruction Oracle.
 
 Source: local experiment
-\`runs/dino/gt_experiments/seed7_smoke_24/occlusion_mask_v1/ground_truth_comparison/\`.
-Files \`full_body_report.json\`, \`by_joint.csv\`, \`by_frame.csv\`. Geometry metadata
-\`mesh_geometry.mesh_geometry.json\`; raw weight/mask provenance sidecars and solver logs also stored there.
+`runs/dino/gt_experiments/seed7_smoke_24/occlusion_mask_v1/ground_truth_comparison/`.
+Files `full_body_report.json`, `by_joint.csv`, `by_frame.csv`. Geometry metadata
+`mesh_geometry.mesh_geometry.json`; raw weight/mask provenance sidecars and solver logs also stored there.
 The local results are NOT uploaded to GitHub.
 
 ## 2. Ground truth 3D results
@@ -104,14 +104,14 @@ new tail-only masking rule and avoid a selection-bias claim.
 Make the following work conditional on 3D GT acceptance:
 
 1. **Explicit observation semantics.** For each Keypoint store
-   \`observed_skin_landmark | virtual_fk_endpoint | internal_bone\`;
-   plus \`visible | occluded | unsupported | unknown\` per view/frame.
+   `observed_skin_landmark | virtual_fk_endpoint | internal_bone`;
+   plus `visible | occluded | unsupported | unknown` per view/frame.
    Derive virtual-tail FK endpoints from visible skin/tail curvature and
    pose/bone constraints; do not expect DINOv2 to see a point >1m outside
    the mesh. Do not mistake a renderer's 2+ mesh intersections for GT
    occlusion.
 2. **P2 predicted localization-error handling.** A candidate
-   \`Front/Tail-only\` inlier gate (Side unchanged) is motivated by high
+   `Front/Tail-only` inlier gate (Side unchanged) is motivated by high
    Front P2 precision and zero Side precision; DO NOT promote it without
    a NEW independent GT seed. Retain soft-weight and robust-loss
    baselines. Avoid using measured Blender GT at inference.
@@ -156,7 +156,7 @@ action. The code/CI passing alone is insufficient.
 
 ## Reproduce
 
-\`\`\`bash
+```bash
 cd /f/anymove_gt_eval_20261101
 export PYTHON=python.exe
 export BLENDER="/c/Program Files/Blender Foundation/Blender 5.0/blender.exe"
@@ -168,7 +168,7 @@ bash tools/eval_dino_occlusion.sh \
   occlusion_mask_new_tag \
   mesh,p2_error,p2_error_temporal,oracle_gt \
   runs/dino/reader_hr_quality_p2_eval_snapshot.pt
-\`\`\`
+```
 
-The code is in the opt-in branch \`feature/dino-motion-quality-p123\`,
+The code is in the opt-in branch `feature/dino-motion-quality-p123`,
 currently retained as Draft PR #2.
