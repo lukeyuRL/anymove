@@ -6,7 +6,7 @@ except ImportError:
     np = None
 
 if np is not None:
-    from mocap.quality_metrics import error_calibration_report, PROFILE
+    from mocap.quality_metrics import error_calibration_report, synthetic_visibility_report, PROFILE
 
 
 @unittest.skipUnless(np is not None, "NumPy optional in lightweight CI")
@@ -28,6 +28,27 @@ class QualityMetricsTests(unittest.TestCase):
         self.assertAlmostEqual(report["mean_error_calibration_gap_px"], 7.5)
         self.assertIsNone(report["predicted_vs_actual_pearson"])
         self.assertIn("not calibrated real visibility", report["interpretation"])
+
+    def test_perfect_cutout_visibility_auc_and_brier(self):
+        scores = np.array([.1, .15, .82, .95, .13, .93], dtype=float)
+        visible = np.array([0, 0, 1, 1, 0, 1], dtype=float)
+        r = synthetic_visibility_report(scores, visible)
+        self.assertEqual(r["roc_auc"], 1.0)
+        self.assertEqual(r["artificially_masked"], 3)
+        self.assertLess(r["brier"], .04)
+        self.assertIn("NOT true mesh", r["meaning"])
+
+    def test_cutout_visibility_ties_and_single_class(self):
+        r = synthetic_visibility_report(
+            np.full(20, .5), np.tile([0, 1], 10))
+        self.assertEqual(r["roc_auc"], .5)
+        no_mask = synthetic_visibility_report(np.ones(10), np.ones(10))
+        self.assertIsNone(no_mask["roc_auc"])
+        self.assertEqual(no_mask["artificially_masked"], 0)
+        with self.assertRaisesRegex(ValueError, "binary"):
+            synthetic_visibility_report([.1, .8], [0, .6])
+        with self.assertRaisesRegex(ValueError, "probabilities"):
+            synthetic_visibility_report([-.2, .8], [0, 1])
 
     def test_invalid_predictions_fail_closed(self):
         a = np.ones((5, 3))
