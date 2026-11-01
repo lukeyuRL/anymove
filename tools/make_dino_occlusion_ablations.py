@@ -152,12 +152,17 @@ def main(argv=None):
     p.add_argument("output_detection")
     p.add_argument("--mode",required=True,choices=MODES)
     p.add_argument("--geometry")
+    p.add_argument("--geometry-truth", help="exact Blender GT joints.json used to create mesh geometry")
     p.add_argument("--quality")
     p.add_argument("--truth")
     p.add_argument("--threshold-px",type=float,default=10.0)
     a=p.parse_args(argv)
     inputs=[pathlib.Path(a.raw_reader),pathlib.Path(a.rig_info)]
-    for value in (a.geometry,a.quality,a.truth):
+    if a.geometry and not a.geometry_truth:
+        raise ValueError("--geometry-truth required to verify mesh raycast provenance")
+    if a.geometry_truth and not a.geometry:
+        raise ValueError("--geometry-truth requires --geometry")
+    for value in (a.geometry,a.geometry_truth,a.quality,a.truth):
         if value:
             inputs.append(pathlib.Path(value))
     out=pathlib.Path(a.output_detection).resolve()
@@ -180,8 +185,7 @@ def main(argv=None):
             raise FileNotFoundError("missing Blender mesh geometry provenance audit")
         meta=json.loads(meta_path.read_text(encoding="utf-8"))
         if (meta["geometry_npz_sha256"]!=sha256(a.geometry)
-                or meta["blender_truth_sha256"]!=sha256(a.truth or
-                    pathlib.Path(a.geometry).parent/"gt_render/joints.json")
+                or meta["blender_truth_sha256"]!=sha256(a.geometry_truth)
                 or meta["rig_info_sha256"]!=sha256(a.rig_info)):
             raise ValueError("Blender geometry SHA validation failed")
     output,audit=build(raw,rig,a.mode,geometry=geom,quality=qual,
