@@ -13,11 +13,11 @@ def validate_base_reader(checkpoint, names, spec):
     """Return a regular Reader state_dict only when its contract matches."""
     if not isinstance(checkpoint, dict):
         raise ValueError("initial Reader checkpoint must be a mapping")
+    if len(names) != len(set(names)) or not names:
+        raise ValueError("initial Reader requires unique nonempty joint names")
     saved_names = checkpoint.get("names")
     if not isinstance(saved_names, (tuple, list)) or list(saved_names) != list(names):
         raise ValueError("initial Reader joint names/order mismatch the Dino rig")
-    if len(names) != len(set(names)) or not names:
-        raise ValueError("initial Reader requires unique nonempty joint names")
     if spec_from_checkpoint(checkpoint) != spec:
         raise ValueError("initial Reader resolution / heatmap does not match training")
     if checkpoint.get("quality_spec") is not None or (checkpoint.get("reader_spec") or {}).get("quality_head", False):
