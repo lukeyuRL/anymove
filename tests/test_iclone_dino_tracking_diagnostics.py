@@ -61,6 +61,16 @@ class DinoTrackingDiagnosticsTests(unittest.TestCase):
         self.assertEqual(report["frames"], 12)
         self.assertEqual(report["keypoints"], 3)
         self.assertEqual(report["detection_changes"]["front"]["changed_joint_frames"], 1)
+        self.assertEqual(
+            report["detection_changes"]["front"]["joint_frames_above_displacement_px"]["3"], 1)
+        self.assertEqual(
+            report["detection_changes"]["front"]["joint_frames_above_displacement_px"]["30"], 0)
+        self.assertEqual(
+            report["detection_changes"]["front"]["max_adjustment_joint"], "left_foot")
+        self.assertEqual(
+            report["detection_changes"]["front"]["max_adjustment_solver_track_weight"], .55)
+        self.assertEqual(
+            report["detection_changes"]["front"]["max_adjustment_raw_reader_peak"], 1.)
         self.assertEqual(report["detection_changes"]["side"]["changed_joint_frames"], 1)
         self.assertEqual(report["detection_changes"]["front"]["joint_frames_with_weight_below_one"], 1)
         self.assertAlmostEqual(report["root_translation_between_solutions_cm"]["mean_cm"], 1., places=4)
