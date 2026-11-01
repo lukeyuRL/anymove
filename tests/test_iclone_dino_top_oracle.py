@@ -27,8 +27,10 @@ class DinoTopOracleContractTests(unittest.TestCase):
         T=8
         self.rig={"keypoints":[{"name":n} for n in self.names]}
         J=np.zeros((T,92,3),float)
-        J[:,:,0]=np.arange(T)[:,None]*.024
-        J[:,:,1]=np.arange(92)[None,:]*.1-4.
+        # Scale the fabricated NumPy test joints to whichever default
+        # creature layout is active in CI; no real Dino assets required.
+        J[:,:,0]=np.arange(T)[:,None]*layout.M_PER_PX*4
+        J[:,:,1]=(np.arange(92)[None,:]-46)*layout.M_PER_PX*7
         J[:,:,2]=2.0
         self.truth={"names":self.names,"fps":24.0,
                     "joints":J.tolist()}
@@ -82,7 +84,7 @@ class DinoTopOracleContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"target"):
             make(self.raw,self.rig,self.truth,shifted,"tail_only")
         flip=dict(self.camera,R=np.eye(3).tolist())
-        with self.assertRaisesRegex(ValueError,"look down"):
+        with self.assertRaisesRegex(ValueError,"rotated"):
             validate_top_camera(flip)
         other=dict(self.truth,names=list(reversed(self.names)))
         with self.assertRaisesRegex(ValueError,"order"):
@@ -106,7 +108,7 @@ class DinoTopOracleContractTests(unittest.TestCase):
             atol=1e-8,rtol=0)
         uv[...,0].sum().backward()
         self.assertTrue(np.allclose(
-            points.grad[...,0].detach().cpu().numpy(),
+            points.grad[...,1].detach().cpu().numpy(),
             1/layout.M_PER_PX))
 
 
