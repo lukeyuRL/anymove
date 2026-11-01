@@ -20,7 +20,7 @@ from mocap.reader_config import HIGH_RES_INPUT_SIZE, HIGH_RES_HEATMAP_SIZE, Read
 from mocap.reader_geometry import Letterbox
 from mocap.reader_warmstart import validate_base_reader, sha256_file
 from mocap.quality_only import configure_quality_only
-from mocap.quality_metrics import error_calibration_report
+from mocap.quality_metrics import error_calibration_report, synthetic_visibility_report
 from mocap.reader_schedule import accumulation_group_size, optimizer_step_count
 from mocap.training_checkpoint import EpochCheckpoints, atomic_torch_save, metadata_fingerprint
 
@@ -62,9 +62,12 @@ def photometric(img, rng):
 
 class Views(Dataset):
     def __init__(self, metas, train, input_size=HIGH_RES_INPUT_SIZE,
-                 quality_targets=False):
+                 quality_targets=False, quality_mask_eval=False):
         self.metas, self.train, self.input_size = metas, train, input_size
         self.quality_targets = quality_targets
+        if quality_mask_eval and (train or not quality_targets):
+            raise ValueError("held-out cutout evaluation requires validation + quality targets")
+        self.quality_mask_eval = bool(quality_mask_eval)
 
     def __len__(self):
         return 2 * len(self.metas)
@@ -116,8 +119,12 @@ class Views(Dataset):
             out = photometric(out, rng)
         visible = None
         if self.quality_targets:
-            if self.train:
-                out, visible = synthetic_cutout(out, kp, rng)
+            if self.train or self.quality_mask_eval:
+                # Stable RNG is already seeded from the validation index.
+                # Forced cutout makes held-out AUC evaluate BOTH classes,
+                # rather than the clean validation set's all-visible labels.
+                out, visible = synthetic_cutout(
+                    out, kp, rng, probability=0.70 if self.train else 1.0)
             else:
                 visible = np.ones(len(kp), dtype=np.float32)
         x = torch.from_numpy(np.ascontiguousarray(out)).permute(2, 0, 1).float() / 255
@@ -198,6 +205,11 @@ def main():
     vl = DataLoader(Views(val, False, spec.input_size,
                           quality_targets=args.train_quality),
                     batch_size=args.batch, num_workers=args.workers, pin_memory=True)
+    quality_vl = (DataLoader(
+        Views(val, False, spec.input_size, quality_targets=True,
+              quality_mask_eval=True),
+        batch_size=args.batch, num_workers=args.workers, pin_memory=True)
+        if args.train_quality else None)
     model = JointReader(len(names), input_size=spec.input_size,
                         heatmap_size=spec.heatmap_size,
                         quality_head=args.train_quality).cuda()
@@ -393,10 +405,25 @@ def main():
                     np.concatenate(uncertainty[view]),
                     np.concatenate(errs[view])) for view in ("front", "side")
             }
-            print(f"epoch {ep} quality head held-out calibration gap (layout px) "
+            vis_scores, vis_labels = [], []
+            # Separate deterministic masked validation: the clean val set
+            # contains no masked joints and cannot measure visibility AUC.
+            for qx, _, _, qvisible in quality_vl:
+                with torch.autocast("cuda", dtype=amp_dtype):
+                    pred_mask, quality_mask = model(
+                        qx.cuda(non_blocking=True), return_quality=True)
+                uv_mask, _ = decode(pred_mask.float())
+                vis_logit, _ = quality_at(quality_mask.float(), uv_mask)
+                vis_scores.append(torch.sigmoid(vis_logit).cpu().numpy())
+                vis_labels.append(qvisible.numpy())
+            quality_val["synthetic_cutout_visibility"] = synthetic_visibility_report(
+                np.concatenate(vis_scores), np.concatenate(vis_labels))
+            print(f"epoch {ep} quality validation: error calibration gap (layout px) "
                   f"front {quality_val['front']['mean_error_calibration_gap_px']:.2f}, "
                   f"side {quality_val['side']['mean_error_calibration_gap_px']:.2f}; "
-                  "NOT real-video visibility calibration", flush=True)
+                  f"held-out synthetic cutout AUC "
+                  f"{quality_val['synthetic_cutout_visibility']['roc_auc']}; "
+                  "NOT mesh self-occlusion calibration", flush=True)
         print(f"epoch {ep} val mean px error (layout pixels) front {msg['front']:.2f} side {msg['side']:.2f}", flush=True)
         atomic_torch_save({"state_dict": model.state_dict(), "names": names, "epoch": ep,
                     "val": msg,
