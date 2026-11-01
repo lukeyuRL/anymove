@@ -60,6 +60,7 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_iclone_tracking_ablation.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_reader_warmstart.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_p2_weighted_reader.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_p2_quality_visualization.py' -v
       - run: python -m tools.make_dino_p2_weighted_detection --help
       - run: python -m tools.compare_dino_p2_motion --help
       - run: python -m tools.review_dino_p2 --help
