@@ -222,3 +222,116 @@ Top／Elevated 消融實驗，不可把不相關的生成畫面當同步真值�
 實測 Report 與每關節、每影格 CSV 只保留在使用者本機測試目錄；
 本次 GitHub Commit **不包含**私人 Dino Mesh、
 Blender Rig、Checkpoint 或其原始資料。
+
+## 2026-11-01 live Dino 124-frame seed 11 results
+
+**已在使用者 Windows 電腦完成實際執行**，不是僅用 GitHub CI 模擬。
+實驗位置：`F:\\anymove_gt_eval_20261101\\runs\\dino\\gt_experiments\\seed11_full_124`。
+另一個固定 Seed 11、124 frames、24 FPS、92 Joint 的 Blender Cycles
+受控連續動作；使用跟 Seed 7 完全相同的原始 672/192 Joint Reader，
+以及 SHA256 固定的 P2 Quality Reader snapshot
+`85d51371b8667eb7a2fd465cc85bfb3e28a6398285b78611e66f854dde289458`。
+全程沒有恢復或改動原始 P2 訓練 Checkpoint。
+
+Blender Front 與 Side Camera 對投影的最大差異分別
+**0.000050px / 0.000059px**，Camera Audit `PASS`。
+同步 Front/Side 最佳時間差 `0 frames`。
+實際 `gt_video.mp4` 有 124 frames。
+全部 92 個 Keypoints 分類完成（0 未分類）。
+
+### 原始 Reader 真值 2D 誤差（px）
+
+下表是 **已知 3D Blender world joints 經固定相機投影的 2D GT**
+對原始 Reader 檢測的距離，不是 Solver Reprojection。
+特別要區分幾何遮擋與仍能顯示投影位置的內部骨骼點；目前尚未
+有 Mesh 自遮擋 Label。
+
+| Seed / View | Head Neck | Torso Root | Forelimbs | Hindlimbs | Feet Toes | Tail |
+|---|---:|---:|---:|---:|---:|---:|
+| Seed 7 · Front | 1.691 | － | － | － | 0.851 | **10.026** |
+| Seed 7 · Side | 1.249 | － | － | － | 1.459 | **0.730** |
+| Seed 11 · Front | 1.539 | 1.460 | 0.921 | 1.164 | 0.933 | **7.577** |
+| Seed 11 · Side | 1.257 | 0.765 | 1.211 | 1.014 | 1.562 | **0.839** |
+
+兩組 Seed 的 2D 錯誤型態相同：Front Tail 大幅偏高，而
+Side Tail 很低；Feet/Toes 的 Side 相對 Front 較弱。
+Seed 11 全部 92 Joint 的 Front/Side Reader MAE 分別為
+**1.736px / 1.276px**。Tail08 在 Frame 47 的 Front 2D 真值
+誤差約 **71.55px**。
+
+### P1 Guarded 2D 真值 A/B（Seed 11）
+
+改用 Optical Flow + Guarded 之後，Front MAE
+**1.736 → 1.939px**、Side **1.276 → 1.387px**。
+Head/Neck、Torso/Root、Forelimbs、Hindlimbs、
+Feet/Toes、Tail **全部六組**在兩個視角的平均 2D GT 誤差皆增加。
+這是直接對 Blender 真值的證據，不是同一 Detection 的
+Solver Loss，足以否決直接開啟目前 P1 Fusion。
+
+### 三版本 3D 真值比較（Seed 11 · 124 frames）
+
+下列 MAE 單位為 cm，全部投影/骨架/影格與 GT 相同。
+
+| Body part | Joints | Baseline | P1 Guarded | P2 Weighted |
+|---|---:|---:|---:|---:|
+| All | 92 | **3.52860** | 4.11449 | 3.52536 |
+| Head / Neck | 17 | 3.85501 | 4.38021 | **3.85140** |
+| Torso / Root | 5 | 2.32611 | 3.11415 | **2.32223** |
+| Forelimbs | 21 | 2.77206 | 3.17449 | **2.75711** |
+| Hindlimbs | 6 | 2.51774 | 3.37383 | **2.51391** |
+| Feet / Toes | 34 | 3.39332 | 4.04297 | **3.36220** |
+| Tail | 9 | **6.53030** | 7.12566 | 6.66117 |
+
+- 全身 P95 (cm)：Baseline **8.67428**、P1 **10.01748**、
+  P2 **8.60468**。
+- Root World Keypoint MAE (cm)：Baseline **2.10476**、
+  P1 **3.27619**、P2 **2.10620**。
+- 全身最大單點誤差 (cm)：Baseline **69.79396**、P1 **65.26477**、
+  P2 **76.33210**。
+- Tail08 在 Frame 47 仍是最嚴重單點：
+  Baseline 69.79396cm、P2 **76.33210cm**。
+- P1 全身平均相對 Baseline 約 **+16.6% 誤差**，與 Seed 7 的
+  **+12.6%** 同方向。
+- P2 全身 MAE 只比 Baseline 改善 **約 0.092%**；Seed 7 曾改善
+  **1.299%**，故不能宣稱 P2 的整體效果已穩定。
+  P2 Tail MAE 在 Seed 11 從 **6.53030 → 6.66117 cm（變差）**；
+  Seed 7 則為 6.41011 → 6.04932cm（改善）。
+
+### P2 誤差校準在 Seed 11 的已知 2D GT 上
+
+P2 的 predicted error vs actual error Pearson：
+Front **0.78505**、Side **0.53304**。
+平均 error-calibration gap：Front **0.4074px**、
+Side **0.68258px**。
+Front Tail 的平均預測 5.821px、實際 7.577px；
+Tail08 Frame 47 預測 **29.887px**，實際約 **71.547px**，
+證明極端失敗案例仍被明顯低估。
+
+在同一份 Raw Reader 座標、完全沒有重新訓練 Joint Reader 的
+前提下，P2 只對 Front **391/11408**、Side **364/11408**
+Joint-frames 乘上小於一的權重。這是啟發式公式
+`clip(5/max(expected_error_px,5),0.4,1)` 的效果，並非
+經真實自遮擋分布校準的統計模型。
+
+### 目前工程結論與下一階段 Gate
+
+1. **P1 Guarded 不得啟用為預設。** 兩組受控 Ground Truth 都呈現
+   2D 與 3D 全身平均退步。先調查 LK 可信度、Joint Identity、
+   常態小幅漂移與「接受／拒絕」融合，再以跨 Seed GT 驗證新 Fusion。
+2. **P2 預測不確定性有用，但 Weighting 暫不升級正式 Solver。**
+   平均改善不穩定，Frame 47 Tail08 極端失敗甚至變嚴重。
+   應優先驗證特別嚴重的尾巴誤差、負向選擇風險，以及 Head/Neck／Toes
+   的不確定性校準。
+3. **關節專屬 View Reliability** 比直接讓全部 92 Joints 用相同
+   視角權重更值得 A/B。可先試精準受控的
+   Tail Front 降權／Side 保持權重，另測接近後腿的 Toe；
+   但 Front 有獨特 X 軸資訊，Side 無法單獨補回，
+   不應把 Front Tail 強制設零而宣稱能恢復 3D。
+4. 若使用 Top／Elevated Third View，需先用 **同一段**
+   Blender Ground Truth 動畫產生同步第三相機，才能量測
+   Joint Specific Multi-view 的真實收益。
+5. 合成動作無接地段／自然步態保證；真正的 Motion Prior、接地與
+   自遮擋需後續 verified gait corpus。
+
+所有真實 GT／Checkpoint／Dino Blender Mesh／CSV 留在使用者的
+本機獨立 Clone，不會隨本文件上傳 GitHub。
