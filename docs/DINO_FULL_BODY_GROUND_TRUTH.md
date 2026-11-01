@@ -164,3 +164,61 @@ P2 的 synthetic-cutout visibility 值**不會**進入 Solver；只有
 動畫**渲染 Top／Elevated 第三視圖，與 Front/Side 在
 同一份 Blender 3D 真值下比較；不可用不同動作假裝同步第三視角。
 未驗證之前，不改 iClone FK/Root Writer、不啟用第三視角為預設。
+
+## 2026-11-01 live Dino 24-frame smoke (LukeYu-2024)
+
+**實際執行完成（非推測）**：Remote Desktop Commander 連線到
+`LukeYu-2024`，只停掉了使用原始
+`runs/dino/reader_hr_quality_p2_headonly.pt` 的 P2 訓練 Python。
+最近完成的訓練備份為 `epoch_013_full.pt`（Epoch 0–12），原始
+`F:\\anymove` Working Tree 不變。GT 測試用獨立 repo
+`F:\\anymove_gt_eval_20261101`，Dino Rig 僅使用本機連結，
+`reader_hr_v1.pt` 與固定的
+`reader_hr_quality_p2_eval_snapshot.pt` 僅作唯讀推論；
+新 Synthetic GT／影片／Detection／Solver／Report 在隔離目錄
+`runs/dino/gt_experiments/seed7_smoke_24/`。
+
+- 24 Frames、24 FPS、92 keypoints、67 bones，Seed 7，Blender Cycles。
+- 正交 Camera Audit **PASS**：Front 最大投影差 0.000048px，
+  Side 0.000057px；Front/Side 最佳 Lag 0 Frames。
+- 原始 Reader 2D peak 平均 Front 0.90、Side 0.93。
+- P2 新 Reader 的 UV 與 Heatmap Peaks 相對 Baseline 完全相同（兩者
+  Max Difference 都是 0）；P2 只在原始座標上對 84/2208 Front 和
+  40/2208 Side Joint-Frames 降權。
+- 最終 Report 使用附檔
+  `dino_joint_group_overrides.json`，將 17 個 Dino Calvicle／Index／Mid
+  Keypoints 正確歸入 Forelimbs，**全部 92 個關節都已分類**。
+- 以下是對 **相同 Blender World-joint GT** 的位置誤差（cm），
+  不是兩組 Solver 相互之間的距離。
+
+| Body part | Keypoints | Baseline MAE (cm) | P1 Guarded MAE (cm) | P2 error-weighted MAE (cm) |
+|---|---:|---:|---:|---:|
+| 全身 | 92 | **3.35111** | 3.77252 | 3.30758 |
+| Head / Neck | 17 | **4.02197** | 4.30098 | 4.03594 |
+| Torso / Root | 5 | **2.07318** | 2.62201 | 2.06410 |
+| Forelimbs (incl. fingers) | 21 | **2.47506** | 2.92241 | 2.46643 |
+| Hindlimbs | 6 | **2.40445** | 3.10417 | 2.39938 |
+| Feet / Toes | 34 | **3.10201** | 3.42297 | 3.08030 |
+| Tail | 9 | **6.41011** | 7.16315 | 6.04932 |
+
+**重點判斷**：P1 Guarded 在此受控 24-frame 測試的全身 MAE
+增加 **約 12.6%**，且**所有身體群組**皆變差；
+Root World Keypoint MAE 2.02491→3.66479cm。
+因此目前不能以單純平滑、2D Reprojection 來推動 P1 預設啟用。
+
+P2 Weighting 全身 MAE 降 **約 1.3%**，其中 Tail MAE 約降 **5.6%**，
+但 Head／Neck 4.02197→4.03594cm 小幅惡化，
+Root World Keypoint 2.02491→2.01953cm 幾乎沒有變化。
+全身 P95：Baseline 9.37482cm、P1 10.31365cm、P2 9.22854cm。
+模型對尾巴有受控小幅改善的證據，但**不能宣稱自然 Dino
+走路或全身 Motion 已獲驗證改善**。
+
+**尚待驗證**：另一個獨立 Seed／124 frames、實際有接地標註的
+Walk／Turn 真實 Blender 動作、AI Video 前後視角同步、
+自遮擋、模型的跨場景泛化，以及 Blender/iClone
+Motion 視覺驗收。若需第三視角，必須基於同一段 GT 動作做
+Top／Elevated 消融實驗，不可把不相關的生成畫面當同步真值。
+
+實測 Report 與每關節、每影格 CSV 只保留在使用者本機測試目錄；
+本次 GitHub Commit **不包含**私人 Dino Mesh、
+Blender Rig、Checkpoint 或其原始資料。
