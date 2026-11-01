@@ -335,3 +335,21 @@ Joint-frames 乘上小於一的權重。這是啟發式公式
 
 所有真實 GT／Checkpoint／Dino Blender Mesh／CSV 留在使用者的
 本機獨立 Clone，不會隨本文件上傳 GitHub。
+
+## 2026-11-01 Joint-specific two-view reliability A/B — REJECTED
+
+完整可重現實測與安全判斷請見 **docs/DINO_VIEW_RELIABILITY_ABLATION.md**。
+
+基於 Seed 7 (24f) 和 Seed 11 (124f) 的獨立 Blender 3D GT，
+對 Tail Front、Feet/Toes Side、Combined 三組固定 0.5 倍視角權重進行
+預先指定、完全不改原始 Detection UV/Peak 的 A/B。兩組 Seed 的三項方案
+全身平均誤差全部上升。Seed 11 全身 3D MAE (cm)：
+Baseline 3.52860、Tail Front 4.23231、Toe Side 4.32314、Combined 5.02743。
+尾巴 Tail08 在 Tail Front 降權時最大誤差達 168.15cm，
+50/124 Frames 相對 Baseline 多出超過 20cm 誤差。
+
+**工程決策：不啟用任何固定全關節群組視角降權。** 即使單視角 2D
+Reader 誤差高，Front/Side 仍供給不可直接互換的 X/Y 觀測。
+下一步應先研究 Front Tail Joint Reader Correction，並使用同步 Blender
+第三視角 Oracle GT 確認 Top/Elevated 潛在增益，之後才開始訓練第三視角。
+原始 F:\\anymove、P2 Checkpoints、Dino 2,200 Poses 未被覆寫。
