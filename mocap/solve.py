@@ -462,7 +462,7 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
             "reproj_px": dict({"front": float(err_f.mean()),
                                 "front_x_only": float(err_fx.mean()),
                                 "side": float(err_s.mean())},
-                               **({"top_oracle_selected_only":weighted_top_reproj}
+                               **({"top_selected_only":weighted_top_reproj}
                                   if top_obs is not None else {})),
             "bones": rig.names, "joint_names": names}
 
@@ -747,7 +747,8 @@ def main():
     print("saved", out)
     if top_provenance is not None:
         from pathlib import Path
-        sidecar=Path(out).with_suffix(".top_oracle.json")
+        sidecar=Path(out).with_suffix(
+            ".top_oracle.json" if top_source_kind=="oracle" else ".top_reader.json")
         meta={"source_detections_sha256":det_sha.hexdigest(),
               "source_top_provenance":top_provenance,
               "source_mode":top_source_kind,
@@ -756,7 +757,7 @@ def main():
                       if top_source_kind=="oracle" else
                       "Untrained Top image-reader transfer experiment; not verified for product")}
         sidecar.write_text(json.dumps(meta,indent=2),encoding="utf-8")
-        print("Top Oracle provenance:",sidecar,flush=True)
+        print("Top source provenance:",sidecar,flush=True)
     if masked_observation_audit is not None:
         from pathlib import Path
         report_path = Path(out).with_suffix(".occlusion.json")
