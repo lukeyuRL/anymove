@@ -55,3 +55,41 @@ def error_calibration_report(expected_error_px, actual_error_px, bins=8):
         "bins": table,
         "interpretation": "held-out synthetic 2D label residuals; not calibrated real visibility",
     }
+
+
+def synthetic_visibility_report(predicted_score, synthetic_visible):
+    """AUC/Brier for explicitly labeled artificial cutouts (NOT mesh visibility).
+
+    Scores are evaluated on held-out, deterministic synthetic occlusions.
+    Without both classes an AUC cannot be defined, which is reported as null.
+    """
+    scores = np.asarray(predicted_score, dtype=np.float64).reshape(-1)
+    y = np.asarray(synthetic_visible, dtype=np.float64).reshape(-1)
+    if (not len(scores) or len(scores) != len(y) or
+            not np.isfinite(scores).all() or not np.isfinite(y).all() or
+            np.any((scores < 0) | (scores > 1)) or
+            np.any((y != 0) & (y != 1))):
+        raise ValueError("synthetic visibility requires finite probabilities and binary mask labels")
+    npos = int(y.sum())
+    nneg = int(len(y) - npos)
+    auc = None
+    if npos > 0 and nneg > 0:
+        order = np.argsort(scores, kind="stable")
+        sorted_scores = scores[order]
+        boundaries = np.concatenate(([0], np.flatnonzero(
+            np.diff(sorted_scores) != 0) + 1, [len(scores)]))
+        rank_sum_positive = 0.
+        for lo, hi in zip(boundaries[:-1], boundaries[1:]):
+            rank = (int(lo) + int(hi) + 1.) / 2.
+            rank_sum_positive += float(y[order[lo:hi]].sum()) * rank
+        auc = (rank_sum_positive - npos*(npos+1)/2) / (npos*nneg)
+    return {
+        "profile": "anymove_synthetic_cutout_heldout_visibility_v1",
+        "samples": int(len(y)),
+        "artificially_visible": npos,
+        "artificially_masked": nneg,
+        "roc_auc": None if auc is None else round(float(auc), 5),
+        "brier": round(float(np.mean((scores-y)**2)), 5),
+        "meaning": ("Deterministic held-out artificial rectangular cutout recognition, "
+                    "NOT true mesh self-occlusion or calibrated P(visible)"),
+    }
