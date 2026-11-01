@@ -52,8 +52,9 @@ def classify_joint(name):
         return "head_neck"
     if any(w in n for w in (
         "shoulder", "forearm", "upperarm", "lowerarm", "clavicle",
+        "calvicle",  # Dino imported FBX bone uses this misspelling
         "scapula", "elbow", "wrist", "hand", "finger", "humerus", "radius",
-        "ulna", "foreleg", "frontleg")):
+        "ulna", "foreleg", "frontleg", "index0", "mid0")):
         return "forelimbs"
     if any(w in n for w in (
         "thigh", "shin", "calf", "knee", "femur", "tibia", "fibula",
