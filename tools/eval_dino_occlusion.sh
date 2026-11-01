@@ -86,7 +86,12 @@ for variant in "${modes[@]}"; do
     solved="$out/motion_$variant.json"
     "$PY" -m tools.make_dino_occlusion_ablations \
         "$raw" "$rig" "$det" "${mask_args[@]}" > "$out/mask_$variant.log"
-    solve_flags=(--no-align)
+    solve_flags=(--no-align --experimental-masked-observations)
+    if [[ "$mode" == "oracle_gt" ]]; then
+        # The oracle uses independent Blender 2D truth. This flag must
+        # NEVER be used for production/AI video or normal user capture.
+        solve_flags+=(--allow-gt-oracle)
+    fi
     if ((temporal)); then
         solve_flags+=(--masked-temporal-strength "$strength")
     fi
