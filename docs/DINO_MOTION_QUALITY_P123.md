@@ -67,6 +67,86 @@ against known 3D animation if available. Verify identity switches, joint
 velocity, paw sliding, reprojection, occlusion recovery, Root trajectory.
 Default behavior remains unchanged. Do not promote on reprojection alone.
 
+### P1 first real Dino clip: 124-frame preliminary results (reported 2026-11-01)
+
+The user-provided comparison for the *same 124-frame video*, using the
+existing `compare_visibility.py`, reported mean inter-solution joint delta
+**0.9728 cm**, P95 **3.7854 cm**, Root mean delta **1.2753 cm** and Root max
+delta **4.7151 cm**. The baseline's Front/Side per-run reprojection was
+4.46174/4.48182 px; the tracked variant's was 4.46021/4.48385 px.
+These values are observations supplied in chat, not independently re-read
+from the local Dino files by CI.
+
+**Critical interpretation:** the original comparison printed
+`same-detection solver ablation`, although `mocap.track` generates an
+independent source NPZ and can change BOTH UV and Solver weights. Moreover
+both per-run reprojection figures use different observations. They do not
+establish that tracking improved 3D accuracy, nor even which P1 effect
+caused the Root displacement. `paw_agreement.score=null` is not zero;
+the available score was simply not evaluable.
+
+The updated `tools/compare_visibility.py` now inspects
+`source_detections_sha256` instead of assuming identical input data.
+
+#### Next run: common RAW Reader reference and Root dynamics
+
+Use the actual same-capture `det.npz` and its P1 tracked counterpart, with
+both corresponding motion files, after `git pull --ff-only`. The tool
+verifies source SHA-256, Rig camera layout, joint order/FPS, original
+Reader UV/peaks, tracked weights and original video calibration, and
+reports changes including Root velocity and acceleration.
+
+```bash
+export MOCAP_CREATURE=assets/dino
+CLIP=runs/dino/clips/REPLACE_WITH_CAPTURE_NAME
+python.exe tools/diagnose_dino_tracking.py \
+  "$CLIP/det.npz" "$CLIP/det_tracked_p1.npz" \
+  "$CLIP/motion.json" "$CLIP/motion_tracked_p1.json" \
+  assets/dino/rigged/rig_info.json \
+  --out "$CLIP/p1_dino_diagnostics.json"
+```
+
+The report's `shared_raw_reader_reprojection_px` evaluates BOTH motions
+against the SAME raw Reader joint observations, which is a fairer
+*common-reference* comparison. The original Reader can itself be wrong;
+lower error against it does **not** imply lower 3D ground-truth error.
+Inspect `worst_joint_mean_deltas_cm`, `max_root_difference_frame`,
+`root_dynamics`, and the P1 tracking counts (especially `flow_only`,
+`outlier_flagged`, and `flow_seed_rejected`).
+
+#### Separate coordinate and weight contributions
+
+If Root changes look substantial, use the four-way factorial test:
+
+| Run | 2D coordinates | Solver weight multiplier |
+|---|---|---|
+| Baseline (existing) | Original Reader | 1 |
+| P1 UV-only | Tracked | 1 |
+| P1 Weight-only | Original Reader | P1 weights |
+| Full P1 (existing) | Tracked | P1 weights |
+
+```bash
+python.exe tools/make_dino_tracking_ablations.py \
+  "$CLIP/det.npz" "$CLIP/det_tracked_p1.npz" \
+  "$CLIP/p1_ablation"
+
+python.exe -m mocap.solve \
+  "$CLIP/p1_ablation/det_p1_uv_only.npz" \
+  assets/dino/rigged/rig_info.json \
+  "$CLIP/p1_ablation/motion_uv_only.json"
+
+python.exe -m mocap.solve \
+  "$CLIP/p1_ablation/det_p1_weight_only.npz" \
+  assets/dino/rigged/rig_info.json \
+  "$CLIP/p1_ablation/motion_weight_only.json"
+```
+
+These two extra fits isolate the UV effect, the weight effect, and their
+interaction without retraining. None of the four solutions is true 3D
+ground truth; review known Blender 3D animation sequences and film
+visually before promoting P1. In particular, avoid tuning the LK
+thresholds based only on changes in reprojection from an AI-generated clip.
+
 ## P2 — experimental Visibility / Uncertainty Reader
 
 The existing quality head predicts (a) *synthetic cutout* visibility and (b)
