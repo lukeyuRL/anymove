@@ -19,6 +19,7 @@ from mocap.quality_targets import synthetic_cutout, PROFILE as QUALITY_TARGET_PR
 from mocap.reader_config import HIGH_RES_INPUT_SIZE, HIGH_RES_HEATMAP_SIZE, ReaderSpec
 from mocap.reader_geometry import Letterbox
 from mocap.reader_warmstart import validate_base_reader, sha256_file
+from mocap.quality_metrics import error_calibration_report
 from mocap.reader_schedule import accumulation_group_size, optimizer_step_count
 from mocap.training_checkpoint import EpochCheckpoints, atomic_torch_save, metadata_fingerprint
 
@@ -335,22 +336,47 @@ def main():
               flush=True)
         model.eval()
         errs = {"front": [], "side": []}
+        uncertainty = {"front": [], "side": []} if args.train_quality else None
         with torch.no_grad():
             for bi, sample in enumerate(vl):
                 x, kp, geo = sample[:3]
                 with torch.autocast("cuda", dtype=amp_dtype):
-                    pred = model(x.cuda(non_blocking=True)).float()
-                uv, _ = decode(pred)
-                uv = uv.cpu() * spec.input_size / spec.heatmap_size
+                    if args.train_quality:
+                        pred, quality_maps = model(x.cuda(non_blocking=True), return_quality=True)
+                        pred, quality_maps = pred.float(), quality_maps.float()
+                    else:
+                        pred = model(x.cuda(non_blocking=True)).float()
+                uv_hm, _ = decode(pred)
+                if args.train_quality:
+                    _, log_error = quality_at(quality_maps, uv_hm)
+                    pred_err_hm = torch.expm1(log_error.clamp(0, 6)).cpu()
+                    pred_err_layout = (pred_err_hm * geo[:, None, 2] /
+                                       (spec.heatmap_size * geo[:, None, 3]))
+                uv = uv_hm.cpu() * spec.input_size / spec.heatmap_size
                 # Undo letterbox and render scale; report in 1280x720 layout pixels.
                 lay = lambda p: (p * geo[:, None, 2:3] / spec.input_size - geo[:, None, :2]) / geo[:, None, 3:4]
                 e = (lay(uv) - lay(kp)).norm(dim=-1)
                 for r in range(len(x)):
-                    errs[("front", "side")[(bi * args.batch + r) % 2]].append(e[r].numpy())
+                    view = ("front", "side")[(bi * args.batch + r) % 2]
+                    errs[view].append(e[r].numpy())
+                    if args.train_quality:
+                        uncertainty[view].append(pred_err_layout[r].numpy())
         msg = {v: float(np.mean(errs[v])) for v in errs}
+        quality_val = None
+        if args.train_quality:
+            quality_val = {
+                view: error_calibration_report(
+                    np.concatenate(uncertainty[view]),
+                    np.concatenate(errs[view])) for view in ("front", "side")
+            }
+            print(f"epoch {ep} quality head held-out calibration gap (layout px) "
+                  f"front {quality_val['front']['mean_error_calibration_gap_px']:.2f}, "
+                  f"side {quality_val['side']['mean_error_calibration_gap_px']:.2f}; "
+                  "NOT real-video visibility calibration", flush=True)
         print(f"epoch {ep} val mean px error (layout pixels) front {msg['front']:.2f} side {msg['side']:.2f}", flush=True)
         atomic_torch_save({"state_dict": model.state_dict(), "names": names, "epoch": ep,
                     "val": msg,
+                    "quality_validation": quality_val,
                     "reader_spec": dict(spec.checkpoint_metadata(),
                                         quality_head=bool(args.train_quality)),
                     "quality_spec": ({"version": 1,
