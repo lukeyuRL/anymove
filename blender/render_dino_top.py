@@ -11,6 +11,7 @@ No model inference and NO oracle positional data is written to images.
 """
 import hashlib
 import json
+import math
 import pathlib
 import sys
 
@@ -64,13 +65,15 @@ def main():
         raise ValueError("Top keyed scene FPS does not match Blender GT")
     if bpy.data.objects.get("cam_top") is not None:
         raise ValueError("GT scene already includes cam_top; refusing camera overwrite")
-    # Camera orientation identity: image +U is world +X, image -V is
-    # world +Y. Orthographic ray travels from +Z toward world -Z.
+    # Rotated +90 deg about world Z so the dinosaur's long ±Y extent
+    # uses Top's 880px horizontal axis, not the 720px vertical axis.
+    # Camera local +X = world +Y; camera local +Y = world -X.
+    # Orthographic ray still travels from +Z toward world -Z.
     w,h=880,720
     top=bpy.data.objects.new("cam_top",bpy.data.cameras.new("cam_top"))
     scene.collection.objects.link(top)
     top.location=(0.0,0.0,30.0)
-    top.rotation_euler=(0.0,0.0,0.0)
+    top.rotation_euler=(0.0,0.0,math.pi/2)
     top.data.type="ORTHO"
     top.data.ortho_scale=common.M_PER_PX*max(w,h)
     top.data.clip_end=100
@@ -102,8 +105,20 @@ def main():
         if err>0.0003:
             raise RuntimeError(f"Top camera animation differs from GT at frame {t}: {err:.6f}m")
         if t==0:
+            camera_info=common.camera_json(top,w,h)
+            # Check independent world-axis framing BEFORE a costly render.
+            R=np.asarray(camera_info["R"],np.float64)
+            trans=np.asarray(camera_info["t"],np.float64)
+            pixels=np.asarray(truth)@R.T+trans
+            image_u=w/2+float(camera_info["f"])*pixels[...,0]
+            image_v=h/2-float(camera_info["f"])*pixels[...,1]
+            invalid=(image_u<0)|(image_u>=w)|(image_v<0)|(image_v>=h)
+            if invalid.any():
+                raise ValueError(
+                    f"Top view clips {invalid.sum()} of {invalid.size} Dino keypoints; "
+                    "check long-axis camera rotation and framing")
             (out/"cam_top.json").write_text(
-                json.dumps(common.camera_json(top,w,h),indent=2),encoding="utf-8")
+                json.dumps(camera_info,indent=2),encoding="utf-8")
         scene.render.filepath=str(out/"top"/f"f_{t:04d}.png")
         bpy.ops.render.render(write_still=True)
         if t%20==0 or t==T-1:
