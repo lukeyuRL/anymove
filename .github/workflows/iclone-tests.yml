@@ -38,6 +38,11 @@ jobs:
         with:
           python-version: "3.11"
       - run: python -m pip install numpy opencv-python-headless
+      # Both direct-file and -m invocations must locate sibling mocap/
+      - run: python tools/diagnose_dino_tracking.py --help
+      - run: python -m tools.diagnose_dino_tracking --help
+      - run: python tools/make_dino_tracking_ablations.py --help
+      - run: python -m tools.make_dino_tracking_ablations --help
       - run: python -m unittest discover -s tests -p 'test_iclone_tracking_opencv.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_visibility.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_temporal_association.py' -v
