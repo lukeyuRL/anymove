@@ -16,6 +16,13 @@ if [ -n "${MOCAP_INIT_READER:-}" ]; then
   [ -f "$MOCAP_INIT_READER" ] || { echo "missing warm-start Reader: $MOCAP_INIT_READER" >&2; exit 2; }
   extras+=(--init-reader "$MOCAP_INIT_READER")
 fi
+if [ "${MOCAP_QUALITY_ONLY:-0}" = "1" ]; then
+  if [ "${MOCAP_TRAIN_QUALITY:-0}" != "1" ] || [ -z "${MOCAP_INIT_READER:-}" ]; then
+    echo "MOCAP_QUALITY_ONLY=1 requires MOCAP_TRAIN_QUALITY=1 and MOCAP_INIT_READER" >&2
+    exit 2
+  fi
+  extras+=(--quality-only)
+fi
 if [ "${MOCAP_FREEZE_BACKBONE:-0}" = "1" ]; then
   extras+=(--freeze-backbone)
 fi
@@ -24,7 +31,7 @@ if [ "${MOCAP_TRAIN_QUALITY:-0}" = "1" ]; then
   # Preserve old trained checkpoints. An explicit new path is required for
   # a new quality head, unless this is the default output.
   if [ "${7:-}" = "" ]; then out="runs/$1/reader_hr_quality.pt"; fi
-  if [ "$out" = "runs/$1/reader_hr.pt" ] || [ "$out" = "runs/$1/reader.pt" ]; then
+  if [ "$out" = "runs/$1/reader_hr.pt" ] || [ "$out" = "runs/$1/reader_hr_v1.pt" ] || [ "$out" = "runs/$1/reader.pt" ] || { [ -n "${MOCAP_INIT_READER:-}" ] && [ "$out" = "$MOCAP_INIT_READER" ]; }; then
     echo "quality model requires a distinct checkpoint filename" >&2; exit 2
   fi
 fi
