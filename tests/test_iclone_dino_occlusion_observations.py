@@ -108,6 +108,35 @@ class DinoOccludedObservationTests(unittest.TestCase):
         self.assertEqual(audit["views"]["front"]["largest_missing_run_frames"],self.T)
         self.assertEqual(len(audit["views"]["front"]["unanchored_joints"]),1)
 
+    def test_mask_provenance_rejects_oracle_without_explicit_allow(self):
+        import hashlib
+        import json
+        import tempfile
+        from pathlib import Path
+        from mocap.occlusion_observations import verify_mask_provenance
+        with tempfile.TemporaryDirectory() as folder:
+            source=Path(folder)/"det_oracle_gt.npz"
+            np.savez_compressed(source, **self.raw)
+            digest=hashlib.sha256(source.read_bytes()).hexdigest()
+            audit={
+                "profile":"anymove.dino_per_view_observation_mask_ablation_v1",
+                "mode":"oracle_gt",
+                "masked_detection_sha256":digest,
+            }
+            path=source.with_suffix(".occlusion_input.json")
+            path.write_text(json.dumps(audit),encoding="utf-8")
+            with self.assertRaisesRegex(PermissionError,"LEAK"):
+                verify_mask_provenance(source)
+            self.assertEqual(verify_mask_provenance(
+                source,allow_oracle=True)["mode"],"oracle_gt")
+            audit["mode"]="p2_error"
+            path.write_text(json.dumps(audit),encoding="utf-8")
+            self.assertEqual(verify_mask_provenance(source)["mode"],"p2_error")
+            audit["masked_detection_sha256"]="0"*64
+            path.write_text(json.dumps(audit),encoding="utf-8")
+            with self.assertRaisesRegex(ValueError,"SHA mismatch"):
+                verify_mask_provenance(source)
+
     def test_reject_shape_dtype_stack_or_wrong_rig(self):
         masked={k:v.copy() for k,v in self.raw.items()}
         masked["front_visible_mask"]=np.ones((self.T,92),bool)
