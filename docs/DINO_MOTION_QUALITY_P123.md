@@ -324,6 +324,54 @@ bash tools/train.sh dino 1 1 672 192 \
   runs/dino/reader_hr_quality_p2_smoke.pt 0
 ```
 
+#### 2026-11-01: Dino RTX 3070 P2 one-Epoch smoke result
+
+Actual user-reported run: 28 train / 2 validation static poses, 92 joints,
+672/192 Reader, BF16, physical batch 1, 56 optimizer steps, original
+`reader_hr_v1.pt` warm-started and frozen, only
+`quality_out.weight` / `quality_out.bias` trainable. GPU peak allocated
+0.44 GiB (peak reserved 0.54 GiB), and the separate
+`reader_hr_quality_p2_smoke.pt` was saved.
+
+The smoke validation measured Front 1.73px / Side 1.71px positional
+residual, localization-error calibration gap Front 1.22px / Side 1.56px,
+and **synthetic held-out cutout AUC 0.52418**, near the chance value 0.5.
+These were only **2 validation poses** (4 images) and one epoch, so they
+establish *pipeline execution*, NOT a useful learned visibility model.
+The validation errors are not comparable with the earlier full dataset's
+Front 3.41px / Side 2.20px because the validation subset differs.
+The 1-epoch cosine schedule reaches very low learning rate near the end,
+so its AUC is not evidence against a normal 20-epoch experiment.
+
+**Next:** Full 2,112-train / 88-validation static pose run with the same
+audited dataset. Keep 20 total epochs fixed for compatible full-state
+resume. For Windows, workers 0 avoids worker-spawning issues; batch 2
+is a conservative starting experiment after the batch-1 smoke. Set
+`MOCAP_LOG_FILE` to keep the smoke log.
+
+```bash
+cd /f/anymove
+git pull --ff-only
+export PYTHON=python.exe
+export MOCAP_CREATURE=assets/dino
+export MOCAP_INIT_READER=runs/dino/reader_hr_v1.pt
+export MOCAP_TRAIN_QUALITY=1
+export MOCAP_QUALITY_ONLY=1
+export MOCAP_RESUME_DIR=runs/dino/resume_quality_p2_headonly
+export MOCAP_KEEP_CHECKPOINTS=3
+export MOCAP_LOG_FILE=runs/dino/train_quality_p2_headonly.log
+bash tools/train.sh dino 20 2 672 192 \
+  runs/dino/dataset_hr_v1 \
+  runs/dino/reader_hr_quality_p2_headonly.pt 0
+```
+
+Record every held-out AUC, Brier, number of synthetic masked joints,
+front/side calibration gap and unchanged clean-location error. The
+Brier score may look good merely because most joints were not covered by
+an artificial rectangle; do not ignore AUC and the visible/masked counts.
+**Do not wire quality predictions into Solver weights** based on synthetic
+cutout AUC alone. Full GPU training was not started by this PR.
+
 If the smoke test saves and loads, begin the full **separate**
 quality-only experiment with a fresh output and dedicated resume directory.
 The full run requires a GPU and may incur cost if using Runpod; check
