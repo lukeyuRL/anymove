@@ -54,8 +54,20 @@ mkdir -p "$out"
 echo "DINO GT: $out, frames $frames, seed $seed, engine $engine"
 "$PY" -m mocap.exam make "$rig" "$out/gt_motion.json" "$seed" "$frames"
 
-"$BLENDER" -b -P blender/apply_motion.py -- \
-  "$blend" "$rig" "$out/gt_motion.json" "$out/gt_render" \
+# Blender can reinterpret relative output paths after open_mainfile().
+# Resolve arguments with the SAME native Windows Python used by the pipeline.
+# This prevents the old Blender issue where outputs accidentally land on C:.
+native_path() {
+  "$PY" -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$1"
+}
+native_blend=$(native_path "$blend")
+native_rig=$(native_path "$rig")
+native_motion=$(native_path "$out/gt_motion.json")
+native_render=$(native_path "$out/gt_render")
+native_script=$(native_path "blender/apply_motion.py")
+
+"$BLENDER" -b -P "$native_script" -- \
+  "$native_blend" "$native_rig" "$native_motion" "$native_render" \
   --views front,side --engine "$engine" --samples "$samples" \
   --save-blend > "$out/blender_gt.log" 2>&1 || {
     echo "Blender GT failed; last Blender log lines:" >&2
