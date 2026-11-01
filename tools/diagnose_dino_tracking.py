@@ -144,13 +144,24 @@ def compare_tracking(raw, tracked, original, candidate, camera):
         d = np.linalg.norm(np.asarray(raw[view+"_uv"], float) -
                            np.asarray(tracked[view+"_uv"], float), axis=-1)
         weight = np.asarray(tracked[view+"_track_weight"], float)
+        max_frame, max_joint = map(int, np.unravel_index(np.argmax(d), d.shape))
         detector_changes[view] = {
             "joint_2d_displacement_px": _vecstats(d, "_px"),
             "changed_joint_frames": int(np.count_nonzero(d > 1e-5)),
+            # Counting 1e-5 deltas as a meaningful motion correction
+            # exaggerates P1 coverage. Show physically significant scales.
+            "joint_frames_above_displacement_px": {
+                str(threshold): int(np.count_nonzero(d > threshold))
+                for threshold in (1, 3, 10, 30)
+            },
             "joint_frames_with_weight_below_one": int(np.count_nonzero(weight < 1)),
             "mean_track_weight": round(float(weight.mean()), 5),
-            "max_adjustment_frame": int(np.unravel_index(np.argmax(d), d.shape)[0]),
-            "max_adjustment_joint": names[int(np.unravel_index(np.argmax(d), d.shape)[1])],
+            "max_adjustment_frame": max_frame,
+            "max_adjustment_joint": names[max_joint],
+            "max_adjustment_raw_reader_peak": round(
+                float(raw[view+"_conf"][max_frame, max_joint]), 5),
+            "max_adjustment_solver_track_weight": round(
+                float(weight[max_frame, max_joint]), 5),
         }
     # Reproject BOTH solved skeletons onto the SAME unmodified Reader UV.
     # This measures raw-Reader agreement, *not* 2D/3D ground-truth accuracy.
