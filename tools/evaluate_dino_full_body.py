@@ -232,6 +232,8 @@ def main(argv=None):
     parser.add_argument("out_dir", help="NEW output directory; refuses overwrite")
     parser.add_argument("--variant", action="append", required=True,
                         help="one label=motion.json per candidate (repeatable)")
+    parser.add_argument("--detection", action="append",
+                        help="corresponding label=detection.npz for SHA provenance (repeatable)")
     parser.add_argument("--group-overrides", help="optional JSON {exact_joint_name: group}")
     parser.add_argument("--source-motion", help="original procedural animation; provenance metadata only")
     args = parser.parse_args(argv)
@@ -244,7 +246,16 @@ def main(argv=None):
         if not sep or not label.isidentifier() or label in paths:
             raise ValueError("--variant must contain unique identifier=filename entries")
         paths[label] = pathlib.Path(path)
-    for path in [pathlib.Path(args.truth),pathlib.Path(args.rig_info),*paths.values()]:
+    detectors = {}
+    for entry in (args.detection or []):
+        label, sep, path = entry.partition("=")
+        if not sep or label not in paths or label in detectors:
+            raise ValueError("--detection must match exactly one known --variant label")
+        detectors[label] = pathlib.Path(path)
+    if detectors and set(detectors) != set(paths):
+        raise ValueError("provide a matching detection NPZ for EVERY variant")
+    for path in [pathlib.Path(args.truth),pathlib.Path(args.rig_info),
+                 *paths.values(),*detectors.values()]:
         if not path.is_file():
             raise FileNotFoundError(path)
     truth = json.loads(pathlib.Path(args.truth).read_text(encoding="utf-8"))
@@ -260,6 +271,13 @@ def main(argv=None):
         "rig_info": _sha(args.rig_info),
         "motions": {key: _sha(path) for key,path in paths.items()},
     }
+    if detectors:
+        report["input_sha256"]["detections"] = {}
+        for label, path in detectors.items():
+            digest = _sha(path)
+            if candidates[label].get("source_detections_sha256") != digest:
+                raise ValueError(f"{label}: candidate motion source detection SHA mismatch")
+            report["input_sha256"]["detections"][label] = digest
     if args.source_motion:
         p = pathlib.Path(args.source_motion)
         source = json.loads(p.read_text(encoding="utf-8"))
