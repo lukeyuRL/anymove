@@ -99,12 +99,18 @@ reports changes including Root velocity and acceleration.
 ```bash
 export MOCAP_CREATURE=assets/dino
 CLIP=runs/dino/clips/REPLACE_WITH_CAPTURE_NAME
-python.exe tools/diagnose_dino_tracking.py \
+python.exe -m tools.diagnose_dino_tracking \
   "$CLIP/det.npz" "$CLIP/det_tracked_p1.npz" \
   "$CLIP/motion.json" "$CLIP/motion_tracked_p1.json" \
   assets/dino/rigged/rig_info.json \
   --out "$CLIP/p1_dino_diagnostics.json"
 ```
+
+**Windows Git Bash:** run these commands from the repository root (`cd /f/anymove`)
+and keep `MOCAP_CREATURE=assets/dino` set. The `python.exe -m tools...`
+form avoids `ModuleNotFoundError: No module named 'mocap'` caused by direct
+execution putting `tools/` rather than the repo root on Python's import path.
+Direct invocation is also supported by these two scripts after the CLI fix.
 
 The report's `shared_raw_reader_reprojection_px` evaluates BOTH motions
 against the SAME raw Reader joint observations, which is a fairer
@@ -126,7 +132,7 @@ If Root changes look substantial, use the four-way factorial test:
 | Full P1 (existing) | Tracked | P1 weights |
 
 ```bash
-python.exe tools/make_dino_tracking_ablations.py \
+python.exe -m tools.make_dino_tracking_ablations \
   "$CLIP/det.npz" "$CLIP/det_tracked_p1.npz" \
   "$CLIP/p1_ablation"
 
