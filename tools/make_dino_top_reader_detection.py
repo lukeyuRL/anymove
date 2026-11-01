@@ -94,8 +94,9 @@ def main(argv=None):
             pathlib.Path(a.rig_info)]
     render=pathlib.Path(a.top_render_dir)
     camera=render/"cam_top.json"
+    render_audit=render/"top_render_audit.json"
     evidence=pathlib.Path(a.top_reader_npz).parent/"top_reader_2d_gt_report.json"
-    source.extend([camera,evidence])
+    source.extend([camera,render_audit,evidence])
     out=pathlib.Path(a.output_detection).resolve()
     sidecar=out.with_suffix(".top_reader.json")
     if out.exists() or sidecar.exists() or out in {p.resolve() for p in source}:
@@ -105,10 +106,20 @@ def main(argv=None):
             raise FileNotFoundError(path)
     camera_from_json(camera)
     report=json.loads(evidence.read_text(encoding="utf-8"))
+    render_meta=json.loads(render_audit.read_text(encoding="utf-8"))
     if (report.get("profile")!="anymove.dino_real_rendered_top_reader_2d_audit_v1" or
+            render_meta.get("profile")!="anymove.dino_synced_top_blender_render_v1" or
             report["provenance_sha256"]["cam_top"]!=sha256(camera) or
-            report["provenance_sha256"]["rig"]!=sha256(a.rig_info)):
-        raise ValueError("actual Top Reader/camera provenance mismatch")
+            report["provenance_sha256"]["rig"]!=sha256(a.rig_info) or
+            render_meta["rig_info_sha256"]!=sha256(a.rig_info) or
+            report["provenance_sha256"]["gt"]!=render_meta["blender_truth_sha256"] or
+            report["frames"]!=render_meta["frames"]):
+        raise ValueError("actual Top Reader/synchronized Blender render provenance mismatch")
+    # Older research snapshots lack this additional NPZ digest; accept them
+    # only inside this explicitly experimental path, not as production proof.
+    prediction_digest=report.get("top_reader_detections_sha256")
+    if prediction_digest is not None and prediction_digest!=sha256(a.top_reader_npz):
+        raise ValueError("Top Reader inference NPZ differs from independent audit SHA")
     rig=json.loads(pathlib.Path(a.rig_info).read_text(encoding="utf-8"))
     with np.load(a.raw_reader,allow_pickle=False) as z:
         raw={k:z[k].copy() for k in z.files}
