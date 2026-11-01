@@ -45,6 +45,7 @@ jobs:
       - run: bash -n tools/eval_dino_full_body.sh
       - run: bash -n tools/eval_dino_view_reliability.sh
       - run: bash -n tools/eval_dino_occlusion.sh
+      - run: bash -n tools/eval_dino_top_oracle.sh
       - run: python -m tools.make_dino_occlusion_ablations --help
       - run: python -m tools.audit_dino_occlusion_sources --help
       - run: python -m tools.review_dino_masked_observations --help
