@@ -42,6 +42,9 @@ jobs:
       - run: python -m mocap.track --help
       - run: bash -n tools/capture.sh
       - run: bash -n tools/eval_dino_p2.sh
+      - run: bash -n tools/eval_dino_full_body.sh
+      - run: python -m tools.audit_dino_gt_camera --help
+      - run: python -m tools.evaluate_dino_full_body --help
       # Both direct-file and -m invocations must locate sibling mocap/
       - run: python tools/diagnose_dino_tracking.py --help
       - run: python -m tools.diagnose_dino_tracking --help
@@ -57,6 +60,8 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_iclone_motion_prior.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_quality_metrics.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_dino_dataset_audit.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_dino_ground_truth_camera.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_dino_full_body_ground_truth.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_dino_tracking_diagnostics.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_tracking_ablation.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_reader_warmstart.py' -v
