@@ -33,7 +33,14 @@ def classify_joint(name):
     Unknown names always remain visible in 'unclassified', never discarded.
     A per-joint explicit mapping can be supplied if imported names differ.
     """
-    n = str(name).lower()
+    # Imported Dino keypoint names look like "joint:BoneName:tail".
+    # The final ":tail" denotes the *END OF A BONE*, not Tail anatomy.
+    # Never classify every bone-tail keypoint as an anatomical Dino tail!
+    text = str(name).lower()
+    parts = text.split(":")
+    n = ":".join(parts[1:-1]) if (
+        len(parts) >= 3 and parts[0] == "joint" and
+        parts[-1] in ("head", "tail")) else text
     if "tail" in n:
         return "tail"
     if any(w in n for w in (
