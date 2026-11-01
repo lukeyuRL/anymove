@@ -1,12 +1,19 @@
 """Create non-destructive P1 2x2-factor ablation detections.
 
-python tools/make_dino_tracking_ablations.py original_det.npz tracked_det.npz OUT_DIR
+python -m tools.make_dino_tracking_ablations original_det.npz tracked_det.npz OUT_DIR
 Produces OUT_DIR/det_p1_uv_only.npz and det_p1_weight_only.npz.
 Use mocap.solve separately on each to isolate UV vs weight contributions.
 """
 import argparse
 import json
 import pathlib
+
+# Direct invocation (python tools/script.py) sets sys.path[0] to tools/,
+# whereas mocap/ is a sibling at the repository root. Support both direct
+# invocation and recommended module invocation (python -m tools.script).
+if __package__ in (None, ""):
+    import sys
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 import numpy as np
 
