@@ -88,3 +88,39 @@ def prepare_masked_solver_input(d, raw, info):
         "kinematic solve. Smoothness/rig constraints continue to determine "
         "unobserved pose; no real occlusion probability is inferred.")
     return result, masks, audit
+
+
+def verify_mask_provenance(det_path, *, allow_oracle=False):
+    """Require matching mask-source audit, explicit Oracle GT authorization.
+
+    This is a safety gate against inadvertently applying leaked 2D GT or
+    unsupported geometry masks to a normal capture. It does NOT certify
+    that a P2 or mesh mask is calibrated for production use.
+    """
+    import hashlib
+    import json
+    import pathlib
+
+    source = pathlib.Path(det_path)
+    audit_path = source.with_suffix(".occlusion_input.json")
+    if not audit_path.is_file():
+        raise FileNotFoundError("masked detection requires matching .occlusion_input.json sidecar")
+    meta=json.loads(audit_path.read_text(encoding="utf-8"))
+    if meta.get("profile") != "anymove.dino_per_view_observation_mask_ablation_v1":
+        raise ValueError("unsupported observation mask provenance profile")
+    mode=meta.get("mode")
+    if mode not in ("mesh","p2_error","mesh_p2","oracle_gt"):
+        raise ValueError("unknown observation mask generation mode")
+    h=hashlib.sha256()
+    with source.open("rb") as fd:
+        for block in iter(lambda: fd.read(1<<20),b""):
+            h.update(block)
+    if h.hexdigest()!=meta.get("masked_detection_sha256"):
+        raise ValueError("masked observation NPZ/source sidecar SHA mismatch")
+    if mode=="oracle_gt" and not allow_oracle:
+        raise PermissionError(
+            "Blender GT oracle masks LEAK ground truth. "
+            "Use --allow-gt-oracle only for a synthetic GT diagnostic, "
+            "never for production or real-video inference.")
+    return {"mode":mode,"sha256":h.hexdigest(),
+            "profile":meta["profile"],"audit_path":str(audit_path)}
