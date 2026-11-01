@@ -1,6 +1,6 @@
 """Compare Dino P1 against ONE common raw 2D observation reference.
 
-python tools/diagnose_dino_tracking.py RAW_DET.npz TRACKED_DET.npz \
+python -m tools.diagnose_dino_tracking RAW_DET.npz TRACKED_DET.npz \
   BASE_MOTION.json TRACKED_MOTION.json RIG_INFO.json [--out REPORT.json]
 
 Separate the (1) tracking 2D coordinate delta, (2) bounded Solver weight
@@ -12,6 +12,13 @@ import argparse
 import hashlib
 import json
 import pathlib
+
+# Direct invocation (python tools/script.py) sets sys.path[0] to tools/,
+# whereas mocap/ is a sibling at the repository root. Support both direct
+# invocation and recommended module invocation (python -m tools.script).
+if __package__ in (None, ""):
+    import sys
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 import numpy as np
 
