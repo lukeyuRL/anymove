@@ -315,7 +315,8 @@ def ik_init(tri, root_aa, info, rig):
 
 def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
         front_visibility=None, masked_joint_visibility=None,
-        masked_temporal_strength=0.0):
+        masked_temporal_strength=0.0, top_observation=None,
+        top_camera=None):
     rig = Rig(info, dev)
     names = rig.kp_names
     T = len(d["front_uv"])
@@ -352,6 +353,33 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
         # Only the corresponding Front reprojection terms are downweighted.
         f_c = f_c * torch.tensor(front_visibility, dtype=torch.float64, device=dev)
     tri_np = triangulate(d, front_height_weight, front_visibility)
+    top_obs, top_c = None, None
+    if top_observation is not None:
+        if top_camera is None or masked_joint_visibility is not None or front_visibility is not None:
+            raise ValueError("experimental Top view requires validated camera and cannot stack with old view masking")
+        from mocap.dino_top_camera import validate_top_camera,project_top_torch
+        cam_spec = validate_top_camera(top_camera)
+        uv = np.asarray(top_observation["uv"],dtype=np.float64)
+        strength = np.asarray(top_observation["conf"],dtype=np.float64)
+        if (uv.shape!=(T,len(names),2) or strength.shape!=(T,len(names))
+                or not np.isfinite(uv).all() or not np.isfinite(strength).all()
+                or np.any(strength<0) or np.any(strength>1)):
+            raise ValueError("invalid Top-view joint UV/weight arrays")
+        top_obs = torch.tensor(uv,dtype=torch.float64,device=dev)
+        top_c = torch.tensor(strength,dtype=torch.float64,device=dev)**2
+        # Optional Top measurements supply INDEPENDENT X and Y. Blend
+        # these with the existing Front/Side triangulation for a better
+        # IK initialization, never rewriting raw Reader measurements.
+        # The weights are observation confidence squared, like the loss.
+        wc = strength**2
+        fx_conf = np.clip(np.asarray(d["front_conf"],float),0,1)**2
+        sy_conf = np.clip(np.asarray(d["side_conf"],float),0,1)**2
+        top_x=(uv[...,0]-cam_spec["cx"])/cam_spec["f"]
+        top_y=(cam_spec["cy"]-uv[...,1])/cam_spec["f"]
+        tri_np[...,0] = (tri_np[...,0]*fx_conf+top_x*wc)/(fx_conf+wc+1e-9)
+        tri_np[...,1] = (tri_np[...,1]*sy_conf+top_y*wc)/(sy_conf+wc+1e-9)
+    elif top_camera is not None:
+        raise ValueError("Top camera without Top observations")
     tri = torch.tensor(tri_np, dtype=torch.float64, device=dev)
     hips = names.index(info["bones"][0]["head_joint"])
     trans = (tri[:, hips] - rig.rest_kp[hips]).clone().requires_grad_(True)
@@ -378,6 +406,10 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
         rf = ((pf - f_obs) ** 2 * f_axis).sum(-1)
         rs = ((ps - s_obs) ** 2).sum(-1)
         data = (f_c * torch.log1p(rf / sigma ** 2)).sum() + (s_c * torch.log1p(rs / sigma ** 2)).sum()
+        if top_obs is not None:
+            pt=project_top_torch(J,top_camera)
+            rt=((pt-top_obs)**2).sum(-1)
+            data=data+(top_c*torch.log1p(rt/sigma**2)).sum()
         accel_sq = ((J[2:] - 2 * J[1:-1] + J[:-2]) ** 2).sum(-1)
         acc = accel_sq.sum() / layout.M_PER_PX ** 2 * 0.02
         # A conservative extra acceleration prior ONLY around joints with
@@ -415,9 +447,17 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
         err_f = (pf - f_obs).norm(dim=-1)
         err_fx = (pf - f_obs)[..., 0].abs()
         err_s = (ps - s_obs).norm(dim=-1)
+        if top_obs is not None:
+            err_top=(project_top_torch(J,top_camera)-top_obs).norm(dim=-1)
+            weighted_top_reproj=float(
+                (err_top*top_c).sum()/top_c.sum().clamp_min(1e-12))
     return {"trans": trans.detach().cpu().numpy(), "root_rotmat": axis_angle(root).detach().cpu().numpy(),
             "euler": eul.detach().cpu().numpy(), "joints": J.cpu().numpy(),
-            "reproj_px": {"front": float(err_f.mean()), "front_x_only": float(err_fx.mean()), "side": float(err_s.mean())},
+            "reproj_px": dict({"front": float(err_f.mean()),
+                                "front_x_only": float(err_fx.mean()),
+                                "side": float(err_s.mean())},
+                               **({"top_oracle_selected_only":weighted_top_reproj}
+                                  if top_obs is not None else {})),
             "bones": rig.names, "joint_names": names}
 
 
@@ -440,6 +480,51 @@ def main():
     if temporal_mode and any(x in sys.argv for x in ("--fix-swaps", "--visibility-aware")):
         raise ValueError("--temporal-association cannot be combined with --fix-swaps or --visibility-aware")
     raw = np.load(det_path)
+    top_observation, top_camera, top_provenance = None, None, None
+    top_fields = ("top_uv" in raw.files, "top_conf" in raw.files)
+    if any(top_fields):
+        if not all(top_fields) or "--experimental-dino-top" not in sys.argv:
+            raise PermissionError("Top observations are opt-in and require --experimental-dino-top")
+        if ("--allow-gt-top-oracle" not in sys.argv or
+                "--top-camera" not in sys.argv):
+            raise PermissionError("Top source is a Blender GT oracle; require --allow-gt-top-oracle and --top-camera")
+        if "--no-align" not in sys.argv:
+            raise ValueError("Top observations require --no-align; cannot retime Top independently")
+        if any(flag in sys.argv for flag in (
+                "--fix-swaps","--temporal-association","--visibility-aware",
+                "--experimental-masked-observations")):
+            raise ValueError("Top oracle A/B must not mix with existing P1/P2/visibility modes")
+        import hashlib
+        from pathlib import Path
+        from mocap.dino_top_camera import camera_from_json
+        i=sys.argv.index("--top-camera")
+        if i+1>=len(sys.argv):
+            raise ValueError("--top-camera missing exact exported Blender cam_top.json")
+        cam_path=Path(sys.argv[i+1])
+        top_camera=camera_from_json(cam_path)
+        meta_path=Path(det_path).with_suffix(".top_oracle.json")
+        if not meta_path.is_file():
+            raise FileNotFoundError("Blender Top oracle requires matching SHA-bound .top_oracle.json")
+        top_provenance=json.loads(meta_path.read_text(encoding="utf-8"))
+        if top_provenance.get("profile")!="anymove.dino_top_truth_leakage_oracle/1":
+            raise ValueError("unsupported Top source provenance")
+        def _hash(path):
+            h=hashlib.sha256()
+            with open(path,"rb") as fd:
+                for chunk in iter(lambda:fd.read(1<<20),b""):
+                    h.update(chunk)
+            return h.hexdigest()
+        if _hash(det_path)!=top_provenance.get("top_detection_sha256"):
+            raise ValueError("Top oracle detection SHA mismatch")
+        expected_cam_hash=_hash(cam_path)
+        if expected_cam_hash not in top_provenance.get("input_sha256",{}).values():
+            raise ValueError("Top camera SHA does not match Blender Oracle source")
+        top_observation={"uv":raw["top_uv"].copy(),
+                         "conf":raw["top_conf"].copy()}
+        print("TOP GT ORACLE LEAKAGE: synthetic Blender truth, not a trained Top Reader",flush=True)
+    elif any(flag in sys.argv for flag in (
+            "--experimental-dino-top","--allow-gt-top-oracle","--top-camera")):
+        raise ValueError("Top flags require a SHA-bound Top oracle detection")
     d = {k: raw[k].copy() for k in ("front_uv", "side_uv", "front_conf", "side_conf")}
     # The reader decodes raw (unbounded) linear heatmap peaks. Weights for
     # optimization are bounded without rewriting or corrupting det.npz.
@@ -608,7 +693,8 @@ def main():
     else:
         res = fit(d, info, dev=device, front_visibility=front_visibility,
                   masked_joint_visibility=masked_masks,
-                  masked_temporal_strength=masked_strength)
+                  masked_temporal_strength=masked_strength,
+                  top_observation=top_observation, top_camera=top_camera)
 
     # These diagnostics describe the ACTUALLY APPLIED detections, never a
     # 2D swap later vetoed by the continuity gate.
@@ -635,6 +721,15 @@ def main():
               "source_detections_sha256": det_sha.hexdigest()}
     json.dump(motion, open(out, "w"))
     print("saved", out)
+    if top_provenance is not None:
+        from pathlib import Path
+        sidecar=Path(out).with_suffix(".top_oracle.json")
+        meta={"source_detections_sha256":det_sha.hexdigest(),
+              "source_oracle_provenance":top_provenance,
+              "source_top_camera":sys.argv[sys.argv.index("--top-camera")+1],
+              "not_production":"Blender GT leakage upper-bound diagnostic only"}
+        sidecar.write_text(json.dumps(meta,indent=2),encoding="utf-8")
+        print("Top Oracle provenance:",sidecar,flush=True)
     if masked_observation_audit is not None:
         from pathlib import Path
         report_path = Path(out).with_suffix(".occlusion.json")
