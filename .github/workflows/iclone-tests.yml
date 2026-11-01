@@ -70,6 +70,9 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_iclone_dino_full_body_ground_truth.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_dino_view_reliability.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_dino_top_oracle.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_dino_top_reader_bridge.py' -v
+      - run: python -m tools.make_dino_top_reader_detection --help
+      - run: bash -n tools/eval_dino_top_reader_motion.sh
       - run: python -m tools.make_dino_top_oracle --help
       - run: python -m tools.eval_dino_top_reader --help
       - run: python -m unittest discover -s tests -p 'test_iclone_dino_occlusion_observations.py' -v
