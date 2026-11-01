@@ -34,7 +34,7 @@ class DinoTopOracleContractTests(unittest.TestCase):
                     "joints":J.tolist()}
         self.camera={
             "type":"ORTHO","res":[TOP_WIDTH,TOP_HEIGHT],
-            "R":np.eye(3).tolist(),"t":[0.,0.,-30.],
+            "R":np.array([[0.,1.,0.],[-1.,0.,0.],[0.,0.,1.]]).tolist(),"t":[0.,0.,-30.],
             "f":1/layout.M_PER_PX,
             "cx":TOP_WIDTH/2,"cy":TOP_HEIGHT/2
         }
@@ -53,10 +53,10 @@ class DinoTopOracleContractTests(unittest.TestCase):
         uv=project_top_numpy(J,self.camera)
         self.assertEqual(uv.shape,(8,92,2))
         np.testing.assert_allclose(
-            uv[...,0],TOP_WIDTH/2+J[...,0]/layout.M_PER_PX,
+            uv[...,0],TOP_WIDTH/2+J[...,1]/layout.M_PER_PX,
             rtol=0,atol=1e-9)
         np.testing.assert_allclose(
-            uv[...,1],TOP_HEIGHT/2-J[...,1]/layout.M_PER_PX,
+            uv[...,1],TOP_HEIGHT/2+J[...,0]/layout.M_PER_PX,
             rtol=0,atol=1e-9)
 
     def test_oracle_tail_only_preserves_front_side_raw(self):
@@ -81,7 +81,7 @@ class DinoTopOracleContractTests(unittest.TestCase):
         shifted=dict(self.camera,t=[.1,0,-30.])
         with self.assertRaisesRegex(ValueError,"target"):
             make(self.raw,self.rig,self.truth,shifted,"tail_only")
-        flip=dict(self.camera,R=np.diag([-1,-1,1]).tolist())
+        flip=dict(self.camera,R=np.eye(3).tolist())
         with self.assertRaisesRegex(ValueError,"look down"):
             validate_top_camera(flip)
         other=dict(self.truth,names=list(reversed(self.names)))
