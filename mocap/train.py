@@ -18,6 +18,7 @@ from mocap.model import JointReader, decode, quality_at
 from mocap.quality_targets import synthetic_cutout, PROFILE as QUALITY_TARGET_PROFILE
 from mocap.reader_config import HIGH_RES_INPUT_SIZE, HIGH_RES_HEATMAP_SIZE, ReaderSpec
 from mocap.reader_geometry import Letterbox
+from mocap.reader_warmstart import validate_base_reader, sha256_file
 from mocap.reader_schedule import accumulation_group_size, optimizer_step_count
 from mocap.training_checkpoint import EpochCheckpoints, atomic_torch_save, metadata_fingerprint
 
@@ -153,6 +154,8 @@ def main():
                         help="fallback: train only the heatmap head; may reduce accuracy")
     parser.add_argument("--train-quality", action="store_true",
                         help="new checkpoint with supervised synthetic cutout / localization error quality maps")
+    parser.add_argument("--init-reader", type=pathlib.Path,
+                        help="compatible original Reader checkpoint for warm-start; quality head is initialized separately")
     args = parser.parse_args()
     spec = ReaderSpec(args.input_size, args.heatmap_size)
     if args.epochs < 1 or args.batch < 1 or args.workers < 0 or args.grad_accum < 1:
@@ -192,6 +195,16 @@ def main():
     model = JointReader(len(names), input_size=spec.input_size,
                         heatmap_size=spec.heatmap_size,
                         quality_head=args.train_quality).cuda()
+    if args.init_reader is not None:
+        original = torch.load(args.init_reader, map_location="cpu", weights_only=True)
+        base_weights = validate_base_reader(original, names, spec)
+        result = model.load_state_dict(base_weights, strict=not args.train_quality)
+        if args.train_quality:
+            expected_missing = {"quality_out.weight", "quality_out.bias"}
+            if set(result.missing_keys) != expected_missing or result.unexpected_keys:
+                raise ValueError("initial Reader weights differ from the expected quality-only extension")
+        print(f"warm-started Reader from {args.init_reader}; new quality head: {args.train_quality}", flush=True)
+        del original, base_weights
     # Prefer memory-efficient PyTorch scaled dot-product attention.
     model.backbone.set_attn_implementation("sdpa")
     if args.freeze_backbone:
@@ -232,6 +245,9 @@ def main():
         "amp_dtype": str(amp_dtype),
         "metadata_sha256": metadata_fingerprint(train + val),
     }
+    if args.init_reader is not None:
+        # Keep resume portable across Pod paths without accepting another base checkpoint.
+        resume_config["init_reader_sha256"] = sha256_file(args.init_reader)
     start_epoch, step = checkpointer.restore(model, opt, scaler, resume_config)
     t0, warm = time.time(), 300
     for ep in range(start_epoch, args.epochs):
@@ -270,7 +286,11 @@ def main():
             loss = F.mse_loss(pred.float(), heatmaps(kp, spec.input_size, spec.heatmap_size)) * 1000
             if args.train_quality:
                 kp_hm = kp * spec.heatmap_size / spec.input_size
-                vis_logits, log_error = quality_at(quality.float(), kp_hm)
+                with torch.no_grad():
+                    predicted_uv, _ = decode(pred.float().detach())
+                # Inference samples at predicted UV, so supervise that location
+                # rather than sampling quality maps only at ground-truth UV.
+                vis_logits, log_error = quality_at(quality.float(), predicted_uv)
                 # This is *synthetic patch visibility*, not ground truth
                 # self-occlusion. Negative labels are upweighted due to rarity.
                 # Rendered joints may project beyond the crop. Such
@@ -285,7 +305,6 @@ def main():
                 vis_loss = (vis_loss * torch.where(
                     visible < .5, 3.0, 1.0) * in_frame).sum() / in_frame.sum().clamp(min=1)
                 with torch.no_grad():
-                    predicted_uv, _ = decode(pred.float().detach())
                     residual = (predicted_uv-kp_hm).norm(dim=-1)
                     log_target = torch.log1p(residual.clamp(max=128.0))
                 # The residual target is a training error proxy, not a
