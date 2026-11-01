@@ -270,16 +270,84 @@ weights. This branch:
    These use static synthetic pose labels and are *diagnostics*, not an
    in-the-loop calibration fit or validation of real video occlusion.
 
-Example after dataset audit (choose a **new** output filename and backup
-directory for this experiment):
+### P2.1 Recommended: frozen baseline Reader, train new Quality Head only
+
+The first Quality experiment should NOT update an already verified
+`reader_hr_v1.pt` backbone/heatmap decoder. This branch adds
+`MOCAP_QUALITY_ONLY=1` (`--quality-only`) which requires
+`MOCAP_TRAIN_QUALITY=1` and a compatible `MOCAP_INIT_READER`. It freezes
+**every** original Reader weight and trains only `quality_out.weight` and
+`quality_out.bias`. During training the pretrained Reader stays in eval
+mode, and no gradient is computed for the frozen heatmap MSE objective.
+Resume metadata records `quality_only` and the original checkpoint SHA.
+
+P2 also now evaluates visibility on a **separate deterministic held-out
+cutout validation set**. The previous clean val set contains no negative
+visibility labels and could not measure AUC. New checkpoint
+`quality_validation.synthetic_cutout_visibility` reports AUC, Brier and
+positive/negative sample counts in addition to the clean held-out
+Front/Side predicted-vs-actual localization error calibration.
+These are artificial patch labels, **not** real mesh occlusion or calibrated
+video probabilities.
+
+First create a non-destructive 30-pose subset from the **audited latest
+2200-pose Dino source** (28 training + 2 held-out). Do not reuse an older
+smoke directory or retrain the original Reader:
 
 ```bash
+cd /f/anymove
+git pull --ff-only
+export PYTHON=python.exe
 export MOCAP_CREATURE=assets/dino
-export MOCAP_INIT_READER=runs/dino/reader_hr_v1.pt
-export MOCAP_RESUME_DIR=runs/dino/resume_quality_p2_v2
-MOCAP_TRAIN_QUALITY=1 bash tools/train.sh dino 20 2 672 192 \
-  runs/dino/dataset_hr_v1 runs/dino/reader_hr_quality_p2_v2.pt 0
+
+python.exe -m tools.make_dino_quality_smoke \
+  runs/dino/dataset_hr_v1 \
+  runs/dino/dataset_hr_v1_p2_smoke --poses 30
+
+python.exe -m tools.audit_dino_dataset \
+  --dataset runs/dino/dataset_hr_v1_p2_smoke \
+  --rig assets/dino/rigged/rig_info.json \
+  --creature assets/dino/creature.json
 ```
+
+Run one epoch on local RTX 3070 8GB as an **integration smoke test**;
+actual P2 VRAM/runtime is unverified. With the base frozen, gradient
+checkpointing is unnecessary, but batch 1 is still safest:
+
+```bash
+export MOCAP_INIT_READER=runs/dino/reader_hr_v1.pt
+export MOCAP_TRAIN_QUALITY=1
+export MOCAP_QUALITY_ONLY=1
+unset MOCAP_RESUME_DIR
+bash tools/train.sh dino 1 1 672 192 \
+  runs/dino/dataset_hr_v1_p2_smoke \
+  runs/dino/reader_hr_quality_p2_smoke.pt 0
+```
+
+If the smoke test saves and loads, begin the full **separate**
+quality-only experiment with a fresh output and dedicated resume directory.
+The full run requires a GPU and may incur cost if using Runpod; check
+current GPU availability and cost before starting:
+
+```bash
+export MOCAP_RESUME_DIR=runs/dino/resume_quality_p2_headonly
+bash tools/train.sh dino 20 2 672 192 \
+  runs/dino/dataset_hr_v1 \
+  runs/dino/reader_hr_quality_p2_headonly.pt 0
+```
+
+Acceptance: matched 92-keypoint order, `672/192` spec, unchanged
+pretrained Reader heatmap state dict, held-out clean Front/Side 2D error
+stays at the same checkpoint baseline (previous Dino report: approximately
+3.41px Front / 2.20px Side), and meaningful held-out synthetic
+visibility AUC/Brier + residual calibration. AUC is undefined if all
+synthetic labels fall in one class. Even successful AUC does not license
+turning new quality scores into Solver visibility probabilities.
+
+The former joint fine-tuning configuration (without
+`MOCAP_QUALITY_ONLY=1`) remains available as an opt-in research
+ablation, but it can change and degrade the original Reader. Train it only
+to a NEW checkpoint and test 2D accuracy against the frozen baseline.
 
 The physical batch, memory and throughput are *not yet GPU-verified*. Reduce
 batch or enable `MOCAP_LOW_VRAM=1` if needed (that enables checkpointing and
