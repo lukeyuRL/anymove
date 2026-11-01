@@ -314,7 +314,8 @@ def ik_init(tri, root_aa, info, rig):
 
 
 def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
-        front_visibility=None):
+        front_visibility=None, masked_joint_visibility=None,
+        masked_temporal_strength=0.0):
     rig = Rig(info, dev)
     names = rig.kp_names
     T = len(d["front_uv"])
@@ -322,6 +323,26 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
     s_obs = torch.tensor(d["side_uv"], dtype=torch.float64, device=dev)
     f_c = torch.tensor(d["front_conf"], dtype=torch.float64, device=dev).clamp(0, 1) ** 2
     s_c = torch.tensor(d["side_conf"], dtype=torch.float64, device=dev).clamp(0, 1) ** 2
+    if not np.isfinite(masked_temporal_strength) or masked_temporal_strength < 0 or masked_temporal_strength > 20:
+        raise ValueError("masked_temporal_strength must be finite in [0,20]")
+    masked_window = None
+    if masked_joint_visibility is not None:
+        front_mask = np.asarray(masked_joint_visibility["front"])
+        side_mask = np.asarray(masked_joint_visibility["side"])
+        if (front_mask.shape != tuple(f_c.shape) or
+                side_mask.shape != tuple(s_c.shape) or
+                front_mask.dtype != np.bool_ or side_mask.dtype != np.bool_):
+            raise ValueError("masked per-view observation shape/dtype mismatch")
+        # Observations have already been zeroed and UV imputed ONLY for
+        # initialization in occlusion_observations. Do not let any arbitrary
+        # masked pixel coordinate pull the 3D fit.
+        f_c = f_c * torch.tensor(front_mask, dtype=torch.float64, device=dev)
+        s_c = s_c * torch.tensor(side_mask, dtype=torch.float64, device=dev)
+        missing = torch.tensor(~(front_mask & side_mask), dtype=torch.float64, device=dev)
+        masked_window = torch.maximum(
+            torch.maximum(missing[:-2], missing[1:-1]), missing[2:])
+    elif masked_temporal_strength:
+        raise ValueError("extra masked temporal regularization requires per-view masks")
     if front_visibility is not None:
         front_visibility = np.asarray(front_visibility, dtype=np.float64)
         if (front_visibility.shape != tuple(f_c.shape)
@@ -357,12 +378,24 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
         rf = ((pf - f_obs) ** 2 * f_axis).sum(-1)
         rs = ((ps - s_obs) ** 2).sum(-1)
         data = (f_c * torch.log1p(rf / sigma ** 2)).sum() + (s_c * torch.log1p(rs / sigma ** 2)).sum()
-        acc = ((J[2:] - 2 * J[1:-1] + J[:-2]) ** 2).sum() / layout.M_PER_PX ** 2 * 0.02
+        accel_sq = ((J[2:] - 2 * J[1:-1] + J[:-2]) ** 2).sum(-1)
+        acc = accel_sq.sum() / layout.M_PER_PX ** 2 * 0.02
+        # A conservative extra acceleration prior ONLY around joints with
+        # one or more missing views. This is NOT a learned motion prior.
+        masked_temporal = (
+            (accel_sq * masked_window).sum() / layout.M_PER_PX**2 * 0.02
+            * masked_temporal_strength
+            if masked_window is not None and masked_temporal_strength else
+            torch.zeros((), dtype=torch.float64, device=dev))
         vel = ((eul[1:] - eul[:-1]) ** 2).sum() * 2.0 + ((root[1:] - root[:-1]) ** 2).sum() * 2.0
         prior = (eul ** 2).sum() * 0.05
         ground = (torch.relu(-J[:, paws, 2]) ** 2).sum() / layout.M_PER_PX ** 2 * 0.5
-        total = data + acc + vel + prior + ground
-        return total, {"data": data.item(), "acc": acc.item(), "vel": vel.item(), "prior": prior.item(), "ground": ground.item()}, J, pf, ps, eul
+        total = data + acc + vel + prior + ground + masked_temporal
+        breakdown = {"data": data.item(), "acc": acc.item(), "vel": vel.item(),
+                     "prior": prior.item(), "ground": ground.item()}
+        if masked_window is not None and masked_temporal_strength:
+            breakdown["masked_temporal"] = masked_temporal.item()
+        return total, breakdown, J, pf, ps, eul
 
     opt = torch.optim.Adam([{"params": [trans], "lr": 0.01}, {"params": [root], "lr": 0.03}, {"params": [phi], "lr": 0.05}])
     for it in range(iters):
@@ -432,6 +465,24 @@ def main():
             print("tracking weights", view, "mean", round(float(w.mean()), 4),
                   "downweighted", int(np.count_nonzero(w < 1)), flush=True)
     info = json.load(open(info_path))
+    masked_observation_audit, masked_masks = None, None
+    masked_strength = 0.0
+    if "--masked-temporal-strength" in sys.argv:
+        i = sys.argv.index("--masked-temporal-strength")
+        if i + 1 >= len(sys.argv):
+            raise ValueError("--masked-temporal-strength requires a float")
+        masked_strength = float(sys.argv[i+1])
+    if any(k in raw.files for k in ("front_visible_mask", "side_visible_mask")):
+        if "--no-align" not in sys.argv:
+            raise ValueError("masked Solver requires --no-align: masks cannot be silently re-timed")
+        if any(flag in sys.argv for flag in ("--fix-swaps", "--temporal-association", "--visibility-aware")):
+            raise ValueError("masked Solver is exclusive with legacy swap/visibility experiments")
+        from mocap.occlusion_observations import prepare_masked_solver_input
+        d, masked_masks, masked_observation_audit = prepare_masked_solver_input(d, raw, info)
+        print("masked per-view observations:",
+              masked_observation_audit["views"], flush=True)
+    elif masked_strength:
+        raise ValueError("--masked-temporal-strength requires a masked detection input")
     # Fail before optimization if imported rig and camera settings disagree.
     # Without MOCAP_CREATURE, mocap.layout silently defaults to Wolf.
     from mocap.layout_guard import verify_layout_for_rig
@@ -549,7 +600,9 @@ def main():
                   check.get("failure_reasons"), flush=True)
         print("Raw original Paw Agreement is unchanged for iClone QA", flush=True)
     else:
-        res = fit(d, info, dev=device, front_visibility=front_visibility)
+        res = fit(d, info, dev=device, front_visibility=front_visibility,
+                  masked_joint_visibility=masked_masks,
+                  masked_temporal_strength=masked_strength)
 
     # These diagnostics describe the ACTUALLY APPLIED detections, never a
     # 2D swap later vetoed by the continuity gate.
@@ -576,6 +629,18 @@ def main():
               "source_detections_sha256": det_sha.hexdigest()}
     json.dump(motion, open(out, "w"))
     print("saved", out)
+    if masked_observation_audit is not None:
+        from pathlib import Path
+        report_path = Path(out).with_suffix(".occlusion.json")
+        masked_observation_audit["source_detections_sha256"] = det_sha.hexdigest()
+        masked_observation_audit["masked_temporal_strength"] = masked_strength
+        masked_observation_audit["reprojection_warning"] = (
+            "The masked Solver's per-run reported reprojection uses "
+            "interpolated UV at missing frames; compare 3D Blender GT "
+            "and per-view observed-only reprojection instead.")
+        report_path.write_text(json.dumps(masked_observation_audit, indent=2),
+                               encoding="utf-8")
+        print("masked-observation audit:", report_path, flush=True)
     if visibility_audit is not None:
         # Separate sidecar; the existing motion.json/iClone interface is not changed.
         from pathlib import Path
