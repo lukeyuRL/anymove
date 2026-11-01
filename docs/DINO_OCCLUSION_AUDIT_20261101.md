@@ -172,3 +172,14 @@ bash tools/eval_dino_occlusion.sh \
 
 The code is in the opt-in branch `feature/dino-motion-quality-p123`,
 currently retained as Draft PR #2.
+
+## Local Motion Prior prerequisite audit
+
+Read-only Blender inspection on the user's local Dino assets confirms:
+
+- `assets/dino/rigged/rigged.blend`: one Armature, **no active Action, no Actions in the .blend, no NLA tracks**.
+- `assets/dino/rigged/Dinosaur_FullbodyTemplate_fix.fbx`: imported in a separate non-saving Blender process; **no Actions, no active Action and no NLA tracks**.
+- Only existing `runs/dino/clips/test_walk` was found; this is solved/AI video output and **not independently verified motion truth**.
+- The Seed 7/11 Blender GT sequences created by `mocap.exam.make` are synthetic, deterministic, rig-valid test motions, but **not** independently verified Dino locomotion with contact annotations. The 2,200 still Reader poses are not a real time series.
+
+**Implication:** A physically meaningful or learned Dino Motion Prior cannot be claimed trained from available independent continuous-motion ground truth. Next first-party task is to establish at least two genuinely distinct, verified rigged continuous animation sources (walk/turn and tail articulations), validate bone names/FPS/contacts, then use separate training and held-out sequences to assess missing-view reconstruction. Do not promote a prior trained only on this AI-Solver's own output. Synthetic exam motion may support *infrastructure smoke*, not claims of natural gait fidelity.
