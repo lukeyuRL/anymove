@@ -95,6 +95,10 @@ variants=(
   --variant "baseline=$out/motion_baseline.json"
   --variant "p1_guarded=$out/motion_p1_guarded.json"
 )
+detections=(
+  --detection "baseline=$out/det_baseline.npz"
+  --detection "p1_guarded=$out/det_p1_guarded.npz"
+)
 if [ -n "$p2" ]; then
   "$PY" -m mocap.detect \
     "$out/gt_video.mp4" "$p2" "$ref" \
@@ -106,11 +110,13 @@ if [ -n "$p2" ]; then
     "$out/det_p2_weighted.npz" "$rig" \
     "$out/motion_p2_weighted.json" --no-align
   variants+=(--variant "p2_weighted=$out/motion_p2_weighted.json")
+  detections+=(--detection "p2_weighted=$out/det_p2_weighted.npz")
 fi
 
 "$PY" -m tools.evaluate_dino_full_body \
   "$out/gt_render/joints.json" "$rig" "$out/full_body_quality" \
-  "${variants[@]}" --source-motion "$out/gt_motion.json"
+  "${variants[@]}" "${detections[@]}" \
+  --source-motion "$out/gt_motion.json"
 
 echo "DINO FULL-BODY GT COMPLETE"
 echo "Blender GT: $out/gt_render/joints.json"
