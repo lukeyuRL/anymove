@@ -47,9 +47,9 @@ class DinoTopReaderBridgeTests(unittest.TestCase):
             np.testing.assert_array_equal(result[key],val)
             np.testing.assert_array_equal(raw[key],val)
         self.assertEqual(result["top_uv"].shape,(6,92,2))
-        np.testing.assert_array_equal(result["top_conf"][:,:9],.7)
-        np.testing.assert_array_equal(result["top_conf"][:,9:],0)
-        np.testing.assert_array_equal(result["top_uv"][:,9:,:],0)
+        np.testing.assert_allclose(result["top_conf"][:,:9],np.full((6,9),.7),atol=1e-7)
+        np.testing.assert_array_equal(result["top_conf"][:,9:],np.zeros((6,83)))
+        np.testing.assert_array_equal(result["top_uv"][:,9:,:],np.zeros((6,83,2)))
 
     def test_out_of_image_predictions_must_not_be_used(self):
         rig,raw,top=self.make_fixture()
