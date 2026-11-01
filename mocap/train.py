@@ -408,14 +408,15 @@ def main():
             vis_scores, vis_labels = [], []
             # Separate deterministic masked validation: the clean val set
             # contains no masked joints and cannot measure visibility AUC.
-            for qx, _, _, qvisible in quality_vl:
-                with torch.autocast("cuda", dtype=amp_dtype):
-                    pred_mask, quality_mask = model(
-                        qx.cuda(non_blocking=True), return_quality=True)
-                uv_mask, _ = decode(pred_mask.float())
-                vis_logit, _ = quality_at(quality_mask.float(), uv_mask)
-                vis_scores.append(torch.sigmoid(vis_logit).cpu().numpy())
-                vis_labels.append(qvisible.numpy())
+            with torch.no_grad():
+                for qx, _, _, qvisible in quality_vl:
+                    with torch.autocast("cuda", dtype=amp_dtype):
+                        pred_mask, quality_mask = model(
+                            qx.cuda(non_blocking=True), return_quality=True)
+                    uv_mask, _ = decode(pred_mask.float())
+                    vis_logit, _ = quality_at(quality_mask.float(), uv_mask)
+                    vis_scores.append(torch.sigmoid(vis_logit).cpu().numpy())
+                    vis_labels.append(qvisible.numpy())
             quality_val["synthetic_cutout_visibility"] = synthetic_visibility_report(
                 np.concatenate(vis_scores), np.concatenate(vis_labels))
             print(f"epoch {ep} quality validation: error calibration gap (layout px) "
