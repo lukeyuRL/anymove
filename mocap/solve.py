@@ -486,20 +486,19 @@ def main():
     if temporal_mode and any(x in sys.argv for x in ("--fix-swaps", "--visibility-aware")):
         raise ValueError("--temporal-association cannot be combined with --fix-swaps or --visibility-aware")
     raw = np.load(det_path)
-    top_observation, top_camera, top_provenance = None, None, None
+    top_observation, top_camera, top_provenance, top_source_kind = None, None, None, None
     top_fields = ("top_uv" in raw.files, "top_conf" in raw.files)
     if any(top_fields):
         if not all(top_fields) or "--experimental-dino-top" not in sys.argv:
             raise PermissionError("Top observations are opt-in and require --experimental-dino-top")
-        if ("--allow-gt-top-oracle" not in sys.argv or
-                "--top-camera" not in sys.argv):
-            raise PermissionError("Top source is a Blender GT oracle; require --allow-gt-top-oracle and --top-camera")
+        if "--top-camera" not in sys.argv:
+            raise PermissionError("Top source requires --top-camera and verified provenance")
         if "--no-align" not in sys.argv:
             raise ValueError("Top observations require --no-align; cannot retime Top independently")
         if any(flag in sys.argv for flag in (
                 "--fix-swaps","--temporal-association","--visibility-aware",
                 "--experimental-masked-observations")):
-            raise ValueError("Top oracle A/B must not mix with existing P1/P2/visibility modes")
+            raise ValueError("Top A/B must not mix with existing P1/P2/visibility modes")
         import hashlib
         from pathlib import Path
         from mocap.dino_top_camera import camera_from_json
@@ -508,12 +507,26 @@ def main():
             raise ValueError("--top-camera missing exact exported Blender cam_top.json")
         cam_path=Path(sys.argv[i+1])
         top_camera=camera_from_json(cam_path)
-        meta_path=Path(det_path).with_suffix(".top_oracle.json")
-        if not meta_path.is_file():
-            raise FileNotFoundError("Blender Top oracle requires matching SHA-bound .top_oracle.json")
+        candidate_oracle=Path(det_path).with_suffix(".top_oracle.json")
+        candidate_reader=Path(det_path).with_suffix(".top_reader.json")
+        if int(candidate_oracle.is_file())+int(candidate_reader.is_file())!=1:
+            raise FileNotFoundError("Top view needs exactly one SHA-bound Top Reader or Top Oracle provenance sidecar")
+        if candidate_oracle.is_file():
+            top_source_kind="oracle"
+            meta_path=candidate_oracle
+            if "--allow-gt-top-oracle" not in sys.argv:
+                raise PermissionError("Blender Top Oracle LEAKS 3D GT; explicit --allow-gt-top-oracle required")
+        else:
+            top_source_kind="actual_image_reader"
+            meta_path=candidate_reader
+            if "--allow-gt-top-oracle" in sys.argv:
+                raise PermissionError("Top Reader source must not be misrepresented as GT Oracle")
         top_provenance=json.loads(meta_path.read_text(encoding="utf-8"))
-        if top_provenance.get("profile")!="anymove.dino_top_truth_leakage_oracle/1":
-            raise ValueError("unsupported Top source provenance")
+        expected_profile=(
+            "anymove.dino_top_truth_leakage_oracle/1" if top_source_kind=="oracle"
+            else "anymove.dino_top_reader_joint_observations_v1")
+        if top_provenance.get("profile")!=expected_profile:
+            raise ValueError("unsupported Top source provenance profile")
         def _hash(path):
             h=hashlib.sha256()
             with open(path,"rb") as fd:
@@ -521,16 +534,21 @@ def main():
                     h.update(chunk)
             return h.hexdigest()
         if _hash(det_path)!=top_provenance.get("top_detection_sha256"):
-            raise ValueError("Top oracle detection SHA mismatch")
-        expected_cam_hash=_hash(cam_path)
-        if expected_cam_hash not in top_provenance.get("input_sha256",{}).values():
-            raise ValueError("Top camera SHA does not match Blender Oracle source")
+            raise ValueError("Top detection SHA mismatch")
+        camera_hash=_hash(cam_path)
+        if top_source_kind=="oracle":
+            if camera_hash not in top_provenance.get("input_sha256",{}).values():
+                raise ValueError("Top Oracle camera SHA does not match Blender source")
+        elif camera_hash!=top_provenance.get("top_camera_sha256"):
+            raise ValueError("Top Reader camera SHA mismatch")
         top_observation={"uv":raw["top_uv"].copy(),
                          "conf":raw["top_conf"].copy()}
-        print("TOP GT ORACLE LEAKAGE: synthetic Blender truth, not a trained Top Reader",flush=True)
+        print(("TOP GT ORACLE LEAKAGE: synthetic Blender truth, NOT a trained Top Reader"
+            if top_source_kind=="oracle" else
+            "EXPERIMENTAL TOP IMAGE READER: image-based predictions, unvalidated for production"),flush=True)
     elif any(flag in sys.argv for flag in (
             "--experimental-dino-top","--allow-gt-top-oracle","--top-camera")):
-        raise ValueError("Top flags require a SHA-bound Top oracle detection")
+        raise ValueError("Top flags require a SHA-bound Top detection")
     d = {k: raw[k].copy() for k in ("front_uv", "side_uv", "front_conf", "side_conf")}
     # The reader decodes raw (unbounded) linear heatmap peaks. Weights for
     # optimization are bounded without rewriting or corrupting det.npz.
@@ -731,9 +749,12 @@ def main():
         from pathlib import Path
         sidecar=Path(out).with_suffix(".top_oracle.json")
         meta={"source_detections_sha256":det_sha.hexdigest(),
-              "source_oracle_provenance":top_provenance,
+              "source_top_provenance":top_provenance,
+              "source_mode":top_source_kind,
               "source_top_camera":sys.argv[sys.argv.index("--top-camera")+1],
-              "not_production":"Blender GT leakage upper-bound diagnostic only"}
+              "not_production":("Blender GT leakage upper-bound diagnostic only"
+                      if top_source_kind=="oracle" else
+                      "Untrained Top image-reader transfer experiment; not verified for product")}
         sidecar.write_text(json.dumps(meta,indent=2),encoding="utf-8")
         print("Top Oracle provenance:",sidecar,flush=True)
     if masked_observation_audit is not None:
