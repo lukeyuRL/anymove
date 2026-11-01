@@ -35,4 +35,8 @@ if [ "${MOCAP_TRAIN_QUALITY:-0}" = "1" ]; then
     echo "quality model requires a distinct checkpoint filename" >&2; exit 2
   fi
 fi
-"$PY" -m mocap.train "$data" "assets/$1/rigged/rig_info.json" "$out" "$epochs" "$batch" --input-size "$size" --heatmap-size "$heatmap" --workers "$workers" "${extras[@]}" 2>&1 | tee "runs/$1/train_${MOCAP_TRAIN_QUALITY:-hr}.log"
+# Optional per-experiment log path; preserve old default when unset.
+# A separate P2 full run must not overwrite the successful smoke log.
+log_file=${MOCAP_LOG_FILE:-runs/$1/train_${MOCAP_TRAIN_QUALITY:-hr}.log}
+mkdir -p "$(dirname "$log_file")"
+"$PY" -m mocap.train "$data" "assets/$1/rigged/rig_info.json" "$out" "$epochs" "$batch" --input-size "$size" --heatmap-size "$heatmap" --workers "$workers" "${extras[@]}" 2>&1 | tee "$log_file"
