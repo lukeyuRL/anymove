@@ -179,6 +179,44 @@ difference change. If no candidates are quarantined, the hypothesized
 outlier path was not the cause. Neither a lower reprojection error nor a
 smaller between-solution distance certifies better 3D motion.
 
+### Dino test_walk P1 Guarded v2 actual follow-up (124 frames)
+
+The user-provided `p1_dino_guarded_diagnostics.json` reports the same
+124 frames, 24fps, 92 joints and same RAW Reader Detection hash
+`0d51a6b2c3b1e7fa61a561eae91820a53d1f6eb0f15fa042c88867cf9eec56e4`.
+The comparison is between **different detections** with a common raw
+Reader reprojection reference; neither result is 3D truth.
+
+| Metric | P1 v1 | P1 guarded v2 | Interpretation |
+| --- | ---: | ---: | --- |
+| Front maximum UV change | 169.17697 px | 29.84275 px | 82.4% smaller extreme modification |
+| Side maximum UV change | 76.14707 px | 29.97502 px | 60.6% smaller |
+| Inter-solution Joint max | 47.95042 cm | 15.69275 cm | 67.3% smaller vs baseline, **not** truth |
+| Inter-solution Joint mean | 0.97278 cm | 0.84462 cm | 13.2% smaller vs baseline |
+| Root mean vs baseline | 1.27534 cm | 1.26223 cm | effectively unchanged |
+| Root maximum vs baseline | 4.71506 cm | 4.78629 cm | **slightly worse**, still at frame 82 |
+
+**Confirmed safety effect:** the guard quarantined 27 Front + 10 Side
+low-peak conflicts (>30 px). No applied 2D correction exceeded 30px.
+Only 596/11,408 Front and 378/11,408 Side joint/frames exceeded 1px;
+"changed_joint_frames" counts tiny floating-point changes too.
+
+Against the *same raw Reader detections*, baseline Front/Side mean
+reprojection was 4.46175 / 4.48184 px and P1 guarded v2 was
+4.45385 / 4.50593 px. Front improves only 0.0079px while Side
+worsens 0.0241px; there is no consistent accuracy signal. Front X-only
+increases from 1.64135 to 1.67240px. Root peak speed
+130.98295 -> 132.23137 cm/s and Root P95 acceleration
+936.43260 -> 886.34387 cm/s², but smoother does not mean more correct.
+
+**Decision:** keep both P1 variants opt-in; guarded v2 is a safer
+*extreme-correction gate*, not a validated temporal joint tracker.
+The persistent Root difference at frame 82 is not explained away by
+the outlier guard. Do not tune or enable default on this one AI clip.
+Reserve P1 UV-only/weight-only factorial runs and independent Blender
+continuous-motion ground truth for follow-up. Advance to P2 quality
+supervision on the verified 2,200 independent Dino still poses.
+
 #### Separate coordinate and weight contributions
 
 If Root changes look substantial, use the four-way factorial test:
