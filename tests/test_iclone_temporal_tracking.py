@@ -73,6 +73,23 @@ class TemporalTrackingTests(unittest.TestCase):
         np.testing.assert_array_equal(refined[2, 0], uv[2, 0])
         self.assertGreaterEqual(report["counts"]["flow_rejected"], 1)
 
+    def test_raw_seed_drift_disables_followup_lk_extrapolation(self):
+        uv, peak, flow, ok, err = self.fixture()
+        truth = uv.copy()
+        # Reader misidentifies an occluded Dino joint on frame 4.
+        uv[4, 0] += [25., 18.]
+        peak[4, 0] = .2
+        flow[4, 0] = truth[4, 0]
+        # At frame 5 LK is seeded at the WRONG raw frame-4 pixel.
+        # A tiny forward/backward error does not make that seed anatomical.
+        flow[5, 0] = uv[4, 0] + [.3, .2]
+        refined, weight, report = fuse_tracks(
+            uv, peak, flow, ok, err, 640, 720)
+        np.testing.assert_allclose(refined[4, 0], truth[4, 0], atol=1e-5)
+        np.testing.assert_allclose(refined[5, 0], truth[5, 0], atol=1e-5)
+        self.assertGreaterEqual(report["counts"]["flow_seed_rejected"], 1)
+        self.assertEqual(weight[4, 0], .55)
+
     def test_invalid_shapes_and_nonfinite_fail_closed(self):
         uv, pk, flow, ok, err = self.fixture()
         with self.assertRaisesRegex(ValueError, "invalid"):
