@@ -101,7 +101,9 @@ class DinoOccludedObservationTests(unittest.TestCase):
         out,_,audit=prepare_masked_solver_input(inp,masks,self.rig)
         point=np.asarray([self.rig["keypoints"][8]["rest"]])
         rest_front,_=layout.project(point)
-        np.testing.assert_allclose(out["front_uv"][:,8,:],rest_front[0])
+        np.testing.assert_allclose(
+            out["front_uv"][:,8,:],
+            np.tile(rest_front[0], (self.T,1)))
         self.assertTrue(np.all(out["front_conf"][:,8]==0))
         self.assertEqual(audit["views"]["front"]["largest_missing_run_frames"],self.T)
         self.assertEqual(len(audit["views"]["front"]["unanchored_joints"]),1)
