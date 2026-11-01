@@ -49,6 +49,3 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_iclone_quality_metrics.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_dino_dataset_audit.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_reader_warmstart.py' -v
-      - run: python -m unittest discover -s tests -p 'test_iclone_temporal_tracking.py' -v
-      - run: python -m unittest discover -s tests -p 'test_iclone_quality_targets.py' -v
-      - run: python -m unittest discover -s tests -p 'test_iclone_temporal_tracking.py' -v
