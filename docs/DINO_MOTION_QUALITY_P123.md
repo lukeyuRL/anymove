@@ -409,6 +409,93 @@ depth/instance-part visibility labels, with hidden joints distinguished from
 visible surface landmarks. A ray cast to a skeleton joint's internal position
 would incorrectly classify most joints as hidden.
 
+## P2.2 — ACTUAL Dino Reader + Motion Solver A/B (same 2D observations)
+
+The P2 smoke/full Quality Head was trained with `MOCAP_QUALITY_ONLY=1`.
+Its original DINOv2 heatmap/coordinate Reader was **frozen**. Running the
+P2 checkpoint by itself can display predicted synthetic-cutout scores and
+2D-error estimates, but cannot physically change keypoint coordinates.
+This experiment performs the missing integration: the **trained P2 Reader
+predicts errors on every real video frame, and its predictions feed the
+EXISTING 3D Solver as experimental per-joint confidence multipliers**.
+
+**Important distinction:** The P2 output is not a trained anatomical
+occlusion probability. The proposed mapping is a conservative,
+configurable heuristic, not a learned noise distribution:
+
+```text
+multiplier = clip(5px / max(predicted_error_px, 5px), 0.40, 1.0)
+```
+
+This uses **predicted error only** (NOT synthetic-cutout score). The
+original `front_uv/side_uv/front_conf/side_conf` are copied exactly
+from the user's proven baseline `det.npz`, so any changed 3D motion is
+attributable to these experimental weights, not changed 2D coordinates.
+The importer and `motion.json` contract are unchanged. The adapter
+will not be enabled by default unless true 3D/visual tests pass.
+
+Use a stable model-only checkpoint snapshot copied between atomic
+per-epoch saves. Don't `git pull` or interrupt an actively running
+`mocap.train` process; the branch must be updated **before** starting
+training or after it exits, never while rewriting the working tree.
+Inference on the same RTX 3070 while training may compete for GPU time;
+prefer running this experiment after training finishes or is paused.
+
+From Git Bash with the new changes checked out:
+
+```bash
+cd /f/anymove
+export PYTHON=python.exe
+export MOCAP_CREATURE=assets/dino
+# Keep original training checkpoint and current output untouched.
+cp -n runs/dino/reader_hr_quality_p2_headonly.pt \
+  runs/dino/reader_hr_quality_p2_eval_snapshot.pt
+
+# Replace CLIP with the EXISTING capture that generated the raw det.npz
+# and baseline motion.json, e.g. runs/dino/clips/test_walk.
+VIDEO=runs/dino/videos/test_walk/s1/h3max.mp4
+CLIP=runs/dino/clips/REPLACE_WITH_EXISTING_CAPTURE
+bash tools/eval_dino_p2.sh "$VIDEO" "$CLIP" \
+  runs/dino/reader_hr_quality_p2_eval_snapshot.pt p2_eval01
+```
+
+The one-command script runs, in sequence:
+1. `mocap.detect` with actual P2 Reader to a new
+   `p2_eval01/det_p2_quality.npz` and joint overlay video.
+2. `tools.review_dino_p2` makes `quality_review.mp4` with colors
+   representing predicted error (<=5 px, 5-12 px, >12 px), a purple ring
+   for low **synthetic** cutout score, and per-joint/ per-frame error
+   rankings in `quality_review.json`. These color thresholds are only
+   display heuristics, not real occlusion labels.
+3. `tools.make_dino_p2_weighted_detection` strictly checks that P2
+   Joint Reader UV/peaks, frame count, names, FPS and video affine
+   calibration still match the original Reader. It refuses mismatches
+   >0.25px UV or >0.02 raw heatmap peak before copying the original
+   UV/peaks and adding bounded `front_track_weight` and
+   `side_track_weight`. The existing Solver consumes these optional
+   arrays as confidence multipliers.
+4. `mocap.solve` produces `motion_p2_weighted.json` in a separate
+   directory. This does NOT affect the original `motion.json`.
+5. `tools.compare_dino_p2_motion` checks input SHA/rig provenance,
+   evaluates BOTH solved motions against the SAME raw Reader 2D
+   observations, and reports Root trajectory differences, speed and
+   acceleration plus per-joint 3D changes. These are NOT 3D accuracy
+   measurements.
+
+Inspect `quality_review.mp4` alongside the **actual source** video,
+then render `motion_p2_weighted.json` on the Dino rig separately and
+compare against the original `motion.json` in Blender/iClone.
+Pay attention to frame 82, toe sliding, Tail07 and Root movement.
+If all predicted errors are <=5px the mapping leaves all weights at
+one, so the two Motion results should be indistinguishable; do not
+claim the P2 quality head helped if no observations were downweighted.
+
+This is an experiment, not a production integration. If P2 uncertainties
+do not generalize from synthetic to AI video, revise supervision or
+independently fine-tune the `JointReader` Heatmap Head on held-out
+realistic Dino detection data in another checkpoint; do not
+unfreeze the production Reader in place.
+
 ## P3 — Motion Prior / Motion Denoising
 
 The existing `mocap.motion_prior` learns per-bone/per-axis **angular
