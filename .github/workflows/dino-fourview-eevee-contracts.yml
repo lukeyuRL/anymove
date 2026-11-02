@@ -1,0 +1,29 @@
+name: Dino SkinMax41 four-view Eevee contracts
+
+on:
+  push:
+    branches:
+      - feature/dino-motion-quality-p123
+    paths:
+      - blender/fourview_render_contract.py
+      - blender/render_four_view_color41.py
+      - tests/test_dino_fourview_eevee_contract.py
+      - .github/workflows/dino-fourview-eevee-contracts.yml
+  pull_request:
+    branches:
+      - feature/dino-motion-quality-p123
+  workflow_dispatch:
+
+jobs:
+  contracts:
+    name: Compile and verify four-view Eevee contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile Blender scripts (no Blender runtime required)
+        run: python -m compileall -q blender/fourview_render_contract.py blender/render_four_view_color41.py tests/test_dino_fourview_eevee_contract.py
+      - name: Test engine IDs, geometry source contract and resume integrity
+        run: python -m unittest discover -s tests -p test_dino_fourview_eevee_contract.py -v
