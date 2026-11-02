@@ -264,9 +264,11 @@ def main():
         raise ValueError("Input must have painted vertex colors")
     engine = configure_scene(scene, a.render_engine, a.samples)
     cameras = create_views(scene)
+    # JSON serializes tuples as arrays. Use lists here so reloading the
+    # persisted contract reproduces identical Python values on --resume.
     dims = {
-        view: (round((common.W_FRONT if view in ("front", "back") else common.W_SIDE) * a.scale),
-               round(common.H * a.scale))
+        view: [round((common.W_FRONT if view in ("front", "back") else common.W_SIDE) * a.scale),
+               round(common.H * a.scale)]
         for view in VIEWS
     }
     if any(min(size) <= 0 for size in dims.values()):
