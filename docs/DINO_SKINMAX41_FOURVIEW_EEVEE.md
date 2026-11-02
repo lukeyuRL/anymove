@@ -45,7 +45,7 @@ $rig = "assets/dino/rigged/rig_info.json"
 $src = "runs/dino/dataset_hr_v1"
 $out = "runs/dino/skinmax_camera_aware_v1/dataset_fourview_color41_full_v1_eevee"
 
-& $blender -b -P blender/render_four_view_color41.py -- `
+& $blender -b --python-exit-code 17 -P blender/render_four_view_color41.py -- `
     --blend $blend `
     --rig $rig `
     --source-dataset $src `
@@ -67,7 +67,7 @@ Use exactly the same output directory, Blender version, painted .blend,
 source metadata, engine, sample count and scale:
 
 ```powershell
-& $blender -b -P blender/render_four_view_color41.py -- `
+& $blender -b --python-exit-code 17 -P blender/render_four_view_color41.py -- `
     --blend $blend `
     --rig $rig `
     --source-dataset $src `
@@ -135,9 +135,14 @@ Total at 2,200 poses: **8,800 PNG + 8,800 NPZ + 2,200 JSON =
 - The local P4 four-view training pipeline is NOT on this GitHub branch.
   Before using this dataset for Reader training, check that the actual
   loader's expected NPZ keys and surface labeling conventions match.
-- These changes were made on GitHub, and the pure contract tests are
-  included. **Blender 5.0 smoke rendering has NOT been executed** due
-  the user's desktop connection being offline.
+- Five-pose Blender 5.0 Eevee smoke passed on Windows: 20 PNGs, 20 NPZs
+  and 5 verified pose JSONs. Minimum depth/RGB mask IoU was 0.95964;
+  source FK error was below 0.1 mm and opposing camera mirroring passed.
+  Full 2,200-pose rendering remains a separate long-running operation.
+- Blender can emit a Python traceback but exit with status 0 unless
+  `--python-exit-code 17` is specified. These commands include that guard.
+- The in-memory render contract uses JSON-safe lists for image dimensions
+  so `--resume` does not falsely reject an unchanged stored contract.
 
 ## Verification
 
