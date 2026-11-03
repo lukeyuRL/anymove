@@ -13,6 +13,7 @@ import numpy as np
 import torch
 
 from mocap import layout
+from mocap.camera_geometry import verify_record_angles, verify_reference_file
 from mocap.model import HM, SIZE, JointReader, decode, square
 
 
@@ -73,6 +74,8 @@ def run(model, views, bs=32):
 
 def load(model_path):
     ck = torch.load(model_path, map_location="cpu", weights_only=True)  # tensors, names and numbers only: safe for downloaded readers
+    verify_record_angles(ck.get("camera_azimuth_deg"),
+                         (layout.FRONT_AZIMUTH_DEG, layout.SIDE_AZIMUTH_DEG), "Reader checkpoint")
     model = JointReader(len(ck["names"])).cuda().eval()
     model.load_state_dict(ck["state_dict"])
     return model, ck["names"]
@@ -94,6 +97,7 @@ def overlay(frames, fuv, suv, fconf, names, path, fps):
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     video, model_path, ref_path, out = args[:4]
+    verify_reference_file(ref_path, (layout.FRONT_AZIMUTH_DEG, layout.SIDE_AZIMUTH_DEG))
     frames, fps = read_frames(video)
     ref = cv2.imread(ref_path)[..., ::-1]
     if "--no-calib" in sys.argv:  # already a layout frame (the exam)
@@ -105,7 +109,9 @@ def main():
     model, names = load(model_path)
     fuv, fconf = run(model, [f[:, :layout.W_FRONT] for f in frames])
     suv, sconf = run(model, [f[:, layout.W_FRONT:] for f in frames])
-    np.savez(out, front_uv=fuv, side_uv=suv, front_conf=fconf, side_conf=sconf, fps=fps, names=np.array(names), calib=A)
+    np.savez(out, front_uv=fuv, side_uv=suv, front_conf=fconf, side_conf=sconf,
+             camera_azimuth_deg=np.array([layout.FRONT_AZIMUTH_DEG, layout.SIDE_AZIMUTH_DEG], dtype=np.float64),
+             fps=fps, names=np.array(names), calib=A)
     print(f"{len(frames)} frames at {fps:.2f} fps; raw heatmap peak means "
           f"front {fconf.mean():.2f} side {sconf.mean():.2f}; "
           f"ranges front [{fconf.min():.3g},{fconf.max():.3g}] "

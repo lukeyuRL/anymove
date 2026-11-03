@@ -1,22 +1,30 @@
-"""The two-camera frame: compose renders into it, split video frames out of it, map pixels to metres and back.
+"""Two-camera orthographic frame, composition and calibrated pixel/world mapping.
 
-Mirrors blender/common.py. Front view (left, 420 px) looks along +Y: u grows with X. Side view (right, 860 px) looks
-along +X: u grows with -Y, so the head (-Y) is on the right. In both, v grows downward with -Z and the ground (z = 0)
-is row 630.
+Default camera slots reproduce the original front 0deg (u=+X) and side 90deg
+(u=-Y). With explicit camera angles the slots retain their legacy names but
+represent arbitrary horizontal azimuths. Both views share world Z, level tilt,
+scale and ground row; mirrors blender/common.py.
 """
 import json, os, pathlib
 
 import numpy as np
 
+from mocap.camera_geometry import project_orthographic, resolve_angles
+
 H, W_FRONT, W_SIDE = 720, 420, 860
 M_PER_PX = 1.9 / H
 GROUND_V = 630
+FRONT_AZIMUTH_DEG, SIDE_AZIMUTH_DEG = 0.0, 90.0
 # MOCAP_CREATURE=<assets dir> with a creature.json "layout" overrides the wolf's framing (see blender/common.py)
 _cfg = pathlib.Path(os.environ.get("MOCAP_CREATURE", "")) / "creature.json"
 if os.environ.get("MOCAP_CREATURE") and _cfg.exists():
     _l = json.load(open(_cfg)).get("layout", {})
     W_FRONT, W_SIDE = _l.get("W_FRONT", W_FRONT), _l.get("W_SIDE", W_SIDE)
     M_PER_PX, GROUND_V = _l.get("M_PER_PX", M_PER_PX), _l.get("GROUND_V", GROUND_V)
+    FRONT_AZIMUTH_DEG = _l.get("FRONT_AZIMUTH_DEG", FRONT_AZIMUTH_DEG)
+    SIDE_AZIMUTH_DEG = _l.get("SIDE_AZIMUTH_DEG", SIDE_AZIMUTH_DEG)
+FRONT_AZIMUTH_DEG, SIDE_AZIMUTH_DEG = resolve_angles(
+    FRONT_AZIMUTH_DEG, SIDE_AZIMUTH_DEG, os.environ.get("MOCAP_CAMERA_AZIMUTHS"))
 W = W_FRONT + W_SIDE
 Z_CENTER = (GROUND_V - H / 2) * M_PER_PX
 BG, FLOOR, DIVIDER = (128, 130, 134), (152, 154, 158), (34, 34, 38)
@@ -44,19 +52,18 @@ def split(frame):
 def project(p):
     """World points (..., 3) to pixel coordinates in each view: front (u, v) and side (u, v)."""
     p = np.asarray(p, np.float64)
-    v = H / 2 - (p[..., 2] - Z_CENTER) / M_PER_PX
-    front = np.stack([W_FRONT / 2 + p[..., 0] / M_PER_PX, v], -1)
-    side = np.stack([W_SIDE / 2 - p[..., 1] / M_PER_PX, v], -1)
+    front = project_orthographic(p, FRONT_AZIMUTH_DEG, W_FRONT, H, M_PER_PX, Z_CENTER)
+    side = project_orthographic(p, SIDE_AZIMUTH_DEG, W_SIDE, H, M_PER_PX, Z_CENTER)
     return front, side
 
 
 def unproject_front(uv):
-    """Front-view pixels to (x, z) in metres."""
+    """Front-slot pixels to (local image-right coordinate, z), not world X for arbitrary angles."""
     uv = np.asarray(uv, np.float64)
     return np.stack([(uv[..., 0] - W_FRONT / 2) * M_PER_PX, Z_CENTER + (H / 2 - uv[..., 1]) * M_PER_PX], -1)
 
 
 def unproject_side(uv):
-    """Side-view pixels to (y, z) in metres."""
+    """Legacy (-image-right, z) coordinates; this is world Y only at 90deg."""
     uv = np.asarray(uv, np.float64)
     return np.stack([-(uv[..., 0] - W_SIDE / 2) * M_PER_PX, Z_CENTER + (H / 2 - uv[..., 1]) * M_PER_PX], -1)

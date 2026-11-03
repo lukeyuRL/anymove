@@ -10,12 +10,13 @@ The fit runs Blender's forward kinematics in torch (pose = parent pose x rest of
 free to turn and move, every other bone limited to its range, and minimises the confidence-weighted distance between
 the rig's projected joints and the readings in both views, plus smoothness and a small pull toward the rest pose.
 """
-import json, sys
+import json, math, sys
 
 import numpy as np
 import torch
 
 from mocap import layout
+from mocap.camera_geometry import triangulate_orthographic, verify_record_angles
 from mocap.confidence import bounded_peak_weights
 
 LEGS = {"F": ["scap", "shoulder", "elbow", "wrist", "fpaw", "ftoe"], "H": ["hip", "knee", "hock", "hpaw", "htoe"]}
@@ -209,21 +210,33 @@ class Rig:
 
 
 def project(J):
+    """Torch (and differentiable) counterpart to the shared Blender/NumPy projection."""
     v = layout.H / 2 - (J[..., 2] - layout.Z_CENTER) / layout.M_PER_PX
-    f = torch.stack([layout.W_FRONT / 2 + J[..., 0] / layout.M_PER_PX, v], -1)
-    s = torch.stack([layout.W_SIDE / 2 - J[..., 1] / layout.M_PER_PX, v], -1)
+    f_angle = math.radians(layout.FRONT_AZIMUTH_DEG)
+    s_angle = math.radians(layout.SIDE_AZIMUTH_DEG)
+    f = torch.stack([layout.W_FRONT / 2 + (math.cos(f_angle) * J[..., 0] - math.sin(f_angle) * J[..., 1]) / layout.M_PER_PX, v], -1)
+    s = torch.stack([layout.W_SIDE / 2 + (math.cos(s_angle) * J[..., 0] - math.sin(s_angle) * J[..., 1]) / layout.M_PER_PX, v], -1)
     return f, s
 
 
-def triangulate(d, front_height_weight=0.25):
-    """Joints in metres: x from the front view, y from the side view, height mostly from the side view."""
-    fx = (d["front_uv"][..., 0] - layout.W_FRONT / 2) * layout.M_PER_PX
-    sy = -(d["side_uv"][..., 0] - layout.W_SIDE / 2) * layout.M_PER_PX
-    fz = layout.Z_CENTER + (layout.H / 2 - d["front_uv"][..., 1]) * layout.M_PER_PX
-    sz = layout.Z_CENTER + (layout.H / 2 - d["side_uv"][..., 1]) * layout.M_PER_PX
-    w1, w2 = (front_height_weight * d["front_conf"].clip(1e-3, 1.0),
-              d["side_conf"].clip(1e-3, 1.0))
-    return np.stack([fx, sy, (fz * w1 + sz * w2) / (w1 + w2)], -1)
+def effective_front_height_weight(value=None):
+    """Preserve legacy Front-height downweight; treat oblique slots symmetrically."""
+    if value is not None:
+        return float(value)
+    return (0.25 if layout.FRONT_AZIMUTH_DEG == 0.0
+            and layout.SIDE_AZIMUTH_DEG == 90.0 else 1.0)
+
+
+def triangulate(d, front_height_weight=None):
+    """Calibrated 2-view XYZ reconstruction; no hardcoded Front X / Side Y."""
+    front_height_weight = effective_front_height_weight(front_height_weight)
+    return triangulate_orthographic(d["front_uv"], d["side_uv"], d["front_conf"], d["side_conf"],
+                                   front_width=layout.W_FRONT, side_width=layout.W_SIDE,
+                                   height=layout.H, metres_per_pixel=layout.M_PER_PX,
+                                   z_center=layout.Z_CENTER,
+                                   front_angle_deg=layout.FRONT_AZIMUTH_DEG,
+                                   side_angle_deg=layout.SIDE_AZIMUTH_DEG,
+                                   front_height_weight=front_height_weight)
 
 
 def root_from_triangulation(tri, conf, rig, names, info):
@@ -303,7 +316,8 @@ def ik_init(tri, root_aa, info, rig):
     return eul
 
 
-def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25):
+def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=None):
+    front_height_weight = effective_front_height_weight(front_height_weight)
     rig = Rig(info, dev)
     names = rig.kp_names
     T = len(d["front_uv"])
@@ -325,9 +339,8 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25):
     phi = torch.logit(z).clone().requires_grad_(True)
     paws = [names.index(n) for n in names if any(n.startswith(p) for p in ("fpaw", "ftoe", "hpaw", "htoe"))]
     sigma = 6.0  # px, robust scale (annealed down from 40 px so far-off joints still pull early on)
-    # The side view sees legs swing and the hips clearly; the front view foreshortens leg lifts and hides the hips
-    # when the creature sits, and video models animate it less faithfully. So heights come mostly from the side
-    # view and the front view mainly supplies left-right position.
+    # Original 0/90 Front height was experimentally downweighted. For arbitrary
+    # oblique camera slots the default is symmetric, with confidence per view.
     f_axis = torch.tensor([1.0, front_height_weight], dtype=torch.float64, device=dev)
 
     def loss_fn(stage):
@@ -398,7 +411,10 @@ def main():
     # Without MOCAP_CREATURE, mocap.layout silently defaults to Wolf.
     from mocap.layout_guard import verify_layout_for_rig
     active_layout=verify_layout_for_rig(info_path,layout)
-    print("Solver camera layout:",active_layout,flush=True)
+    camera_angles=[layout.FRONT_AZIMUTH_DEG,layout.SIDE_AZIMUTH_DEG]
+    observed_angles=raw["camera_azimuth_deg"] if "camera_azimuth_deg" in raw.files else None
+    camera_provenance=verify_record_angles(observed_angles,camera_angles,"detections.npz")
+    print("Solver camera layout:",active_layout,"camera provenance:",camera_provenance,flush=True)
     names = [k["name"] for k in info["keypoints"]]
     before = sync_report(d)
     paws = paw_agreement(d, names)
@@ -440,6 +456,7 @@ def main():
               "joints": res["joints"].round(4).tolist(), "joint_names": res["joint_names"],
               "reproj_px": res["reproj_px"], "sync": sync, "swaps": swapped,
               "solver_camera_layout": active_layout,
+              "solver_camera_azimuth_deg": camera_angles,
               "source_detections_sha256": det_sha.hexdigest()}
     json.dump(motion, open(out, "w"))
     print("saved", out)

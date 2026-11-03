@@ -2,7 +2,7 @@
 
 blender -b -P blender/render_ref.py -- rigged.blend out_dir [samples]
 """
-import pathlib, sys
+import json, pathlib, sys
 
 import bpy
 
@@ -19,3 +19,8 @@ for pb in bpy.data.objects["rig"].pose.bones:
     pb.location = (0, 0, 0)
 common.studio(bpy.context.scene, samples=int(args[2]) if len(args) > 2 else 128)
 common.render_views(out, "ref")
+(out / "render_camera_angles.json").write_text(json.dumps({
+    "camera_azimuth_deg": [common.FRONT_AZIMUTH_DEG, common.SIDE_AZIMUTH_DEG],
+    "widths": [common.W_FRONT, common.W_SIDE], "height": common.H,
+    "metres_per_pixel": common.M_PER_PX
+}, indent=2), encoding="utf-8")

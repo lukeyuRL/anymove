@@ -10,6 +10,7 @@ Pure stdlib; no torch or numpy is imported into regression tests.
 """
 import json
 import math
+import os
 import pathlib
 
 
@@ -30,21 +31,37 @@ def verify_layout_for_rig(rig_info_path, layout):
     if not isinstance(expected,dict):
         raise RuntimeError("Missing Creature Layout in "+str(cfg))
     fields=("W_FRONT","W_SIDE","M_PER_PX","GROUND_V")
+    angle_defaults={"FRONT_AZIMUTH_DEG":0.0,"SIDE_AZIMUTH_DEG":90.0}
+    override=os.environ.get("MOCAP_CAMERA_AZIMUTHS")
+    if override:
+        values=override.split(",")
+        if len(values)!=2:
+            raise RuntimeError("MOCAP_CAMERA_AZIMUTHS must be two degree values")
+        try:
+            explicit_angles=tuple(float(v.strip())%360 for v in values)
+        except ValueError as exc:
+            raise RuntimeError("Invalid MOCAP_CAMERA_AZIMUTHS values") from exc
+        if not all(math.isfinite(v) for v in explicit_angles):
+            raise RuntimeError("MOCAP_CAMERA_AZIMUTHS must be finite")
+        expected=dict(expected)
+        expected.update(zip(angle_defaults,explicit_angles))
     if any(key not in expected for key in fields):
         raise RuntimeError("Missing camera field(s) in "+str(cfg))
     current={name:getattr(layout,name,None) for name in fields}
+    current.update({name:getattr(layout,name,default) for name,default in angle_defaults.items()})
     differences=[]
-    for name in fields:
+    for name in fields+tuple(angle_defaults):
         actual=current[name]
-        wanted=expected[name]
-        if (type(actual) not in (int,float)
-                or type(wanted) not in (int,float)
-                or not math.isfinite(actual)
-                or not math.isfinite(wanted)
-                or not math.isclose(actual,wanted,
-                                    rel_tol=1e-6,abs_tol=1e-9)):
-            differences.append("%s expected %r, actual %r"%
-                               (name,wanted,actual))
+        wanted=expected.get(name,angle_defaults.get(name))
+        valid=(type(actual) in (int,float) and type(wanted) in (int,float)
+               and math.isfinite(actual) and math.isfinite(wanted))
+        if valid and name in angle_defaults:
+            # 315 and -45 degrees describe the same world camera.
+            valid=abs((actual-wanted+180)%360-180)<1e-6
+        elif valid:
+            valid=math.isclose(actual,wanted,rel_tol=1e-6,abs_tol=1e-9)
+        if not valid:
+            differences.append("%s expected %r, actual %r"%(name,wanted,actual))
     if differences:
         creature_name=str(creature.get("name",cfg.parent.name))
         raise RuntimeError(

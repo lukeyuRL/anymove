@@ -1,14 +1,18 @@
-"""Shared Blender helpers: the rig file, the two-camera layout, the studio, limb paint and debug renders.
+"""Shared Blender helpers: calibrated camera slots, studio, rig, paint and renders.
 
-The layout is the contract between every stage. One 1280 x 720 frame holds two orthographic views at the same scale:
-the front camera (left) looks along +Y at the creature's face, the side camera (right) looks along +X at its right
-flank, head to the right. Both share the vertical axis, so a joint's height is the same row in both halves; that is
-what makes two views enough for 3D and what the sync check measures.
-
-The creature is chosen with MOCAP_CREATURE=<assets dir>, whose creature.json can set its own framing (a dragon's
-wingspan needs a wider front view) and limb paint groups. Without it, the wolf's settings below apply.
+The default level orthographic pair is front 0deg/side 90deg at common scale.
+Set MOCAP_CAMERA_AZIMUTHS=315,45 to change both camera azimuths while keeping
+image-slot names front/side, world-Z height, framing and rig rest basis.
+MOCAP_CREATURE=<assets dir> controls the creature-specific layout and paint.
 """
-import json, math, os, pathlib
+import json, math, os, pathlib, sys
+
+# Blender -P often places only blender/ on sys.path; share the pure camera
+# projection implementation with the Solver without importing bpy there.
+_root = str(pathlib.Path(__file__).resolve().parent.parent)
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+from mocap.camera_geometry import project_orthographic, resolve_angles, verify_record_angles
 
 import bpy
 import numpy as np
@@ -18,6 +22,7 @@ H = 720
 W_FRONT, W_SIDE = 420, 860
 M_PER_PX = 1.9 / H        # 1.9 m of height in frame
 GROUND_V = 630            # pixel row of the ground (z = 0); the 90 rows below it are the floor band
+FRONT_AZIMUTH_DEG, SIDE_AZIMUTH_DEG = 0.0, 90.0
 LEG_COLORS = {"FL": "#F53CD1", "FR": "#2F6BFF", "HL": "#FFD21F", "HR": "#19D3E0"}
 LEG_BONES = {"FL": ["upperarm_L", "forearm_L", "metacarpus_L", "fpaw_L"],
              "FR": ["upperarm_R", "forearm_R", "metacarpus_R", "fpaw_R"],
@@ -30,11 +35,16 @@ if CREATURE and (pathlib.Path(CREATURE) / "creature.json").exists():
     W_FRONT, W_SIDE = _l.get("W_FRONT", W_FRONT), _l.get("W_SIDE", W_SIDE)
     M_PER_PX = _l.get("M_PER_PX", M_PER_PX)
     GROUND_V = _l.get("GROUND_V", GROUND_V)
+    FRONT_AZIMUTH_DEG = _l.get("FRONT_AZIMUTH_DEG", FRONT_AZIMUTH_DEG)
+    SIDE_AZIMUTH_DEG = _l.get("SIDE_AZIMUTH_DEG", SIDE_AZIMUTH_DEG)
     if "paint" in _c:
         LEG_COLORS = {k: v["color"] for k, v in _c["paint"].items()}
         LEG_BONES = {k: v["bones"] for k, v in _c["paint"].items()}
+FRONT_AZIMUTH_DEG, SIDE_AZIMUTH_DEG = resolve_angles(
+    FRONT_AZIMUTH_DEG, SIDE_AZIMUTH_DEG, os.environ.get("MOCAP_CAMERA_AZIMUTHS"))
 Z_CENTER = (GROUND_V - H / 2) * M_PER_PX
 LAYOUT = {"H": H, "W_FRONT": W_FRONT, "W_SIDE": W_SIDE, "M_PER_PX": M_PER_PX, "GROUND_V": GROUND_V,
+          "FRONT_AZIMUTH_DEG": FRONT_AZIMUTH_DEG, "SIDE_AZIMUTH_DEG": SIDE_AZIMUTH_DEG,
           "Z_CENTER": Z_CENTER, "Y_CENTER": 0.0, "X_CENTER": 0.0}
 
 
@@ -117,11 +127,20 @@ def write_rig_info(arm, joints, bones, limits, path):
     json.dump(info, open(path, "w"), indent=1)
 
 
+def project_joints(points):
+    """Blender dataset joint labels using the exact calibrated Solver projection."""
+    return (project_orthographic(points, FRONT_AZIMUTH_DEG, W_FRONT, H, M_PER_PX, Z_CENTER),
+            project_orthographic(points, SIDE_AZIMUTH_DEG, W_SIDE, H, M_PER_PX, Z_CENTER))
+
+
 def cameras(scene):
-    """The front and side orthographic cameras of the layout (created once, reused)."""
+    """Level orthographic cameras at the configured world-space azimuths."""
     cams = {}
-    for name, loc, rot, w in (("cam_front", (0, -20, Z_CENTER), (math.pi / 2, 0, 0), W_FRONT),
-                              ("cam_side", (-20, 0, Z_CENTER), (math.pi / 2, 0, -math.pi / 2), W_SIDE)):
+    for name, azimuth, w in (("cam_front", FRONT_AZIMUTH_DEG, W_FRONT),
+                             ("cam_side", SIDE_AZIMUTH_DEG, W_SIDE)):
+        theta = math.radians(azimuth)
+        loc = (-20 * math.sin(theta), -20 * math.cos(theta), Z_CENTER)
+        rot = (math.pi / 2, 0, -theta)
         cam = bpy.data.objects.get(name)
         if cam is None:
             cam = bpy.data.objects.new(name, bpy.data.cameras.new(name))

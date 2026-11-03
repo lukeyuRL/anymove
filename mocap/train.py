@@ -14,6 +14,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 
 from mocap import layout
+from mocap.camera_geometry import verify_record_angles
 from mocap.model import HM, SIZE, JointReader, decode, square
 
 
@@ -64,6 +65,9 @@ class Views(Dataset):
         m = self.metas[i // 2]
         view = ("front", "side")[i % 2]
         meta = json.loads(m.read_text())
+        verify_record_angles(meta.get("camera_azimuth_deg"),
+                             (layout.FRONT_AZIMUTH_DEG, layout.SIDE_AZIMUTH_DEG),
+                             f"render dataset {m.name}")
         s = meta["scale"]
         rgba = cv2.imread(str(m).replace("_meta.json", f"_{view}.png"), cv2.IMREAD_UNCHANGED)[..., [2, 1, 0, 3]].astype(np.float32)
         h, w = rgba.shape[:2]
@@ -160,7 +164,8 @@ def main():
                     errs[("front", "side")[(bi * bs + r) % 2]].append(e[r].numpy())
         msg = {v: float(np.mean(errs[v])) for v in errs}
         print(f"epoch {ep} val mean px error (layout pixels) front {msg['front']:.2f} side {msg['side']:.2f}", flush=True)
-        torch.save({"state_dict": model.state_dict(), "names": names, "epoch": ep, "val": msg}, out)
+        torch.save({"state_dict": model.state_dict(), "names": names, "epoch": ep, "val": msg,
+                    "camera_azimuth_deg": [layout.FRONT_AZIMUTH_DEG, layout.SIDE_AZIMUTH_DEG]}, out)
     print("saved", out)
 
 

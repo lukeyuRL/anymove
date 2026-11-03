@@ -93,6 +93,10 @@ rng = np.random.default_rng(seed + start)
 for i in range(start, start + count):
     stem = out / f"{i:05d}"
     if (out / f"{i:05d}_meta.json").exists():
+        previous = json.loads((out / f"{i:05d}_meta.json").read_text())
+        common.verify_record_angles(previous.get("camera_azimuth_deg"),
+                                    (common.FRONT_AZIMUTH_DEG, common.SIDE_AZIMUTH_DEG),
+                                    f"render resume sample {i:05d}")
         continue
     rig.animation_data_clear()
     for a in list(bpy.data.actions):
@@ -131,14 +135,14 @@ for i in range(start, start + count):
     bg.inputs["Color"].default_value = (g * rng.uniform(0.9, 1.1), g, g * rng.uniform(0.9, 1.1), 1)
 
     jw = joints_world()
-    front = np.stack([common.W_FRONT / 2 + jw[:, 0] / M, H / 2 - (jw[:, 2] - ZC) / M], 1)
-    side = np.stack([common.W_SIDE / 2 - jw[:, 1] / M, H / 2 - (jw[:, 2] - ZC) / M], 1)
+    front, side = common.project_joints(jw)
     for name, (cam, w) in cams.items():
         scene.camera = cam
         scene.render.resolution_x, scene.render.resolution_y = round(w * scale), round(H * scale)
         scene.render.filepath = f"{stem}_{name.split('_')[1]}.png"
         bpy.ops.render.render(write_still=True)
     meta = {"joints_world": jw.round(5).tolist(), "front_uv": front.round(3).tolist(), "side_uv": side.round(3).tolist(),
+            "camera_azimuth_deg": [common.FRONT_AZIMUTH_DEG, common.SIDE_AZIMUTH_DEG],
             "scale": scale, "blur": blur, "yaw": yaw, "root": list(loc),
             "pose": {n: np.round(a, 5).tolist() for n, a in pose.items()}}
     (out / f"{i:05d}_meta.json").write_text(json.dumps(meta))
