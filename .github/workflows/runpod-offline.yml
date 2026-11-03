@@ -1,0 +1,22 @@
+name: Runpod training workflow offline checks
+
+on:
+  push:
+    branches: [feature/runpod-managed-training, iClone_High_Res]
+  pull_request:
+    branches: [iClone_High_Res]
+
+jobs:
+  runpod-offline:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m unittest discover -s tests -p 'test_runpod_*.py' -v
+      - run: python -m compileall -q tools/runpod tests/test_runpod_workflow.py
+      - run: bash -n tools/runpod/provision.sh tools/runpod/train.sh
