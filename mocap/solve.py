@@ -218,7 +218,7 @@ def project(J):
     return f, s
 
 
-def triangulate(d, front_height_weight=0.25, front_visibility=None):
+def triangulate(d, front_height_weight=0.25, front_visibility=None, side_visibility=None):
     """Joints in metres: x from the front view, y from the side view, height mostly from the side view."""
     fx = (d["front_uv"][..., 0] - layout.W_FRONT / 2) * layout.M_PER_PX
     sy = -(d["side_uv"][..., 0] - layout.W_SIDE / 2) * layout.M_PER_PX
@@ -231,9 +231,15 @@ def triangulate(d, front_height_weight=0.25, front_visibility=None):
         if (front_visibility.shape != w1.shape or not np.isfinite(front_visibility).all()
                 or np.any(front_visibility < 0) or np.any(front_visibility > 1)):
             raise ValueError("invalid front visibility weights in triangulation")
-        # Affects only Front's height contribution, never the Side data.
+        # Affects only Front's height contribution.
         w1 = w1 * front_visibility
-    return np.stack([fx, sy, (fz * w1 + sz * w2) / (w1 + w2)], -1)
+    if side_visibility is not None:
+        side_visibility = np.asarray(side_visibility, dtype=np.float64)
+        if (side_visibility.shape != w2.shape or not np.isfinite(side_visibility).all()
+                or np.any(side_visibility < 0) or np.any(side_visibility > 1)):
+            raise ValueError("invalid side visibility weights in triangulation")
+        w2 = w2 * side_visibility
+    return np.stack([fx, sy, (fz * w1 + sz * w2) / (w1 + w2).clip(min=1e-9)], -1)
 
 
 def root_from_triangulation(tri, conf, rig, names, info):
@@ -314,9 +320,7 @@ def ik_init(tri, root_aa, info, rig):
 
 
 def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
-        front_visibility=None, masked_joint_visibility=None,
-        masked_temporal_strength=0.0, top_observation=None,
-        top_camera=None):
+        front_visibility=None, side_visibility=None):
     rig = Rig(info, dev)
     names = rig.kp_names
     T = len(d["front_uv"])
@@ -324,26 +328,6 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
     s_obs = torch.tensor(d["side_uv"], dtype=torch.float64, device=dev)
     f_c = torch.tensor(d["front_conf"], dtype=torch.float64, device=dev).clamp(0, 1) ** 2
     s_c = torch.tensor(d["side_conf"], dtype=torch.float64, device=dev).clamp(0, 1) ** 2
-    if not np.isfinite(masked_temporal_strength) or masked_temporal_strength < 0 or masked_temporal_strength > 20:
-        raise ValueError("masked_temporal_strength must be finite in [0,20]")
-    masked_window = None
-    if masked_joint_visibility is not None:
-        front_mask = np.asarray(masked_joint_visibility["front"])
-        side_mask = np.asarray(masked_joint_visibility["side"])
-        if (front_mask.shape != tuple(f_c.shape) or
-                side_mask.shape != tuple(s_c.shape) or
-                front_mask.dtype != np.bool_ or side_mask.dtype != np.bool_):
-            raise ValueError("masked per-view observation shape/dtype mismatch")
-        # Observations have already been zeroed and UV imputed ONLY for
-        # initialization in occlusion_observations. Do not let any arbitrary
-        # masked pixel coordinate pull the 3D fit.
-        f_c = f_c * torch.tensor(front_mask, dtype=torch.float64, device=dev)
-        s_c = s_c * torch.tensor(side_mask, dtype=torch.float64, device=dev)
-        missing = torch.tensor(~(front_mask & side_mask), dtype=torch.float64, device=dev)
-        masked_window = torch.maximum(
-            torch.maximum(missing[:-2], missing[1:-1]), missing[2:])
-    elif masked_temporal_strength:
-        raise ValueError("extra masked temporal regularization requires per-view masks")
     if front_visibility is not None:
         front_visibility = np.asarray(front_visibility, dtype=np.float64)
         if (front_visibility.shape != tuple(f_c.shape)
@@ -352,44 +336,19 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
             raise ValueError("invalid front visibility weights in solver")
         # Only the corresponding Front reprojection terms are downweighted.
         f_c = f_c * torch.tensor(front_visibility, dtype=torch.float64, device=dev)
-    tri_np = triangulate(d, front_height_weight, front_visibility)
-    top_obs, top_c = None, None
-    if top_observation is not None:
-        if top_camera is None or masked_joint_visibility is not None or front_visibility is not None:
-            raise ValueError("experimental Top view requires validated camera and cannot stack with old view masking")
-        from mocap.dino_top_camera import validate_top_camera,project_top_torch
-        cam_spec = validate_top_camera(top_camera)
-        uv = np.asarray(top_observation["uv"],dtype=np.float64)
-        strength = np.asarray(top_observation["conf"],dtype=np.float64)
-        if (uv.shape!=(T,len(names),2) or strength.shape!=(T,len(names))
-                or not np.isfinite(uv).all() or not np.isfinite(strength).all()
-                or np.any(strength<0) or np.any(strength>1)):
-            raise ValueError("invalid Top-view joint UV/weight arrays")
-        top_obs = torch.tensor(uv,dtype=torch.float64,device=dev)
-        top_c = torch.tensor(strength,dtype=torch.float64,device=dev)**2
-        # Optional Top measurements supply INDEPENDENT X and Y. Blend
-        # these with the existing Front/Side triangulation for a better
-        # IK initialization, never rewriting raw Reader measurements.
-        # The weights are observation confidence squared, like the loss.
-        wc = strength**2
-        fx_conf = np.clip(np.asarray(d["front_conf"],float),0,1)**2
-        sy_conf = np.clip(np.asarray(d["side_conf"],float),0,1)**2
-        # Invert the *actual* exported Top camera XY rotation. For
-        # +90deg Blender Top: image U tracks world Y and image V tracks
-        # world X. Never assume Top U measures X (that crops long tails).
-        local_xy=np.stack([
-            (uv[...,0]-cam_spec["cx"])/cam_spec["f"],
-            (cam_spec["cy"]-uv[...,1])/cam_spec["f"]],axis=-1)
-        xy=(local_xy-cam_spec["t"][:2]) @ cam_spec["R"][:2,:2]
-        top_x,top_y=xy[...,0],xy[...,1]
-        tri_np[...,0] = (tri_np[...,0]*fx_conf+top_x*wc)/(fx_conf+wc+1e-9)
-        tri_np[...,1] = (tri_np[...,1]*sy_conf+top_y*wc)/(sy_conf+wc+1e-9)
-    elif top_camera is not None:
-        raise ValueError("Top camera without Top observations")
+    if side_visibility is not None:
+        side_visibility = np.asarray(side_visibility, dtype=np.float64)
+        if (side_visibility.shape != tuple(s_c.shape)
+                or not np.isfinite(side_visibility).all()
+                or np.any(side_visibility < 0) or np.any(side_visibility > 1)):
+            raise ValueError("invalid side visibility weights in solver")
+        s_c = s_c * torch.tensor(side_visibility, dtype=torch.float64, device=dev)
+    tri_np = triangulate(d, front_height_weight, front_visibility, side_visibility)
     tri = torch.tensor(tri_np, dtype=torch.float64, device=dev)
     hips = names.index(info["bones"][0]["head_joint"])
     trans = (tri[:, hips] - rig.rest_kp[hips]).clone().requires_grad_(True)
-    conf = np.minimum(d["front_conf"], d["side_conf"]).clip(1e-3, 1)
+    conf = np.minimum(d["front_conf"] * (1 if front_visibility is None else front_visibility),
+                      d["side_conf"] * (1 if side_visibility is None else side_visibility)).clip(1e-3, 1)
     root0 = root_from_triangulation(tri_np, conf, rig, names, info) + 1e-4
     root = torch.tensor(root0, dtype=torch.float64, device=dev).requires_grad_(True)
     nb = len(rig.names)
@@ -412,28 +371,12 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
         rf = ((pf - f_obs) ** 2 * f_axis).sum(-1)
         rs = ((ps - s_obs) ** 2).sum(-1)
         data = (f_c * torch.log1p(rf / sigma ** 2)).sum() + (s_c * torch.log1p(rs / sigma ** 2)).sum()
-        if top_obs is not None:
-            pt=project_top_torch(J,top_camera)
-            rt=((pt-top_obs)**2).sum(-1)
-            data=data+(top_c*torch.log1p(rt/sigma**2)).sum()
-        accel_sq = ((J[2:] - 2 * J[1:-1] + J[:-2]) ** 2).sum(-1)
-        acc = accel_sq.sum() / layout.M_PER_PX ** 2 * 0.02
-        # A conservative extra acceleration prior ONLY around joints with
-        # one or more missing views. This is NOT a learned motion prior.
-        masked_temporal = (
-            (accel_sq * masked_window).sum() / layout.M_PER_PX**2 * 0.02
-            * masked_temporal_strength
-            if masked_window is not None and masked_temporal_strength else
-            torch.zeros((), dtype=torch.float64, device=dev))
+        acc = ((J[2:] - 2 * J[1:-1] + J[:-2]) ** 2).sum() / layout.M_PER_PX ** 2 * 0.02
         vel = ((eul[1:] - eul[:-1]) ** 2).sum() * 2.0 + ((root[1:] - root[:-1]) ** 2).sum() * 2.0
         prior = (eul ** 2).sum() * 0.05
         ground = (torch.relu(-J[:, paws, 2]) ** 2).sum() / layout.M_PER_PX ** 2 * 0.5
-        total = data + acc + vel + prior + ground + masked_temporal
-        breakdown = {"data": data.item(), "acc": acc.item(), "vel": vel.item(),
-                     "prior": prior.item(), "ground": ground.item()}
-        if masked_window is not None and masked_temporal_strength:
-            breakdown["masked_temporal"] = masked_temporal.item()
-        return total, breakdown, J, pf, ps, eul
+        total = data + acc + vel + prior + ground
+        return total, {"data": data.item(), "acc": acc.item(), "vel": vel.item(), "prior": prior.item(), "ground": ground.item()}, J, pf, ps, eul
 
     opt = torch.optim.Adam([{"params": [trans], "lr": 0.01}, {"params": [root], "lr": 0.03}, {"params": [phi], "lr": 0.05}])
     for it in range(iters):
@@ -453,17 +396,9 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=0.25,
         err_f = (pf - f_obs).norm(dim=-1)
         err_fx = (pf - f_obs)[..., 0].abs()
         err_s = (ps - s_obs).norm(dim=-1)
-        if top_obs is not None:
-            err_top=(project_top_torch(J,top_camera)-top_obs).norm(dim=-1)
-            weighted_top_reproj=float(
-                (err_top*top_c).sum()/top_c.sum().clamp_min(1e-12))
     return {"trans": trans.detach().cpu().numpy(), "root_rotmat": axis_angle(root).detach().cpu().numpy(),
             "euler": eul.detach().cpu().numpy(), "joints": J.cpu().numpy(),
-            "reproj_px": dict({"front": float(err_f.mean()),
-                                "front_x_only": float(err_fx.mean()),
-                                "side": float(err_s.mean())},
-                               **({"top_selected_only":weighted_top_reproj}
-                                  if top_obs is not None else {})),
+            "reproj_px": {"front": float(err_f.mean()), "front_x_only": float(err_fx.mean()), "side": float(err_s.mean())},
             "bones": rig.names, "joint_names": names}
 
 
@@ -481,74 +416,15 @@ def to_quat(Rm):
 def main():
     det_path, info_path, out = sys.argv[1:4]
     temporal_mode = "--temporal-association" in sys.argv
-    # The old per-frame swap and experimental weighting have different
-    # assumptions. Do not stack effects without independent QA.
-    if temporal_mode and any(x in sys.argv for x in ("--fix-swaps", "--visibility-aware")):
-        raise ValueError("--temporal-association cannot be combined with --fix-swaps or --visibility-aware")
+    visibility_flags = [flag for flag in ("--visibility-aware", "--generic-visibility",
+                                          "--visibility-legacy-dragon") if flag in sys.argv]
+    if len(visibility_flags) > 1:
+        raise ValueError("Choose only one visibility mode")
+    # Do not stack the older temporal-association experiments with new
+    # visibility weights before independent interaction QA.
+    if temporal_mode and ("--fix-swaps" in sys.argv or visibility_flags):
+        raise ValueError("--temporal-association cannot be combined with --fix-swaps or visibility weighting")
     raw = np.load(det_path)
-    top_observation, top_camera, top_provenance, top_source_kind = None, None, None, None
-    top_fields = ("top_uv" in raw.files, "top_conf" in raw.files)
-    if any(top_fields):
-        if not all(top_fields) or "--experimental-dino-top" not in sys.argv:
-            raise PermissionError("Top observations are opt-in and require --experimental-dino-top")
-        if "--top-camera" not in sys.argv:
-            raise PermissionError("Top source requires --top-camera and verified provenance")
-        if "--no-align" not in sys.argv:
-            raise ValueError("Top observations require --no-align; cannot retime Top independently")
-        if any(flag in sys.argv for flag in (
-                "--fix-swaps","--temporal-association","--visibility-aware",
-                "--experimental-masked-observations")):
-            raise ValueError("Top A/B must not mix with existing P1/P2/visibility modes")
-        import hashlib
-        from pathlib import Path
-        from mocap.dino_top_camera import camera_from_json
-        i=sys.argv.index("--top-camera")
-        if i+1>=len(sys.argv):
-            raise ValueError("--top-camera missing exact exported Blender cam_top.json")
-        cam_path=Path(sys.argv[i+1])
-        top_camera=camera_from_json(cam_path)
-        candidate_oracle=Path(det_path).with_suffix(".top_oracle.json")
-        candidate_reader=Path(det_path).with_suffix(".top_reader.json")
-        if int(candidate_oracle.is_file())+int(candidate_reader.is_file())!=1:
-            raise FileNotFoundError("Top view needs exactly one SHA-bound Top Reader or Top Oracle provenance sidecar")
-        if candidate_oracle.is_file():
-            top_source_kind="oracle"
-            meta_path=candidate_oracle
-            if "--allow-gt-top-oracle" not in sys.argv:
-                raise PermissionError("Blender Top Oracle LEAKS 3D GT; explicit --allow-gt-top-oracle required")
-        else:
-            top_source_kind="actual_image_reader"
-            meta_path=candidate_reader
-            if "--allow-gt-top-oracle" in sys.argv:
-                raise PermissionError("Top Reader source must not be misrepresented as GT Oracle")
-        top_provenance=json.loads(meta_path.read_text(encoding="utf-8"))
-        expected_profile=(
-            "anymove.dino_top_truth_leakage_oracle/1" if top_source_kind=="oracle"
-            else "anymove.dino_top_reader_joint_observations_v1")
-        if top_provenance.get("profile")!=expected_profile:
-            raise ValueError("unsupported Top source provenance profile")
-        def _hash(path):
-            h=hashlib.sha256()
-            with open(path,"rb") as fd:
-                for chunk in iter(lambda:fd.read(1<<20),b""):
-                    h.update(chunk)
-            return h.hexdigest()
-        if _hash(det_path)!=top_provenance.get("top_detection_sha256"):
-            raise ValueError("Top detection SHA mismatch")
-        camera_hash=_hash(cam_path)
-        if top_source_kind=="oracle":
-            if camera_hash not in top_provenance.get("input_sha256",{}).values():
-                raise ValueError("Top Oracle camera SHA does not match Blender source")
-        elif camera_hash!=top_provenance.get("top_camera_sha256"):
-            raise ValueError("Top Reader camera SHA mismatch")
-        top_observation={"uv":raw["top_uv"].copy(),
-                         "conf":raw["top_conf"].copy()}
-        print(("TOP GT ORACLE LEAKAGE: synthetic Blender truth, NOT a trained Top Reader"
-            if top_source_kind=="oracle" else
-            "EXPERIMENTAL TOP IMAGE READER: image-based predictions, unvalidated for production"),flush=True)
-    elif any(flag in sys.argv for flag in (
-            "--experimental-dino-top","--allow-gt-top-oracle","--top-camera")):
-        raise ValueError("Top flags require a SHA-bound Top detection")
     d = {k: raw[k].copy() for k in ("front_uv", "side_uv", "front_conf", "side_conf")}
     # The reader decodes raw (unbounded) linear heatmap peaks. Weights for
     # optimization are bounded without rewriting or corrupting det.npz.
@@ -574,30 +450,6 @@ def main():
             print("tracking weights", view, "mean", round(float(w.mean()), 4),
                   "downweighted", int(np.count_nonzero(w < 1)), flush=True)
     info = json.load(open(info_path))
-    masked_observation_audit, masked_masks, masked_provenance = None, None, None
-    masked_strength = 0.0
-    if "--masked-temporal-strength" in sys.argv:
-        i = sys.argv.index("--masked-temporal-strength")
-        if i + 1 >= len(sys.argv):
-            raise ValueError("--masked-temporal-strength requires a float")
-        masked_strength = float(sys.argv[i+1])
-    if any(k in raw.files for k in ("front_visible_mask", "side_visible_mask")):
-        if "--experimental-masked-observations" not in sys.argv:
-            raise PermissionError("mask data is experimental; pass --experimental-masked-observations explicitly")
-        from mocap.occlusion_observations import verify_mask_provenance
-        masked_provenance=verify_mask_provenance(
-            det_path, allow_oracle="--allow-gt-oracle" in sys.argv)
-        if "--no-align" not in sys.argv:
-            raise ValueError("masked Solver requires --no-align: masks cannot be silently re-timed")
-        if any(flag in sys.argv for flag in ("--fix-swaps", "--temporal-association", "--visibility-aware")):
-            raise ValueError("masked Solver is exclusive with legacy swap/visibility experiments")
-        from mocap.occlusion_observations import prepare_masked_solver_input
-        d, masked_masks, masked_observation_audit = prepare_masked_solver_input(d, raw, info)
-        print("masked per-view observations:",
-              masked_observation_audit["views"], flush=True)
-    elif (masked_strength or "--experimental-masked-observations" in sys.argv
-          or "--allow-gt-oracle" in sys.argv):
-        raise ValueError("masked observation flags require a masked detection with provenance")
     # Fail before optimization if imported rig and camera settings disagree.
     # Without MOCAP_CREATURE, mocap.layout silently defaults to Wolf.
     from mocap.layout_guard import verify_layout_for_rig
@@ -649,18 +501,29 @@ def main():
               "frames", association_audit["accepted_swapped_frames"],
               "segments", association_audit["accepted_segments"], flush=True)
 
-    front_visibility, visibility_audit = None, None
-    if "--visibility-aware" in sys.argv:
-        # This older weighting experiment remains independent and opt-in.
+    front_visibility, side_visibility, visibility_audit = None, None, None
+    if "--visibility-aware" in sys.argv or "--generic-visibility" in sys.argv:
+        if active_layout.get("status") != "camera_layout_verified_for_rig":
+            raise RuntimeError("Generic visibility requires verified Creature camera layout")
+        from mocap.visibility_generic import generic_view_weights
+        generic_weights, visibility_audit = generic_view_weights(d, names, info)
+        front_visibility = generic_weights["front"]
+        side_visibility = generic_weights["side"]
+        print("experimental creature-generic front/side reliability proxy:",
+              visibility_audit["profile"],
+              "downweighted front/side:",
+              {v: visibility_audit["views"][v]["joint_frames_downweighted"]
+               for v in ("front", "side")},
+              "(not true mesh visibility)", flush=True)
+    elif "--visibility-legacy-dragon" in sys.argv:
         if (active_layout.get("creature") != "dragon"
                 or active_layout.get("status") != "camera_layout_verified_for_rig"):
-            raise RuntimeError("--visibility-aware requires verified Dragon camera layout")
+            raise RuntimeError("Legacy visibility requires verified Dragon camera layout")
         from mocap.visibility import front_hind_weights
         front_visibility, visibility_audit = front_hind_weights(d, names)
-        print("experimental front-hind visibility proxy:",
+        print("legacy experimental Dragon front-hind reliability proxy:",
               visibility_audit["profile"],
-              "affected joints:", visibility_audit["affected_joint_count"],
-              "(not an observed occlusion mask)", flush=True)
+              "affected joints:", visibility_audit["affected_joint_count"], flush=True)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if temporal_mode:
@@ -716,9 +579,7 @@ def main():
         print("Raw original Paw Agreement is unchanged for iClone QA", flush=True)
     else:
         res = fit(d, info, dev=device, front_visibility=front_visibility,
-                  masked_joint_visibility=masked_masks,
-                  masked_temporal_strength=masked_strength,
-                  top_observation=top_observation, top_camera=top_camera)
+                  side_visibility=side_visibility)
 
     # These diagnostics describe the ACTUALLY APPLIED detections, never a
     # 2D swap later vetoed by the continuity gate.
@@ -745,32 +606,6 @@ def main():
               "source_detections_sha256": det_sha.hexdigest()}
     json.dump(motion, open(out, "w"))
     print("saved", out)
-    if top_provenance is not None:
-        from pathlib import Path
-        sidecar=Path(out).with_suffix(
-            ".top_oracle.json" if top_source_kind=="oracle" else ".top_reader.json")
-        meta={"source_detections_sha256":det_sha.hexdigest(),
-              "source_top_provenance":top_provenance,
-              "source_mode":top_source_kind,
-              "source_top_camera":sys.argv[sys.argv.index("--top-camera")+1],
-              "not_production":("Blender GT leakage upper-bound diagnostic only"
-                      if top_source_kind=="oracle" else
-                      "Untrained Top image-reader transfer experiment; not verified for product")}
-        sidecar.write_text(json.dumps(meta,indent=2),encoding="utf-8")
-        print("Top source provenance:",sidecar,flush=True)
-    if masked_observation_audit is not None:
-        from pathlib import Path
-        report_path = Path(out).with_suffix(".occlusion.json")
-        masked_observation_audit["source_detections_sha256"] = det_sha.hexdigest()
-        masked_observation_audit["source_provenance"] = masked_provenance
-        masked_observation_audit["masked_temporal_strength"] = masked_strength
-        masked_observation_audit["reprojection_warning"] = (
-            "The masked Solver's per-run reported reprojection uses "
-            "interpolated UV at missing frames; compare 3D Blender GT "
-            "and per-view observed-only reprojection instead.")
-        report_path.write_text(json.dumps(masked_observation_audit, indent=2),
-                               encoding="utf-8")
-        print("masked-observation audit:", report_path, flush=True)
     if visibility_audit is not None:
         # Separate sidecar; the existing motion.json/iClone interface is not changed.
         from pathlib import Path
