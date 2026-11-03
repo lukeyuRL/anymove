@@ -12,6 +12,7 @@ except ImportError:
 if np is not None:
     from mocap.motion_prior import train_prior, denoise_euler, PROFILE
     from mocap.denoise_motion import quaternion_matrices
+    from mocap.second_order_prior import solve_second_order
 
 
 @unittest.skipUnless(np is not None, "NumPy optional in lightweight CI")
@@ -84,6 +85,51 @@ class MotionPriorTests(unittest.TestCase):
             manifest.write_text(json.dumps(config))
             with self.assertRaisesRegex(ValueError, "verified"):
                 train_prior(manifest)
+
+    def test_exact_banded_map_matches_dense_solution(self):
+        rng = np.random.default_rng(12)
+        for frames in (3, 4, 9, 75):
+            original = rng.normal(size=frames)
+            d2 = np.zeros((frames-2, frames))
+            for t in range(frames-2):
+                d2[t, t:t+3] = [1., -2., 1.]
+            for gamma in (0., .01, 1., 12.):
+                expected = np.linalg.solve(
+                    np.eye(frames) + gamma*(d2.T@d2), original)
+                np.testing.assert_allclose(
+                    solve_second_order(original, gamma), expected,
+                    atol=1e-11, rtol=1e-11)
+
+    def test_long_dino_prior_does_not_allocate_dense_matrix(self):
+        source = np.sin(np.arange(2500)*.07)
+        output = solve_second_order(source, 8.0)
+        self.assertEqual(output.shape, source.shape)
+        self.assertTrue(np.isfinite(output).all())
+
+    def test_duplicate_verified_sequence_content_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest, paths = self.make_sequences(tmp)
+            paths[1].write_bytes(paths[0].read_bytes())
+            with self.assertRaisesRegex(ValueError, "duplicate"):
+                train_prior(manifest)
+
+    def test_angular_wrap_does_not_inflate_learned_acceleration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest, paths = self.make_sequences(tmp)
+            for i, path in enumerate(paths):
+                item = json.loads(path.read_text())
+                theta = np.linspace(2.9 + .02*i, 3.5 + .02*i, 140)
+                wrapped = (theta + np.pi) % (2*np.pi) - np.pi
+                e = np.asarray(item["euler"])
+                e[:, 1, 0] = wrapped
+                item["euler"] = e.tolist()
+                path.write_text(json.dumps(item))
+            prior = train_prior(manifest)
+            self.assertLess(prior["acceleration_sigma"][1][0], .005)
+            e = np.asarray(json.loads(paths[0].read_text())["euler"])
+            got = denoise_euler(e, prior)
+            np.testing.assert_allclose(
+                np.sin(got[:, 1, 0]), np.sin(e[:, 1, 0]), atol=1e-3)
 
     def test_root_quaternion_rotation_matrix(self):
         q = np.array([[1., 0., 0., 0.],

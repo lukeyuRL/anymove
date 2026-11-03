@@ -13,6 +13,7 @@ import pathlib
 import sys
 
 import numpy as np
+from mocap.second_order_prior import solve_second_order
 
 PROFILE = "anymove_empirical_angular_acceleration_prior_v1"
 MIN_SEQUENCES = 2
@@ -62,6 +63,7 @@ def train_prior(manifest_path, noise_sigma_rad=.04):
     bones = None
     accelerations = []
     sources = []
+    seen_source_hashes = set()
     for item in cfg["sequences"]:
         source_kind = item.get("source_kind")
         if not item.get("verified", False) or source_kind not in SAFE_SOURCE_KINDS:
@@ -78,8 +80,14 @@ def train_prior(manifest_path, noise_sigma_rad=.04):
         if len(motion) < MIN_FRAMES:
             raise ValueError("motion prior needs at least 24 continuous frames per source")
         fps = rate
-        accelerations.append(np.diff(motion, n=2, axis=0))
-        sources.append({"path": str(path), "sha256": _hash_file(path),
+        source_hash = _hash_file(path)
+        if source_hash in seen_source_hashes:
+            raise ValueError("motion prior requires distinct verified sequences; duplicate file contents")
+        seen_source_hashes.add(source_hash)
+        # Euler can cross +/-pi without an actual acceleration spike. Learn
+        # dynamics on unwrapped phase rather than a 2pi representation jump.
+        accelerations.append(np.diff(np.unwrap(motion, axis=0), n=2, axis=0))
+        sources.append({"path": str(path), "sha256": source_hash,
                         "frames": len(motion), "source_kind": source_kind})
     # Mean squared angular acceleration, not learned from independent poses.
     second = np.concatenate(accelerations, axis=0)
@@ -121,20 +129,20 @@ def denoise_euler(observed, prior, limits_deg=None, strength=1.0):
     result = x.copy()
     if strength == 0:
         return result
-    T = len(x)
-    d2 = np.zeros((T-2, T), dtype=np.float64)
-    for t in range(T-2):
-        d2[t, t:t+3] = [1., -2., 1.]
-    penalty = d2.T @ d2
-    eye = np.eye(T)
+    # Solve the same exact Gaussian MAP objective in O(frames) per DOF,
+    # avoiding repeated dense O(frames^3) solves on long Dino clips.
     for j in range(1, len(names)):
         for axis in range(3):
             gamma = min(MAX_REGULARIZATION,
                         strength*(noise/sigma[j, axis])**2)
             if gamma <= 0:
                 continue
-            result[:, j, axis] = np.linalg.solve(
-                eye + gamma*penalty, x[:, j, axis])
+            # Unwrap +/-pi before smoothing. Map back to the equivalent
+            # Euler angle nearest the observed frame for FK compatibility.
+            unwrapped = np.unwrap(x[:, j, axis])
+            smooth = solve_second_order(unwrapped, gamma)
+            result[:, j, axis] = smooth - 2*np.pi*np.rint(
+                (smooth-x[:, j, axis])/(2*np.pi))
     if limits_deg is not None:
         limits = np.radians(np.asarray(limits_deg, np.float64))
         if limits.shape != (len(names), 3, 2):

@@ -107,6 +107,21 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(result["joint_position_difference_mean_cm"], 0)
         self.assertIn("NOT 3D truth", result["comparison_type"])
 
+    def test_comparison_type_identifies_tracking_and_unknown_provenance(self):
+        baseline, tracked = self.motion(), self.motion()
+        baseline["source_detections_sha256"] = "a" * 64
+        tracked["source_detections_sha256"] = "b" * 64
+        report = compare(baseline, tracked)
+        self.assertIn("different-detection", report["comparison_type"])
+        self.assertIn("both 2D", report["source_comparability"])
+        self.assertEqual(report["source_detection_sha256_baseline"], "a" * 64)
+        tracked["source_detections_sha256"] = baseline["source_detections_sha256"]
+        report = compare(baseline, tracked)
+        self.assertIn("same-detection", report["comparison_type"])
+        tracked.pop("source_detections_sha256")
+        report = compare(baseline, tracked)
+        self.assertIn("unverified-source", report["comparison_type"])
+
     def test_motion_delta_and_reject_invalid_pair(self):
         a, b = self.motion(), self.motion()
         b["trans"] = [[0, 0, .10], [0, 0, .20]]

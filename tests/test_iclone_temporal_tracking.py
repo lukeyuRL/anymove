@@ -45,6 +45,42 @@ class TemporalTrackingTests(unittest.TestCase):
         self.assertEqual(report["counts"]["flow_only"], 1)
         np.testing.assert_allclose(uv[4, 0], base[4, 0]+[20, 22])
 
+    def test_guarded_large_disagreement_quarantines_uncertain_flow_without_default_regression(self):
+        uv, pk, flow, ok, err = self.fixture()
+        clean = uv.copy()
+        # A bad Reader reidentification at a Dino tail/toe can be >100 px
+        # even if LK's local forward/backward check is internally consistent.
+        uv[4, 0] += [130., 100.]
+        pk[4, 0] = .1
+        flow[4, 0] = clean[4, 0]
+        unguarded, old_weights, old_report = fuse_tracks(
+            uv, pk, flow, ok, err, 640, 720)
+        guarded, new_weights, report = fuse_tracks(
+            uv, pk, flow, ok, err, 640, 720,
+            guard_large_disagreements=True)
+        np.testing.assert_allclose(unguarded[4, 0], clean[4, 0], atol=1e-5)
+        np.testing.assert_allclose(guarded[4, 0], uv[4, 0], atol=1e-5)
+        self.assertAlmostEqual(old_weights[4, 0], .55)
+        self.assertAlmostEqual(new_weights[4, 0], .1)
+        self.assertEqual(report["counts"]["quarantined_large_disagreement"], 1)
+        self.assertEqual(old_report["counts"]["quarantined_large_disagreement"], 0)
+        self.assertTrue(report["guard_large_disagreements"])
+        self.assertFalse(old_report["guard_large_disagreements"])
+
+    def test_guarded_mode_retains_small_low_peak_flow_correction(self):
+        uv, pk, flow, ok, err = self.fixture()
+        clean = uv.copy()
+        uv[4, 0] += [12., 10.]
+        pk[4, 0] = .1
+        flow[4, 0] = clean[4, 0]
+        actual, weights, report = fuse_tracks(
+            uv, pk, flow, ok, err, 640, 720,
+            guard_large_disagreements=True)
+        np.testing.assert_allclose(actual[4, 0], clean[4, 0], atol=1e-5)
+        self.assertAlmostEqual(weights[4, 0], .55)
+        self.assertEqual(report["counts"]["flow_only"], 1)
+        self.assertEqual(report["counts"]["quarantined_large_disagreement"], 0)
+
     def test_high_peak_outlier_not_forcibly_replaced(self):
         uv, pk, flow, ok, err = self.fixture()
         base = uv.copy()
@@ -72,6 +108,23 @@ class TemporalTrackingTests(unittest.TestCase):
         refined, _, report = fuse_tracks(uv, pk, flow, ok, err, 640, 720)
         np.testing.assert_array_equal(refined[2, 0], uv[2, 0])
         self.assertGreaterEqual(report["counts"]["flow_rejected"], 1)
+
+    def test_raw_seed_drift_disables_followup_lk_extrapolation(self):
+        uv, peak, flow, ok, err = self.fixture()
+        truth = uv.copy()
+        # Reader misidentifies an occluded Dino joint on frame 4.
+        uv[4, 0] += [25., 18.]
+        peak[4, 0] = .2
+        flow[4, 0] = truth[4, 0]
+        # At frame 5 LK is seeded at the WRONG raw frame-4 pixel.
+        # A tiny forward/backward error does not make that seed anatomical.
+        flow[5, 0] = uv[4, 0] + [.3, .2]
+        refined, weight, report = fuse_tracks(
+            uv, peak, flow, ok, err, 640, 720)
+        np.testing.assert_allclose(refined[4, 0], truth[4, 0], atol=1e-5)
+        np.testing.assert_allclose(refined[5, 0], truth[5, 0], atol=1e-5)
+        self.assertGreaterEqual(report["counts"]["flow_seed_rejected"], 1)
+        self.assertEqual(weight[4, 0], .55)
 
     def test_invalid_shapes_and_nonfinite_fail_closed(self):
         uv, pk, flow, ok, err = self.fixture()

@@ -29,6 +29,7 @@ jobs:
           python-version: "3.11"
       - run: python -m pip install torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
       - run: python -m unittest discover -s tests -p 'test_iclone_training_checkpoint.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_quality_only.py' -v
 
   visibility-numpy:
     runs-on: ubuntu-latest
@@ -37,7 +38,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: python -m pip install numpy opencv-python-headless
+      - run: python -m pip install numpy opencv-python-headless Pillow
+      - run: python -m mocap.track --help
+      - run: bash -n tools/capture.sh
+      - run: bash -n tools/eval_dino_p2.sh
+      - run: bash -n tools/eval_dino_full_body.sh
+      - run: bash -n tools/eval_dino_view_reliability.sh
+      - run: bash -n tools/eval_dino_occlusion.sh
+      - run: bash -n tools/eval_dino_top_oracle.sh
+      - run: python -m tools.make_dino_occlusion_ablations --help
+      - run: python -m tools.audit_dino_occlusion_sources --help
+      - run: python -m tools.review_dino_masked_observations --help
+      - run: python -m tools.audit_dino_gt_camera --help
+      - run: python -m tools.evaluate_dino_full_body --help
+      # Both direct-file and -m invocations must locate sibling mocap/
+      - run: python tools/diagnose_dino_tracking.py --help
+      - run: python -m tools.diagnose_dino_tracking --help
+      - run: python tools/make_dino_tracking_ablations.py --help
+      - run: python -m tools.make_dino_tracking_ablations --help
       - run: python -m unittest discover -s tests -p 'test_iclone_tracking_opencv.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_visibility.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_temporal_association.py' -v
@@ -46,6 +64,29 @@ jobs:
       - run: python -m unittest discover -s tests -p 'test_iclone_temporal_tracking.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_quality_targets.py' -v
       - run: python -m unittest discover -s tests -p 'test_iclone_motion_prior.py' -v
-      - run: python -m unittest discover -s tests -p 'test_iclone_temporal_tracking.py' -v
-      - run: python -m unittest discover -s tests -p 'test_iclone_quality_targets.py' -v
-      - run: python -m unittest discover -s tests -p 'test_iclone_temporal_tracking.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_quality_metrics.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_dino_dataset_audit.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_dino_ground_truth_camera.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_dino_full_body_ground_truth.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_dino_view_reliability.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_fal_threeview_smoke.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_dino_top_oracle.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_dino_top_image_reader.py' -v
+      - run: bash -n tools/eval_dino_top_reader_motion.sh
+      - run: python -m tools.make_dino_top_reader_detection --help
+      - run: python -m unittest discover -s tests -p 'test_iclone_dino_top_reader_bridge.py' -v
+      - run: python -m tools.make_dino_top_reader_detection --help
+      - run: bash -n tools/eval_dino_top_reader_motion.sh
+      - run: python -m tools.make_dino_top_oracle --help
+      - run: python -m tools.eval_dino_top_reader --help
+      - run: python -m tools.review_dino_top_reader --help
+      - run: python -m unittest discover -s tests -p 'test_iclone_dino_occlusion_observations.py' -v
+      - run: python -m tools.make_dino_view_ablations --help
+      - run: python -m unittest discover -s tests -p 'test_iclone_dino_tracking_diagnostics.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_tracking_ablation.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_reader_warmstart.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_p2_weighted_reader.py' -v
+      - run: python -m unittest discover -s tests -p 'test_iclone_p2_quality_visualization.py' -v
+      - run: python -m tools.make_dino_p2_weighted_detection --help
+      - run: python -m tools.compare_dino_p2_motion --help
+      - run: python -m tools.review_dino_p2 --help

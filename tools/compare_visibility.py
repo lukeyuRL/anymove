@@ -1,4 +1,4 @@
-"""Compare two solved Dragon motions; this is NOT a ground-truth accuracy test.
+"""Compare two AnyMove solved motions; this is NOT a ground-truth accuracy test.
 
 python tools/compare_visibility.py baseline_motion.json variant_motion.json
 """
@@ -21,8 +21,28 @@ def compare(a, b):
     diff = np.linalg.norm(joints_a-joints_b, axis=-1)
     delta_root = np.linalg.norm(root_a-root_b, axis=-1)
     reproj_a, reproj_b = a.get("reproj_px", {}), b.get("reproj_px", {})
+    hash_a = a.get("source_detections_sha256")
+    hash_b = b.get("source_detections_sha256")
+    if hash_a and hash_b and hash_a != hash_b:
+        comparison_type = "different-detection motion comparison, NOT 3D truth"
+        source_note = (
+            "Different detection files were used. Tracking can change both 2D "
+            "joint coordinates and Solver weights. Each motion's reported "
+            "reprojection is against its OWN observations, so the two errors "
+            "are not directly comparable without evaluating against the SAME "
+            "raw detections.")
+    elif hash_a and hash_b and hash_a == hash_b:
+        comparison_type = "same-detection solver ablation, NOT 3D truth"
+        source_note = (
+            "Both motions identify the same source detection file; differing "
+            "Solver settings can still alter the fit.")
+    else:
+        comparison_type = "unverified-source motion comparison, NOT 3D truth"
+        source_note = (
+            "At least one motion lacks a source detection hash. This tool "
+            "cannot establish that both runs used the same detections.")
     return {
-        "comparison_type": "same-detection solver ablation, NOT 3D truth",
+        "comparison_type": comparison_type,
         "frames": len(root_a),
         "joint_position_difference_mean_cm": round(float(diff.mean()*100), 4),
         "joint_position_difference_p95_cm": round(float(np.percentile(diff, 95)*100), 4),
@@ -32,7 +52,10 @@ def compare(a, b):
         "reprojection_px_variant": reproj_b,
         "raw_paw_agreement_baseline": a.get("sync", {}).get("paw_agreement"),
         "raw_paw_agreement_variant": b.get("sync", {}).get("paw_agreement"),
-        "conclusion": "Differences measure the effect of weighting only. Without ground-truth joints and visual inspection, smaller reprojection is NOT proof of higher motion accuracy."
+        "source_detection_sha256_baseline": hash_a,
+        "source_detection_sha256_variant": hash_b,
+        "source_comparability": source_note,
+        "conclusion": "Motion differences are not ground-truth error. Without known 3D motion and a shared 2D observation reference, smaller per-run reprojection does NOT prove higher accuracy."
     }
 
 

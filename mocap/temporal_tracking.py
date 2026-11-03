@@ -9,8 +9,18 @@ of the Reader's measurements. No claim of learned occlusion awareness.
 import numpy as np
 
 PROFILE = "anymove_lk_reader_temporal_fusion_v1"
+GUARDED_PROFILE = "anymove_lk_reader_temporal_fusion_v2_guarded"
+# A conservative engineering guard. Not calibrated to Dino GT.
+# An enormous Reader-vs-flow disagreement leaves the joint observation
+# unresolved: do not pick either the raw Reader or flow as certain.
+MAX_GUARDED_FLOW_READER_GAP_PX = 30.0
+UNRESOLVED_TRACK_WEIGHT = 0.10
 MAX_FB_ERROR_PX = 2.0
 MAX_FLOW_STEP_PX = 45.0
+# LK is measured at the RAW previous-frame joint. Once fusion diverges
+# from that raw seed, a subsequent raw-seeded displacement is not a valid
+# continuation of the corrected trajectory.
+MAX_FLOW_SEED_OFFSET_PX = 7.0
 MAX_READER_FLOW_AGREEMENT_PX = 9.0
 LOW_PEAK_THRESHOLD = 0.50  # Heuristic raw peak, NOT a probability.
 MAX_FLOW_ONLY_STREAK = 3
@@ -19,13 +29,20 @@ FLOW_ONLY_WEIGHT = 0.55
 
 
 def fuse_tracks(raw_uv, raw_peak, flow_next, flow_valid, fb_error,
-                view_width, view_height):
+                view_width, view_height, guard_large_disagreements=False):
     """Fuse (T,J,2) DINO positions with per-step LK displacement.
 
     flow_next[t,j] is tracking raw_uv[t-1,j] to the next image, not an
     independent absolute joint estimate. No change to raw heatmap peaks.
+    When guard_large_disagreements=True (opt-in v2), a huge LOW-PEAK
+    raw-vs-flow disagreement is ambiguous: retain raw coordinates but
+    strongly downweight their Solver contribution, rather than replacing
+    the joint with a 30-170px flow extrapolation. This is abstention,
+    not evidence that raw Reader or LK is anatomically correct.
     Returns refined_uv, bounded solver weight multiplier, audit.
     """
+    if not isinstance(guard_large_disagreements, (bool, np.bool_)):
+        raise ValueError("guard_large_disagreements must be boolean")
     uv = np.asarray(raw_uv, dtype=np.float64)
     peaks = np.asarray(raw_peak, dtype=np.float64)
     next_uv = np.asarray(flow_next, dtype=np.float64)
@@ -42,15 +59,20 @@ def fuse_tracks(raw_uv, raw_peak, flow_next, flow_valid, fb_error,
     weights = np.ones((T, J), np.float32)
     streak = np.zeros(J, np.int32)
     counts = {"reader_retained": 0, "fused": 0, "flow_only": 0,
-              "outlier_flagged": 0, "flow_rejected": 0}
+              "outlier_flagged": 0, "flow_rejected": 0,
+              "flow_seed_rejected": 0, "quarantined_large_disagreement": 0}
     for t in range(1, T):
         delta = next_uv[t] - uv[t-1]
         step = np.linalg.norm(delta, axis=-1)
         prediction = adjusted[t-1] + delta
         in_bounds = ((prediction[:, 0] >= 0) & (prediction[:, 0] < view_width) &
                      (prediction[:, 1] >= 0) & (prediction[:, 1] < view_height))
+        seed_offset = np.linalg.norm(adjusted[t-1] - uv[t-1], axis=-1)
+        usable_seed = seed_offset <= MAX_FLOW_SEED_OFFSET_PX
         trustworthy = (valid[t] & (err[t] <= MAX_FB_ERROR_PX) &
-                       (step <= MAX_FLOW_STEP_PX) & in_bounds)
+                       (step <= MAX_FLOW_STEP_PX) & in_bounds &
+                       usable_seed)
+        counts["flow_seed_rejected"] += int(np.sum(valid[t] & ~usable_seed))
         discrepancy = np.linalg.norm(prediction - uv[t], axis=-1)
         for j in range(J):
             if not trustworthy[j]:
@@ -64,12 +86,23 @@ def fuse_tracks(raw_uv, raw_peak, flow_next, flow_valid, fb_error,
                 streak[j] = 0
                 counts["fused"] += 1
             elif peaks[t, j] < LOW_PEAK_THRESHOLD and streak[j] < MAX_FLOW_ONLY_STREAK:
-                # Only extrapolate briefly when the raw peak is low AND
-                # LK's forward/backward check is reliable.
-                adjusted[t, j] = prediction[j]
-                weights[t, j] = FLOW_ONLY_WEIGHT
-                streak[j] += 1
-                counts["flow_only"] += 1
+                # Flow-only recovery is permitted for a short low-peak window,
+                # but a 100+ pixel disagreement is *not* proof of reliable flow:
+                # a wrongly identified raw landmark can still pass LK F/B.
+                if (guard_large_disagreements and
+                        discrepancy[j] > MAX_GUARDED_FLOW_READER_GAP_PX):
+                    # Decline choosing either candidate. Keep the raw Reader
+                    # location to preserve the detection contract, but make
+                    # the Solver rely chiefly on other joints and the rig prior.
+                    weights[t, j] = UNRESOLVED_TRACK_WEIGHT
+                    streak[j] = 0
+                    counts["quarantined_large_disagreement"] += 1
+                    counts["reader_retained"] += 1
+                else:
+                    adjusted[t, j] = prediction[j]
+                    weights[t, j] = FLOW_ONLY_WEIGHT
+                    streak[j] += 1
+                    counts["flow_only"] += 1
             else:
                 # High-confidence reader/flow disagreement is unresolved,
                 # so keep Reader coordinates but warn/downweight the Solver.
@@ -78,7 +111,12 @@ def fuse_tracks(raw_uv, raw_peak, flow_next, flow_valid, fb_error,
                 counts["outlier_flagged"] += 1
                 counts["reader_retained"] += 1
     diagnostics = {
-        "profile": PROFILE,
+        "profile": GUARDED_PROFILE if guard_large_disagreements else PROFILE,
+        "guard_large_disagreements": bool(guard_large_disagreements),
+        "quarantine_flow_reader_gap_px": (
+            MAX_GUARDED_FLOW_READER_GAP_PX if guard_large_disagreements else None),
+        "unresolved_solver_weight": (
+            UNRESOLVED_TRACK_WEIGHT if guard_large_disagreements else None),
         "frames": T,
         "joints": J,
         "counts": counts,
@@ -88,8 +126,11 @@ def fuse_tracks(raw_uv, raw_peak, flow_next, flow_valid, fb_error,
             np.linalg.norm(adjusted-uv, axis=-1).max()), 4),
         "mean_solver_weight": round(float(weights.mean()), 4),
         "unmodified_reader_peak_scores": True,
+        "flow_seed_max_offset_px": MAX_FLOW_SEED_OFFSET_PX,
         "note": ("LK point tracking is image evidence only, not joint identity "
-                 "or a calibrated occlusion/uncertainty estimate.")
+                 "or a calibrated occlusion/uncertainty estimate. A large "
+                 "disagreement is unresolved, not a guaranteed LK failure; "
+                 "the opt-in guard rejects these replacements conservatively.")
     }
     return adjusted.astype(np.float32), weights, diagnostics
 

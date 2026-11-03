@@ -1,0 +1,111 @@
+{
+  "schema": "anymove.fourcam_v6_controlled_fal_requests/1",
+  "note": "Reference URLs and hosted model URL replaced with immutable placeholders. Original paid requests remain local in runs/.",
+  "training_request_id": "01a1a04e-19bd-7340-8b68-c3bfd4566976",
+  "experiments": {
+    "forward_left": {
+      "input_digest": {
+        "reference_video_sha256": "1963fa9f9b62675dbf447f185dc93e1353c85420be79317c4f619148a82d7d88",
+        "reference_image_sha256": "741089358f3097cee4fb1222804bce02ffe00c6f4adcad155e243f56c8ebc6b1"
+      },
+      "requests": {
+        "scale0": {
+          "prompt": "FOURCAM Four synchronized fixed ORTHOGRAPHIC cameras show the SAME multicolored human performing the SAME 3D motion at exactly the SAME time in a 2x2 square grid. TOP-LEFT: front-left 45 degree oblique view. TOP-RIGHT: front-right 45 degree oblique view. BOTTOM-LEFT: back view. BOTTOM-RIGHT: true overhead TOP view looking down on the head and arms. There is NO front panel. Camera views do not move or swap. Human anatomical LEFT upperarm RED, LEFT forearm ORANGE, RIGHT upperarm BLUE, RIGHT forearm GREEN; limb colors never switch. Image 1 is the exact appearance and four-view layout reference. Video 1 is a colored anatomical skeleton reference for poses; render the colored 3D HUMAN, not the skeleton drawing. Only the anatomical LEFT red/orange arm reaches FORWARD toward the person's front, then returns to rest; RIGHT blue/green arm stays lowered.",
+          "reference_image_urls": [
+            "<VERIFIED_IDENTICAL_FOURCAM_FRAME0>"
+          ],
+          "reference_video_urls": [
+            "<HELDOUT_POSE_VIDEO:forward_left>"
+          ],
+          "duration": 5,
+          "resolution": "768P",
+          "aspect_ratio": "1:1",
+          "seed": 42,
+          "prompt_expansion_mode": "disabled",
+          "loras": [
+            {
+              "path": "<V6_FOURCAM_400STEP_CHECKPOINT>",
+              "scale": 0.0
+            }
+          ]
+        },
+        "scale1": {
+          "prompt": "FOURCAM Four synchronized fixed ORTHOGRAPHIC cameras show the SAME multicolored human performing the SAME 3D motion at exactly the SAME time in a 2x2 square grid. TOP-LEFT: front-left 45 degree oblique view. TOP-RIGHT: front-right 45 degree oblique view. BOTTOM-LEFT: back view. BOTTOM-RIGHT: true overhead TOP view looking down on the head and arms. There is NO front panel. Camera views do not move or swap. Human anatomical LEFT upperarm RED, LEFT forearm ORANGE, RIGHT upperarm BLUE, RIGHT forearm GREEN; limb colors never switch. Image 1 is the exact appearance and four-view layout reference. Video 1 is a colored anatomical skeleton reference for poses; render the colored 3D HUMAN, not the skeleton drawing. Only the anatomical LEFT red/orange arm reaches FORWARD toward the person's front, then returns to rest; RIGHT blue/green arm stays lowered.",
+          "reference_image_urls": [
+            "<VERIFIED_IDENTICAL_FOURCAM_FRAME0>"
+          ],
+          "reference_video_urls": [
+            "<HELDOUT_POSE_VIDEO:forward_left>"
+          ],
+          "duration": 5,
+          "resolution": "768P",
+          "aspect_ratio": "1:1",
+          "seed": 42,
+          "prompt_expansion_mode": "disabled",
+          "loras": [
+            {
+              "path": "<V6_FOURCAM_400STEP_CHECKPOINT>",
+              "scale": 1.0
+            }
+          ]
+        }
+      },
+      "request_ids": {
+        "scale0": "01a1a10d-983c-7220-a919-5e5ee98b04ca",
+        "scale1": "01a1a10d-9b80-72a3-a037-0f3306ae1800"
+      }
+    },
+    "backward_right": {
+      "input_digest": {
+        "reference_video_sha256": "0dab33d3065c4ba311681a356a92fa58c54a0f5a23ef45aa8f3868e6c1bceb4d",
+        "reference_image_sha256": "741089358f3097cee4fb1222804bce02ffe00c6f4adcad155e243f56c8ebc6b1"
+      },
+      "requests": {
+        "scale0": {
+          "prompt": "FOURCAM Four synchronized fixed ORTHOGRAPHIC cameras show the SAME multicolored human performing the SAME 3D motion at exactly the SAME time in a 2x2 square grid. TOP-LEFT: front-left 45 degree oblique view. TOP-RIGHT: front-right 45 degree oblique view. BOTTOM-LEFT: back view. BOTTOM-RIGHT: true overhead TOP view looking down on the head and arms. There is NO front panel. Camera views do not move or swap. Human anatomical LEFT upperarm RED, LEFT forearm ORANGE, RIGHT upperarm BLUE, RIGHT forearm GREEN; limb colors never switch. Image 1 is the exact appearance and four-view layout reference. Video 1 is a colored anatomical skeleton reference for poses; render the colored 3D HUMAN, not the skeleton drawing. Only the anatomical RIGHT blue/green arm reaches BACKWARD behind the torso then returns to neutral; LEFT red/orange arm stays lowered.",
+          "reference_image_urls": [
+            "<VERIFIED_IDENTICAL_FOURCAM_FRAME0>"
+          ],
+          "reference_video_urls": [
+            "<HELDOUT_POSE_VIDEO:backward_right>"
+          ],
+          "duration": 5,
+          "resolution": "768P",
+          "aspect_ratio": "1:1",
+          "seed": 42,
+          "prompt_expansion_mode": "disabled",
+          "loras": [
+            {
+              "path": "<V6_FOURCAM_400STEP_CHECKPOINT>",
+              "scale": 0.0
+            }
+          ]
+        },
+        "scale1": {
+          "prompt": "FOURCAM Four synchronized fixed ORTHOGRAPHIC cameras show the SAME multicolored human performing the SAME 3D motion at exactly the SAME time in a 2x2 square grid. TOP-LEFT: front-left 45 degree oblique view. TOP-RIGHT: front-right 45 degree oblique view. BOTTOM-LEFT: back view. BOTTOM-RIGHT: true overhead TOP view looking down on the head and arms. There is NO front panel. Camera views do not move or swap. Human anatomical LEFT upperarm RED, LEFT forearm ORANGE, RIGHT upperarm BLUE, RIGHT forearm GREEN; limb colors never switch. Image 1 is the exact appearance and four-view layout reference. Video 1 is a colored anatomical skeleton reference for poses; render the colored 3D HUMAN, not the skeleton drawing. Only the anatomical RIGHT blue/green arm reaches BACKWARD behind the torso then returns to neutral; LEFT red/orange arm stays lowered.",
+          "reference_image_urls": [
+            "<VERIFIED_IDENTICAL_FOURCAM_FRAME0>"
+          ],
+          "reference_video_urls": [
+            "<HELDOUT_POSE_VIDEO:backward_right>"
+          ],
+          "duration": 5,
+          "resolution": "768P",
+          "aspect_ratio": "1:1",
+          "seed": 42,
+          "prompt_expansion_mode": "disabled",
+          "loras": [
+            {
+              "path": "<V6_FOURCAM_400STEP_CHECKPOINT>",
+              "scale": 1.0
+            }
+          ]
+        }
+      },
+      "request_ids": {
+        "scale0": "01a1a10e-23f0-77b2-a801-fd0ac2fe2460",
+        "scale1": "01a1a10e-26f9-7fc1-a523-300f9c6c2e7a"
+      }
+    }
+  }
+}

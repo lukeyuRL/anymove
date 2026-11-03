@@ -1,0 +1,58 @@
+{
+  "schema": "anymove.human_fal_h3_ref2va_v6_diverse_reach_final_acceptance/1",
+  "status": "PASS_OFFLINE_DATASET",
+  "go_for_native_fal_ref2va_1step_debug": "REQUIRES_USER_APPROVAL",
+  "go_for_full_400step_paid_training": "HOLD_UNTIL_DEBUG_AND_FURTHER_QUALITY_REVIEW",
+  "no_paid_training_or_inference_executed": true,
+  "final_zip": {
+    "path": "F:\\anymove\\runs\\human\\lora_synth_A\\conditioned_backend\\fal_h3_ref2va\\fourview_v6_reach_expanded\\fal_h3_ref2va_v6_28train_fourview_diverse_reach.zip",
+    "sha256": "76faf527f9e5cd7f9521b8a42f306b7f07fda04f6c2d7cc2d4d233f57f102141",
+    "bytes": 16154035,
+    "members": 112,
+    "training_clips": 28,
+    "heldout_clips": 8,
+    "source_V5_train": 12,
+    "new_V6_reach_train": 16,
+    "total_reach_train": 20,
+    "total_lean_train": 8
+  },
+  "layout": {
+    "top_left": "front-left 45",
+    "top_right": "front-right 45",
+    "bottom_left": "back",
+    "bottom_right": "top-overhead",
+    "canvas": [
+      896,
+      896
+    ],
+    "aspect_ratio": "1:1",
+    "camera_extrinsics_consumed_by_fal_as_numbers": false,
+    "fourview_RGB_Pose_and_Identity_match": true
+  },
+  "source_validation": {
+    "new_source_motions": 20,
+    "new_augmented_source_world_3D_joint_signs_and_nonmoving_arm": "PASS",
+    "new_augmented_source_deduplication": "PASS",
+    "new_augmented_20x107_source_4camera_projection": "PASS",
+    "new_RGB_Pose_20x107_png_pair_QA": "PASS",
+    "new_20x4x4_independent_depth_pixel_witness_QA": "PASS",
+    "new_20x107_RGB_and_Pose_H264_mp4_decode_QA": "PASS",
+    "encoded_bone_color_accuracy": 0.999381
+  },
+  "remaining_risks": [
+    "Only 20 Reach training examples, generated procedurally; not natural movement diversity",
+    "Original four Reach training samples only side-lateral; high V6 family partially overlaps old reaching trajectories",
+    "New heldout high-left near an old lateral left Reach, so do not treat it as a fully novel action generalization test",
+    "fal H3 Ref2VA conditions on sparse/soft visual references, not a hard multi-view 3D joint/camera model",
+    "No model trained/evaluated yet with the expanded fourview distribution"
+  ],
+  "recommended_next": "Review final RGB/Pose contact and optionally authorize at most one fal 1-Step Debug on THIS exact ZIP. Full training only after separate approval and matched heldout experiment.",
+  "reports": [
+    "F:\\anymove\\runs\\human\\lora_synth_A\\conditioned_backend\\fal_h3_ref2va\\fourview_v5_l45_r45_back_top\\FINAL_ACCEPTANCE.json",
+    "F:\\anymove\\runs\\human\\lora_synth_A\\conditioned_backend\\fal_h3_ref2va\\fourview_v6_reach_augmented\\STATIC_INDEPENDENT_QA.json",
+    "F:\\anymove\\runs\\human\\lora_synth_A\\conditioned_backend\\fal_h3_ref2va\\fourview_v6_reach_augmented\\ENCODED_MP4_INDEPENDENT_QA.json",
+    "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\INDEPENDENT_MOTION_DIVERSITY_QA.json",
+    "F:\\anymove\\runs\\human\\lora_synth_A\\conditioned_backend\\fal_h3_ref2va\\fourview_v6_reach_expanded\\MERGED_DATASET_QA.json"
+  ],
+  "new_paid_jobs": 0
+}

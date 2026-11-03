@@ -11,8 +11,14 @@ c=$1; video=${2:?video}; name=${3:?name}; views=${4:-persp,side}
 # Fifth argument or MOCAP_READER_PT overrides the choice.
 reader=${5:-${MOCAP_READER_PT:-}}
 if [ -z "$reader" ]; then
-  if [ -f "runs/$c/reader_hr.pt" ]; then reader="runs/$c/reader_hr.pt"
-  else reader="runs/$c/reader.pt"; fi
+  if [ -f "runs/$c/reader_hr.pt" ]; then
+    reader="runs/$c/reader_hr.pt"
+  elif [ -f "runs/$c/reader_hr_v1.pt" ]; then
+    # Dino's versioned 672/192 checkpoint; retain legacy reader_hr.pt precedence.
+    reader="runs/$c/reader_hr_v1.pt"
+  else
+    reader="runs/$c/reader.pt"
+  fi
 fi
 [ -f "$reader" ] || { echo "missing reader checkpoint: $reader" >&2; exit 1; }
 rig=assets/$c/rigged; out=runs/$c/clips/$name
@@ -23,7 +29,11 @@ mkdir -p "$out"
 # separately and write the refined tracks as det.npz for the existing Solver.
 if [ "${MOCAP_TEMPORAL_TRACKING:-0}" = "1" ]; then
   $PY -m mocap.detect "$video" "$reader" "runs/$c/ref/ref.png" "$out/det_reader.npz" "$out/overlay.mp4" | tail -1
-  "$PY" -m mocap.track "$video" "$out/det_reader.npz" "$out/det.npz"
+  tracking_flags=()
+  if [ "${MOCAP_TEMPORAL_TRACKING_GUARDED:-0}" = "1" ]; then
+    tracking_flags+=(--guard-large-disagreements)
+  fi
+  "$PY" -m mocap.track "$video" "$out/det_reader.npz" "$out/det.npz" "${tracking_flags[@]}"
 else
   $PY -m mocap.detect "$video" "$reader" "runs/$c/ref/ref.png" "$out/det.npz" "$out/overlay.mp4" | tail -1
 fi

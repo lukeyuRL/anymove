@@ -1,0 +1,451 @@
+{
+  "schema": "anymove.h3_fourview_diverse_reach_28train_8heldout/1",
+  "status": "PASS_MERGED_OFFLINE_FILES_AND_INTEGRITY",
+  "new_training_status": "NOT_STARTED",
+  "new_paid_fal_jobs": 0,
+  "fal_trainer": "minimax/h3/ref2va/trainer",
+  "fal_inference": "minimax/h3/reference-to-video/lora",
+  "recommended_trigger_phrase": "FOURCAM",
+  "same_view_layout": [
+    "left_45",
+    "right_45",
+    "back",
+    "top"
+  ],
+  "canvas": [
+    896,
+    896
+  ],
+  "aspect_ratio": "1:1",
+  "frames": 107,
+  "fps": 24,
+  "training_clips": 28,
+  "heldout_clips": 8,
+  "training_reach_clips": 20,
+  "training_lean_clips": 8,
+  "original_v5_training_clips": 12,
+  "added_reach_training_clips": 16,
+  "added_reach_heldout_clips": 4,
+  "source_V5_archive_sha256": "629d1a190bb14212b92e31aab3ed5d602075a5f6100e6399a62ced1bedcd0e20",
+  "source_V6_aug_archive_sha256": "e171278378ce9ac9b382d361ec7d1e952f5643dbec668c4cd4cea3ab379d1ba6",
+  "merged_archive": {
+    "path": "F:\\anymove\\runs\\human\\lora_synth_A\\conditioned_backend\\fal_h3_ref2va\\fourview_v6_reach_expanded\\fal_h3_ref2va_v6_28train_fourview_diverse_reach.zip",
+    "bytes": 16154035,
+    "sha256": "76faf527f9e5cd7f9521b8a42f306b7f07fda04f6c2d7cc2d4d233f57f102141",
+    "entries": 112
+  },
+  "train_records": [
+    {
+      "id": "full_train_lean_alternating_a17_s6104",
+      "split": "train",
+      "family": "lean_alternating",
+      "seed": 6104,
+      "amplitude_deg": 17,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_alternating_a17_s6104",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_alternating_a17_s6104\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_alternating_a17_s6104\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_alternating_a17_s6104\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_alternating_a17_s6104\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_alternating_a17_s6104\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_alternating_a17_s6104\\motion.json"
+    },
+    {
+      "id": "full_train_lean_alternating_a24_s6105",
+      "split": "train",
+      "family": "lean_alternating",
+      "seed": 6105,
+      "amplitude_deg": 24,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_alternating_a24_s6105",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_alternating_a24_s6105\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_alternating_a24_s6105\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_alternating_a24_s6105\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_alternating_a24_s6105\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_alternating_a24_s6105\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_alternating_a24_s6105\\motion.json"
+    },
+    {
+      "id": "full_train_lean_left_a15_s6101",
+      "split": "train",
+      "family": "lean_left",
+      "seed": 6101,
+      "amplitude_deg": 15,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a15_s6101",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a15_s6101\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a15_s6101\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a15_s6101\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a15_s6101\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a15_s6101\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a15_s6101\\motion.json"
+    },
+    {
+      "id": "full_train_lean_left_a22_s6102",
+      "split": "train",
+      "family": "lean_left",
+      "seed": 6102,
+      "amplitude_deg": 22,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a22_s6102",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a22_s6102\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a22_s6102\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a22_s6102\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a22_s6102\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a22_s6102\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a22_s6102\\motion.json"
+    },
+    {
+      "id": "full_train_lean_left_a28_s6103",
+      "split": "train",
+      "family": "lean_left",
+      "seed": 6103,
+      "amplitude_deg": 28,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a28_s6103",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a28_s6103\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a28_s6103\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a28_s6103\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a28_s6103\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a28_s6103\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_left_a28_s6103\\motion.json"
+    },
+    {
+      "id": "full_train_lean_right_a15_s6101",
+      "split": "train",
+      "family": "lean_right",
+      "seed": 6101,
+      "amplitude_deg": 15,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a15_s6101",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a15_s6101\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a15_s6101\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a15_s6101\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a15_s6101\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a15_s6101\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a15_s6101\\motion.json"
+    },
+    {
+      "id": "full_train_lean_right_a22_s6102",
+      "split": "train",
+      "family": "lean_right",
+      "seed": 6102,
+      "amplitude_deg": 22,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a22_s6102",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a22_s6102\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a22_s6102\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a22_s6102\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a22_s6102\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a22_s6102\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a22_s6102\\motion.json"
+    },
+    {
+      "id": "full_train_lean_right_a28_s6103",
+      "split": "train",
+      "family": "lean_right",
+      "seed": 6103,
+      "amplitude_deg": 28,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a28_s6103",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a28_s6103\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a28_s6103\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a28_s6103\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a28_s6103\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a28_s6103\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_lean_right_a28_s6103\\motion.json"
+    },
+    {
+      "id": "full_train_reach_left_a50_s6201",
+      "split": "train",
+      "family": "reach_left",
+      "seed": 6201,
+      "amplitude_deg": 50,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_left_a50_s6201",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_left_a50_s6201\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_left_a50_s6201\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_left_a50_s6201\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_left_a50_s6201\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_left_a50_s6201\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_left_a50_s6201\\motion.json"
+    },
+    {
+      "id": "full_train_reach_left_a62_s6202",
+      "split": "train",
+      "family": "reach_left",
+      "seed": 6202,
+      "amplitude_deg": 62,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_left_a62_s6202",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_left_a62_s6202\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_left_a62_s6202\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_left_a62_s6202\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_left_a62_s6202\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_left_a62_s6202\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_left_a62_s6202\\motion.json"
+    },
+    {
+      "id": "full_train_reach_right_a50_s6201",
+      "split": "train",
+      "family": "reach_right",
+      "seed": 6201,
+      "amplitude_deg": 50,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_right_a50_s6201",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_right_a50_s6201\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_right_a50_s6201\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_right_a50_s6201\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_right_a50_s6201\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_right_a50_s6201\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_right_a50_s6201\\motion.json"
+    },
+    {
+      "id": "full_train_reach_right_a62_s6202",
+      "split": "train",
+      "family": "reach_right",
+      "seed": 6202,
+      "amplitude_deg": 62,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_right_a62_s6202",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_right_a62_s6202\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_right_a62_s6202\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_right_a62_s6202\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_right_a62_s6202\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_right_a62_s6202\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_train_reach_right_a62_s6202\\motion.json"
+    },
+    {
+      "split": "train",
+      "family": "reach_forward_left",
+      "seed": 7301,
+      "amplitude_deg": 44,
+      "id": "full_train_reach_forward_left_a44_s7301",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_forward_left_a44_s7301"
+    },
+    {
+      "split": "train",
+      "family": "reach_forward_left",
+      "seed": 7302,
+      "amplitude_deg": 66,
+      "id": "full_train_reach_forward_left_a66_s7302",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_forward_left_a66_s7302"
+    },
+    {
+      "split": "train",
+      "family": "reach_forward_right",
+      "seed": 7301,
+      "amplitude_deg": 44,
+      "id": "full_train_reach_forward_right_a44_s7301",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_forward_right_a44_s7301"
+    },
+    {
+      "split": "train",
+      "family": "reach_forward_right",
+      "seed": 7302,
+      "amplitude_deg": 66,
+      "id": "full_train_reach_forward_right_a66_s7302",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_forward_right_a66_s7302"
+    },
+    {
+      "split": "train",
+      "family": "reach_diagonal_left",
+      "seed": 7301,
+      "amplitude_deg": 48,
+      "id": "full_train_reach_diagonal_left_a48_s7301",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_diagonal_left_a48_s7301"
+    },
+    {
+      "split": "train",
+      "family": "reach_diagonal_left",
+      "seed": 7302,
+      "amplitude_deg": 67,
+      "id": "full_train_reach_diagonal_left_a67_s7302",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_diagonal_left_a67_s7302"
+    },
+    {
+      "split": "train",
+      "family": "reach_diagonal_right",
+      "seed": 7301,
+      "amplitude_deg": 48,
+      "id": "full_train_reach_diagonal_right_a48_s7301",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_diagonal_right_a48_s7301"
+    },
+    {
+      "split": "train",
+      "family": "reach_diagonal_right",
+      "seed": 7302,
+      "amplitude_deg": 67,
+      "id": "full_train_reach_diagonal_right_a67_s7302",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_diagonal_right_a67_s7302"
+    },
+    {
+      "split": "train",
+      "family": "reach_high_left",
+      "seed": 7301,
+      "amplitude_deg": 45,
+      "id": "full_train_reach_high_left_a45_s7301",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_high_left_a45_s7301"
+    },
+    {
+      "split": "train",
+      "family": "reach_high_left",
+      "seed": 7302,
+      "amplitude_deg": 70,
+      "id": "full_train_reach_high_left_a70_s7302",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_high_left_a70_s7302"
+    },
+    {
+      "split": "train",
+      "family": "reach_high_right",
+      "seed": 7301,
+      "amplitude_deg": 45,
+      "id": "full_train_reach_high_right_a45_s7301",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_high_right_a45_s7301"
+    },
+    {
+      "split": "train",
+      "family": "reach_high_right",
+      "seed": 7302,
+      "amplitude_deg": 70,
+      "id": "full_train_reach_high_right_a70_s7302",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_high_right_a70_s7302"
+    },
+    {
+      "split": "train",
+      "family": "reach_backward_left",
+      "seed": 7301,
+      "amplitude_deg": 40,
+      "id": "full_train_reach_backward_left_a40_s7301",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_backward_left_a40_s7301"
+    },
+    {
+      "split": "train",
+      "family": "reach_backward_left",
+      "seed": 7302,
+      "amplitude_deg": 60,
+      "id": "full_train_reach_backward_left_a60_s7302",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_backward_left_a60_s7302"
+    },
+    {
+      "split": "train",
+      "family": "reach_backward_right",
+      "seed": 7301,
+      "amplitude_deg": 40,
+      "id": "full_train_reach_backward_right_a40_s7301",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_backward_right_a40_s7301"
+    },
+    {
+      "split": "train",
+      "family": "reach_backward_right",
+      "seed": 7302,
+      "amplitude_deg": 60,
+      "id": "full_train_reach_backward_right_a60_s7302",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_train_reach_backward_right_a60_s7302"
+    }
+  ],
+  "heldout_records": [
+    {
+      "id": "full_heldout_lean_left_a21_s9901",
+      "split": "heldout",
+      "family": "lean_left",
+      "seed": 9901,
+      "amplitude_deg": 21,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_lean_left_a21_s9901",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_lean_left_a21_s9901\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_lean_left_a21_s9901\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_lean_left_a21_s9901\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_lean_left_a21_s9901\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_lean_left_a21_s9901\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_lean_left_a21_s9901\\motion.json"
+    },
+    {
+      "id": "full_heldout_lean_right_a21_s9901",
+      "split": "heldout",
+      "family": "lean_right",
+      "seed": 9901,
+      "amplitude_deg": 21,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_lean_right_a21_s9901",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_lean_right_a21_s9901\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_lean_right_a21_s9901\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_lean_right_a21_s9901\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_lean_right_a21_s9901\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_lean_right_a21_s9901\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_lean_right_a21_s9901\\motion.json"
+    },
+    {
+      "id": "full_heldout_reach_left_a57_s9902",
+      "split": "heldout",
+      "family": "reach_left",
+      "seed": 9902,
+      "amplitude_deg": 57,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_reach_left_a57_s9902",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_reach_left_a57_s9902\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_reach_left_a57_s9902\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_reach_left_a57_s9902\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_reach_left_a57_s9902\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_reach_left_a57_s9902\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_reach_left_a57_s9902\\motion.json"
+    },
+    {
+      "id": "full_heldout_reach_right_a57_s9902",
+      "split": "heldout",
+      "family": "reach_right",
+      "seed": 9902,
+      "amplitude_deg": 57,
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_reach_right_a57_s9902",
+      "rgb_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_reach_right_a57_s9902\\rgb_twocam.mp4",
+      "pose_twocam": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_reach_right_a57_s9902\\pose_control_twocam.mp4",
+      "camera_contract": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_reach_right_a57_s9902\\cameras.json",
+      "pose_condition": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_reach_right_a57_s9902\\pose_camera_conditions.json",
+      "ground_truth_joints": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_reach_right_a57_s9902\\joints.json",
+      "root_motion": "F:\\anymove\\runs\\human\\lora_synth_A\\v2\\full_heldout_reach_right_a57_s9902\\motion.json"
+    },
+    {
+      "split": "heldout",
+      "family": "reach_forward_left",
+      "seed": 8201,
+      "amplitude_deg": 55,
+      "id": "full_heldout_reach_forward_left_a55_s8201",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_heldout_reach_forward_left_a55_s8201"
+    },
+    {
+      "split": "heldout",
+      "family": "reach_diagonal_right",
+      "seed": 8202,
+      "amplitude_deg": 58,
+      "id": "full_heldout_reach_diagonal_right_a58_s8202",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_heldout_reach_diagonal_right_a58_s8202"
+    },
+    {
+      "split": "heldout",
+      "family": "reach_high_left",
+      "seed": 8203,
+      "amplitude_deg": 62,
+      "id": "full_heldout_reach_high_left_a62_s8203",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_heldout_reach_high_left_a62_s8203"
+    },
+    {
+      "split": "heldout",
+      "family": "reach_backward_right",
+      "seed": 8204,
+      "amplitude_deg": 52,
+      "id": "full_heldout_reach_backward_right_a52_s8204",
+      "path": "F:\\anymove\\runs\\human\\lora_synth_A\\v6_reach_source\\full_heldout_reach_backward_right_a52_s8204"
+    }
+  ],
+  "new_reach_family_counts": {
+    "reach_forward_left": 2,
+    "reach_forward_right": 2,
+    "reach_diagonal_left": 2,
+    "reach_diagonal_right": 2,
+    "reach_high_left": 2,
+    "reach_high_right": 2,
+    "reach_backward_left": 2,
+    "reach_backward_right": 2
+  },
+  "known_motion_similarity_warning": {
+    "high_reach_overlaps_prior_lateral_reach": true,
+    "new_heldout_high_left_nearest_original_reach_peak_hand_distance_m": 0.0052,
+    "do_not_treat_heldout_high_left_as_independent_novel_motion_test": true,
+    "main_new_direction_families": [
+      "forward",
+      "diagonal",
+      "backward"
+    ],
+    "high_reach_family_is_amplitude_and_timing_variation_not_a_new_axis": true
+  },
+  "static_v6_QA": "PASS_STATIC_FOURVIEW_GEOMETRY_AND_MEDIA",
+  "encoded_v6_QA": "PASS_ACTUAL_H264_RGB_AND_POSE",
+  "H3_sparsely_sampled_soft_reference_poses": true,
+  "3D_generation_quality_unverified": true,
+  "does_not_authorize_new_training": true
+}

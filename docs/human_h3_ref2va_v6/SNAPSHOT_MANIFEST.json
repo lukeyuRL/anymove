@@ -1,0 +1,208 @@
+{
+  "schema": "anymove.human_ref2va_v6_git_snapshot/1",
+  "notes": "The original working scripts live under runs/human (Git ignored). Copies remain source-identical, using the F:/anymove runtime layout.",
+  "source_files": [
+    {
+      "name": "derive_fourview_v5_l45_r45_back_top.py",
+      "bytes": 4738,
+      "sha256": "9502d892229f0e479bf459a1046db4e67d6c335b99747d6c2ab37a81aa5b3332"
+    },
+    {
+      "name": "prepare_fourview_v5_l45_r45_back_top.py",
+      "bytes": 8322,
+      "sha256": "8f79c45776c050e9a215c43e2085ce4e45ad01f09f3a428fea93fdb2423e0823"
+    },
+    {
+      "name": "render_fourview_v5_l45_r45_back_top_blender.py",
+      "bytes": 7328,
+      "sha256": "e53b06b404738afb2b59c513da62fe189cede12e8f8538ddc5594cc7c597eae1"
+    },
+    {
+      "name": "render_fourview_v5_l45_r45_back_top_batch.py",
+      "bytes": 2455,
+      "sha256": "10847317621cf3e1bb580026ec5bc16eab4f6cbbb53da0c05d2d810d0778ee48"
+    },
+    {
+      "name": "qa_fourview_v5_independent.py",
+      "bytes": 12372,
+      "sha256": "fe81bb80ce076776d12ae7471f5d1228046a1b0bbc302d4da30d28d6210b2d0f"
+    },
+    {
+      "name": "prepare_reach_diverse_v6.py",
+      "bytes": 7395,
+      "sha256": "6c6407f964b9674a15e828a387eddfdaa1c974b51ecb8a4d1838e7a7f32da098"
+    },
+    {
+      "name": "render_reach_diverse_v6_source_batch.py",
+      "bytes": 2921,
+      "sha256": "8d95b770512bc96f7fc8bcaa696b7f095d46b7a35a2e097505a14a5558bf8b65"
+    },
+    {
+      "name": "smoke_reach_diverse_v6_batch.py",
+      "bytes": 1674,
+      "sha256": "1d1c4c0407128b5133ab113d1e985f87b787feaea898276e21fac880700dce40"
+    },
+    {
+      "name": "prepare_fourview_v6_reach_cameras.py",
+      "bytes": 8350,
+      "sha256": "e6a0fe7f582677c87c62632492faa6967901b4ccc871863ce3da9146c49f5d50"
+    },
+    {
+      "name": "render_fourview_v6_reach_blender.py",
+      "bytes": 7346,
+      "sha256": "e303ff8f436b0eb51423dc5b604b7c5b2020fb8208b3026f2634ac8dadeca9e4"
+    },
+    {
+      "name": "render_fourview_v6_reach_batch.py",
+      "bytes": 2456,
+      "sha256": "3eaf6993e019e18575cf73b31b399332f14a3cc41058acbb6f1005faeb4713e0"
+    },
+    {
+      "name": "build_fourview_v6_reach_media.py",
+      "bytes": 15527,
+      "sha256": "d16a4b51bbe6741032dafdc180ff2131b629a42058d0a467c2ea07e067876fa4"
+    },
+    {
+      "name": "qa_fourview_v6_reach_independent.py",
+      "bytes": 12648,
+      "sha256": "7a7f264ce49e68546c073dc674a2222dd50d4ea42d503112d265cc9337179c4a"
+    },
+    {
+      "name": "qa_fourview_v6_reach_encoded_mp4.py",
+      "bytes": 5579,
+      "sha256": "1fbb218584376dfb9c8d4ed236e1c679b232db3b8b8a0e130864603d1fd5ae60"
+    },
+    {
+      "name": "package_fourview_v6_reach_from_completed.py",
+      "bytes": 3288,
+      "sha256": "0f51827b8cd0e56dafc50dae39bdd4c669b7179f991f1a700e8f83c93fa26011"
+    },
+    {
+      "name": "merge_v5_v6_reach_augmented.py",
+      "bytes": 7833,
+      "sha256": "6807a2e8fd3a8d02eca17b7d79edf286d33e40b27254d2baac91d2fa41a1e396"
+    },
+    {
+      "name": "finalize_reach_v6_expanded.py",
+      "bytes": 5155,
+      "sha256": "6151cf3987f9cb2e620d8457c4eb08c0194d40cf41967f666085ac9bc704b326"
+    },
+    {
+      "name": "run_v6_28_fourcam_1step_debug.py",
+      "bytes": 12341,
+      "sha256": "d83a64e4a26a37c896b99b1da11960665bce6d033caaac105f60d7ed82b6379d"
+    },
+    {
+      "name": "audit_v6_28_fourcam_debug.py",
+      "bytes": 11071,
+      "sha256": "f67ccd12b3232459ce8f0ebf450cb8dde710fd0e7562d72e955e22f027ae93e2"
+    },
+    {
+      "name": "run_v6_28_fourcam_400step.py",
+      "bytes": 11091,
+      "sha256": "8a3ff725b11991baf6fea6bef020a841c3d531af5bf2af72179c3833286475ca"
+    },
+    {
+      "name": "stage_v6_fourcam_heldout_ab.py",
+      "bytes": 7438,
+      "sha256": "7af048dbded81fecdd8507de3826c332ac5b95cfac32df9686e7604bcd7a9c49"
+    },
+    {
+      "name": "run_v6_fourcam_forward_left_ab.py",
+      "bytes": 13136,
+      "sha256": "93065ae5bda9effed3be0f178dd40e7eba6c46f907ba6bc29d4a850fd87463bd"
+    },
+    {
+      "name": "run_v6_fourcam_backward_right_ab.py",
+      "bytes": 13144,
+      "sha256": "138cb42ecf49be4f0e5d117ea91434b63f8c8ffe1ebec6b4488a308c596ad1c5"
+    },
+    {
+      "name": "reuse_v6_fourcam_identity_once.py",
+      "bytes": 773,
+      "sha256": "c25f002639d0d09561425c4167a2d0d984f7e164528d3452a1b997fbe36f0ee6"
+    },
+    {
+      "name": "analyze_v6_fourcam_heldout_ab.py",
+      "bytes": 10404,
+      "sha256": "519e09ac88470d35187d162fd376a0ec28939ea01dff9166817c64789838446c"
+    },
+    {
+      "name": "v6_fourcam_pixel_iou_qa.py",
+      "bytes": 4083,
+      "sha256": "a1c481d12346c7889d1286b908534dae61ea47401b6b81d62d70100589456bc7"
+    },
+    {
+      "name": "summarize_v6_fourcam_ab.py",
+      "bytes": 5700,
+      "sha256": "6ab9b69950fad2b7ebbbe045d009b127c98051ddd3e1fab68f0a2e84285ab827"
+    }
+  ],
+  "evidence_files": [
+    {
+      "name": "dataset_offline_acceptance.json",
+      "bytes": 3098,
+      "sha256": "78089289293563031824f69e1be13391a75f5124571fcb60e80938d431ae5208"
+    },
+    {
+      "name": "dataset_merge_qa.json",
+      "bytes": 24337,
+      "sha256": "405f286a69a7d2f264439eba1272501e8ab2cf3db6a05fdaaefa39810ac36f5e"
+    },
+    {
+      "name": "fal_1step_debug_audit.json",
+      "bytes": 83147,
+      "sha256": "562b7829a592cf2e2bfa9e9c034223604ce94b2d6a48ca9b8cbf3225e5fdcb41"
+    },
+    {
+      "name": "model_validation.json",
+      "bytes": 1153,
+      "sha256": "7032476fddffa01e99d21e2fb04e7de96502928a45b7386eda1ee08d2a80b569"
+    },
+    {
+      "name": "forward_left_color_iou.json",
+      "bytes": 9762,
+      "sha256": "be7fbbd380d2ded36ff650be676571b2461dfe667813708586f003954b8eadbd"
+    },
+    {
+      "name": "backward_right_color_iou.json",
+      "bytes": 9765,
+      "sha256": "be739712ec5d58f02b9ef84d8fdc7101d8a198cd32a53befe35f61c09651ada8"
+    },
+    {
+      "name": "forward_left_color_centroids.json",
+      "bytes": 10897,
+      "sha256": "d744858fac91ebf23e383a845f8cef30c7013a11469d1689d4db7cc571f58fa5"
+    },
+    {
+      "name": "backward_right_color_centroids.json",
+      "bytes": 10894,
+      "sha256": "4dc65c5f3482e8c4e132ac3ff1ab3ef77414d01d2526830a2a7c4ce72e55c64d"
+    },
+    {
+      "name": "original_v6_ab_report.md",
+      "bytes": 6535,
+      "sha256": "fb4a098b7fb60d8678efbb2afcc0fe7a704ccbad0206bb092139185a65059300"
+    },
+    {
+      "name": "ab_summary_sanitized.json",
+      "bytes": 5188,
+      "sha256": "f2663763c217a647bf428cfeada220e036ce795524c1d12c9752374b1a020903"
+    },
+    {
+      "name": "ab_request_controls_sanitized.json",
+      "bytes": 6911,
+      "sha256": "db7c328585698dc2676d2c049e11aa1614aa67637f6de0782418a03d6cf18309"
+    },
+    {
+      "name": "forward_left_visual_review.jpg",
+      "bytes": 131928,
+      "sha256": "ee2cf447348001c87dedbdedcea0741047deface50d785b2625acf1d74805149"
+    },
+    {
+      "name": "backward_right_visual_review.jpg",
+      "bytes": 132283,
+      "sha256": "493861efe5478328c3cd857b571d060b6140f8cc35f960c644cc04a60d22bb73"
+    }
+  ]
+}
