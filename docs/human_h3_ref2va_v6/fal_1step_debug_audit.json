@@ -1,0 +1,2801 @@
+{
+  "schema": "anymove.fal_h3_ref2va_v6_fourcam_1step_debug_preprocessing/1",
+  "status": "PASS_PREPROCESSED_28_FOUR_CAMERA_SAMPLES",
+  "fal_request_id": "01a1a02c-599c-7281-9144-7c2ef7b46c1e",
+  "source_dataset_sha256": "76faf527f9e5cd7f9521b8a42f306b7f07fda04f6c2d7cc2d4d233f57f102141",
+  "source_training_clips": 28,
+  "preprocessed_samples": 28,
+  "captions_with_FOURCAM": 28,
+  "reference_video_and_image_present_for_all_28": true,
+  "reference1_sparse_video_frames": 9,
+  "no_unexpected_fallback": true,
+  "preprocessing_fallbacks": {
+    "audio_missing_used_silence": 28
+  },
+  "metadata": {
+    "samples": [
+      {
+        "sample_index": 0,
+        "stem": "full_train_lean_alternating_a17_s6104",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10425,
+            "saturated_fraction": 0.070699
+          },
+          "right45": {
+            "saturated_pixels": 10273,
+            "saturated_fraction": 0.069668
+          },
+          "back": {
+            "saturated_pixels": 9894,
+            "saturated_fraction": 0.067098
+          },
+          "top": {
+            "saturated_pixels": 3408,
+            "saturated_fraction": 0.023112
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2696,
+              "saturated_fraction": 0.018283
+            },
+            "right45": {
+              "saturated_pixels": 2695,
+              "saturated_fraction": 0.018277
+            },
+            "back": {
+              "saturated_pixels": 2746,
+              "saturated_fraction": 0.018623
+            },
+            "top": {
+              "saturated_pixels": 840,
+              "saturated_fraction": 0.005697
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2694,
+              "saturated_fraction": 0.01827
+            },
+            "right45": {
+              "saturated_pixels": 2686,
+              "saturated_fraction": 0.018216
+            },
+            "back": {
+              "saturated_pixels": 2740,
+              "saturated_fraction": 0.018582
+            },
+            "top": {
+              "saturated_pixels": 855,
+              "saturated_fraction": 0.005798
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2692,
+              "saturated_fraction": 0.018256
+            },
+            "right45": {
+              "saturated_pixels": 2699,
+              "saturated_fraction": 0.018304
+            },
+            "back": {
+              "saturated_pixels": 2748,
+              "saturated_fraction": 0.018636
+            },
+            "top": {
+              "saturated_pixels": 846,
+              "saturated_fraction": 0.005737
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 1,
+        "stem": "full_train_lean_alternating_a24_s6105",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10401,
+            "saturated_fraction": 0.070536
+          },
+          "right45": {
+            "saturated_pixels": 10241,
+            "saturated_fraction": 0.069451
+          },
+          "back": {
+            "saturated_pixels": 9922,
+            "saturated_fraction": 0.067288
+          },
+          "top": {
+            "saturated_pixels": 3396,
+            "saturated_fraction": 0.023031
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2697,
+              "saturated_fraction": 0.01829
+            },
+            "right45": {
+              "saturated_pixels": 2703,
+              "saturated_fraction": 0.018331
+            },
+            "back": {
+              "saturated_pixels": 2743,
+              "saturated_fraction": 0.018602
+            },
+            "top": {
+              "saturated_pixels": 828,
+              "saturated_fraction": 0.005615
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2684,
+              "saturated_fraction": 0.018202
+            },
+            "right45": {
+              "saturated_pixels": 2688,
+              "saturated_fraction": 0.018229
+            },
+            "back": {
+              "saturated_pixels": 2727,
+              "saturated_fraction": 0.018494
+            },
+            "top": {
+              "saturated_pixels": 838,
+              "saturated_fraction": 0.005683
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2698,
+              "saturated_fraction": 0.018297
+            },
+            "right45": {
+              "saturated_pixels": 2694,
+              "saturated_fraction": 0.01827
+            },
+            "back": {
+              "saturated_pixels": 2738,
+              "saturated_fraction": 0.018568
+            },
+            "top": {
+              "saturated_pixels": 851,
+              "saturated_fraction": 0.005771
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 2,
+        "stem": "full_train_lean_left_a15_s6101",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10381,
+            "saturated_fraction": 0.070401
+          },
+          "right45": {
+            "saturated_pixels": 10198,
+            "saturated_fraction": 0.06916
+          },
+          "back": {
+            "saturated_pixels": 9853,
+            "saturated_fraction": 0.06682
+          },
+          "top": {
+            "saturated_pixels": 3321,
+            "saturated_fraction": 0.022522
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2702,
+              "saturated_fraction": 0.018324
+            },
+            "right45": {
+              "saturated_pixels": 2699,
+              "saturated_fraction": 0.018304
+            },
+            "back": {
+              "saturated_pixels": 2738,
+              "saturated_fraction": 0.018568
+            },
+            "top": {
+              "saturated_pixels": 826,
+              "saturated_fraction": 0.005602
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2671,
+              "saturated_fraction": 0.018114
+            },
+            "right45": {
+              "saturated_pixels": 2690,
+              "saturated_fraction": 0.018243
+            },
+            "back": {
+              "saturated_pixels": 2724,
+              "saturated_fraction": 0.018473
+            },
+            "top": {
+              "saturated_pixels": 818,
+              "saturated_fraction": 0.005547
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2691,
+              "saturated_fraction": 0.01825
+            },
+            "right45": {
+              "saturated_pixels": 2705,
+              "saturated_fraction": 0.018344
+            },
+            "back": {
+              "saturated_pixels": 2733,
+              "saturated_fraction": 0.018534
+            },
+            "top": {
+              "saturated_pixels": 842,
+              "saturated_fraction": 0.00571
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 3,
+        "stem": "full_train_lean_left_a22_s6102",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10341,
+            "saturated_fraction": 0.070129
+          },
+          "right45": {
+            "saturated_pixels": 10124,
+            "saturated_fraction": 0.068658
+          },
+          "back": {
+            "saturated_pixels": 9876,
+            "saturated_fraction": 0.066976
+          },
+          "top": {
+            "saturated_pixels": 3334,
+            "saturated_fraction": 0.02261
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2699,
+              "saturated_fraction": 0.018304
+            },
+            "right45": {
+              "saturated_pixels": 2698,
+              "saturated_fraction": 0.018297
+            },
+            "back": {
+              "saturated_pixels": 2744,
+              "saturated_fraction": 0.018609
+            },
+            "top": {
+              "saturated_pixels": 841,
+              "saturated_fraction": 0.005703
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2670,
+              "saturated_fraction": 0.018107
+            },
+            "right45": {
+              "saturated_pixels": 2688,
+              "saturated_fraction": 0.018229
+            },
+            "back": {
+              "saturated_pixels": 2733,
+              "saturated_fraction": 0.018534
+            },
+            "top": {
+              "saturated_pixels": 839,
+              "saturated_fraction": 0.00569
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2678,
+              "saturated_fraction": 0.018161
+            },
+            "right45": {
+              "saturated_pixels": 2696,
+              "saturated_fraction": 0.018283
+            },
+            "back": {
+              "saturated_pixels": 2745,
+              "saturated_fraction": 0.018616
+            },
+            "top": {
+              "saturated_pixels": 854,
+              "saturated_fraction": 0.005792
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 4,
+        "stem": "full_train_lean_left_a28_s6103",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10294,
+            "saturated_fraction": 0.069811
+          },
+          "right45": {
+            "saturated_pixels": 9987,
+            "saturated_fraction": 0.067729
+          },
+          "back": {
+            "saturated_pixels": 9818,
+            "saturated_fraction": 0.066583
+          },
+          "top": {
+            "saturated_pixels": 3505,
+            "saturated_fraction": 0.02377
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2703,
+              "saturated_fraction": 0.018331
+            },
+            "right45": {
+              "saturated_pixels": 2702,
+              "saturated_fraction": 0.018324
+            },
+            "back": {
+              "saturated_pixels": 2744,
+              "saturated_fraction": 0.018609
+            },
+            "top": {
+              "saturated_pixels": 841,
+              "saturated_fraction": 0.005703
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2660,
+              "saturated_fraction": 0.018039
+            },
+            "right45": {
+              "saturated_pixels": 2660,
+              "saturated_fraction": 0.018039
+            },
+            "back": {
+              "saturated_pixels": 2751,
+              "saturated_fraction": 0.018656
+            },
+            "top": {
+              "saturated_pixels": 841,
+              "saturated_fraction": 0.005703
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2681,
+              "saturated_fraction": 0.018182
+            },
+            "right45": {
+              "saturated_pixels": 2714,
+              "saturated_fraction": 0.018405
+            },
+            "back": {
+              "saturated_pixels": 2746,
+              "saturated_fraction": 0.018623
+            },
+            "top": {
+              "saturated_pixels": 845,
+              "saturated_fraction": 0.005731
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 5,
+        "stem": "full_train_lean_right_a15_s6101",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10298,
+            "saturated_fraction": 0.069838
+          },
+          "right45": {
+            "saturated_pixels": 10275,
+            "saturated_fraction": 0.069682
+          },
+          "back": {
+            "saturated_pixels": 9841,
+            "saturated_fraction": 0.066739
+          },
+          "top": {
+            "saturated_pixels": 3372,
+            "saturated_fraction": 0.022868
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2698,
+              "saturated_fraction": 0.018297
+            },
+            "right45": {
+              "saturated_pixels": 2699,
+              "saturated_fraction": 0.018304
+            },
+            "back": {
+              "saturated_pixels": 2744,
+              "saturated_fraction": 0.018609
+            },
+            "top": {
+              "saturated_pixels": 826,
+              "saturated_fraction": 0.005602
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2687,
+              "saturated_fraction": 0.018222
+            },
+            "right45": {
+              "saturated_pixels": 2687,
+              "saturated_fraction": 0.018222
+            },
+            "back": {
+              "saturated_pixels": 2736,
+              "saturated_fraction": 0.018555
+            },
+            "top": {
+              "saturated_pixels": 827,
+              "saturated_fraction": 0.005608
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2692,
+              "saturated_fraction": 0.018256
+            },
+            "right45": {
+              "saturated_pixels": 2701,
+              "saturated_fraction": 0.018317
+            },
+            "back": {
+              "saturated_pixels": 2732,
+              "saturated_fraction": 0.018528
+            },
+            "top": {
+              "saturated_pixels": 854,
+              "saturated_fraction": 0.005792
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 6,
+        "stem": "full_train_lean_right_a22_s6102",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10338,
+            "saturated_fraction": 0.070109
+          },
+          "right45": {
+            "saturated_pixels": 10268,
+            "saturated_fraction": 0.069634
+          },
+          "back": {
+            "saturated_pixels": 9824,
+            "saturated_fraction": 0.066623
+          },
+          "top": {
+            "saturated_pixels": 3365,
+            "saturated_fraction": 0.02282
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2701,
+              "saturated_fraction": 0.018317
+            },
+            "right45": {
+              "saturated_pixels": 2693,
+              "saturated_fraction": 0.018263
+            },
+            "back": {
+              "saturated_pixels": 2742,
+              "saturated_fraction": 0.018595
+            },
+            "top": {
+              "saturated_pixels": 825,
+              "saturated_fraction": 0.005595
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2674,
+              "saturated_fraction": 0.018134
+            },
+            "right45": {
+              "saturated_pixels": 2692,
+              "saturated_fraction": 0.018256
+            },
+            "back": {
+              "saturated_pixels": 2739,
+              "saturated_fraction": 0.018575
+            },
+            "top": {
+              "saturated_pixels": 839,
+              "saturated_fraction": 0.00569
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2680,
+              "saturated_fraction": 0.018175
+            },
+            "right45": {
+              "saturated_pixels": 2717,
+              "saturated_fraction": 0.018426
+            },
+            "back": {
+              "saturated_pixels": 2746,
+              "saturated_fraction": 0.018623
+            },
+            "top": {
+              "saturated_pixels": 856,
+              "saturated_fraction": 0.005805
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 7,
+        "stem": "full_train_lean_right_a28_s6103",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10140,
+            "saturated_fraction": 0.068766
+          },
+          "right45": {
+            "saturated_pixels": 10222,
+            "saturated_fraction": 0.069322
+          },
+          "back": {
+            "saturated_pixels": 9815,
+            "saturated_fraction": 0.066562
+          },
+          "top": {
+            "saturated_pixels": 3546,
+            "saturated_fraction": 0.024048
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2696,
+              "saturated_fraction": 0.018283
+            },
+            "right45": {
+              "saturated_pixels": 2703,
+              "saturated_fraction": 0.018331
+            },
+            "back": {
+              "saturated_pixels": 2748,
+              "saturated_fraction": 0.018636
+            },
+            "top": {
+              "saturated_pixels": 836,
+              "saturated_fraction": 0.005669
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2654,
+              "saturated_fraction": 0.017999
+            },
+            "right45": {
+              "saturated_pixels": 2651,
+              "saturated_fraction": 0.017978
+            },
+            "back": {
+              "saturated_pixels": 2747,
+              "saturated_fraction": 0.018629
+            },
+            "top": {
+              "saturated_pixels": 846,
+              "saturated_fraction": 0.005737
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2693,
+              "saturated_fraction": 0.018263
+            },
+            "right45": {
+              "saturated_pixels": 2703,
+              "saturated_fraction": 0.018331
+            },
+            "back": {
+              "saturated_pixels": 2752,
+              "saturated_fraction": 0.018663
+            },
+            "top": {
+              "saturated_pixels": 846,
+              "saturated_fraction": 0.005737
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 8,
+        "stem": "full_train_reach_backward_left_a40_s7301",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10333,
+            "saturated_fraction": 0.070075
+          },
+          "right45": {
+            "saturated_pixels": 9153,
+            "saturated_fraction": 0.062073
+          },
+          "back": {
+            "saturated_pixels": 9655,
+            "saturated_fraction": 0.065477
+          },
+          "top": {
+            "saturated_pixels": 3852,
+            "saturated_fraction": 0.026123
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2700,
+              "saturated_fraction": 0.018311
+            },
+            "right45": {
+              "saturated_pixels": 2693,
+              "saturated_fraction": 0.018263
+            },
+            "back": {
+              "saturated_pixels": 2750,
+              "saturated_fraction": 0.01865
+            },
+            "top": {
+              "saturated_pixels": 829,
+              "saturated_fraction": 0.005622
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2706,
+              "saturated_fraction": 0.018351
+            },
+            "right45": {
+              "saturated_pixels": 2572,
+              "saturated_fraction": 0.017442
+            },
+            "back": {
+              "saturated_pixels": 2668,
+              "saturated_fraction": 0.018094
+            },
+            "top": {
+              "saturated_pixels": 940,
+              "saturated_fraction": 0.006375
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2706,
+              "saturated_fraction": 0.018351
+            },
+            "right45": {
+              "saturated_pixels": 2689,
+              "saturated_fraction": 0.018236
+            },
+            "back": {
+              "saturated_pixels": 2750,
+              "saturated_fraction": 0.01865
+            },
+            "top": {
+              "saturated_pixels": 837,
+              "saturated_fraction": 0.005676
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 9,
+        "stem": "full_train_reach_backward_left_a60_s7302",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10321,
+            "saturated_fraction": 0.069994
+          },
+          "right45": {
+            "saturated_pixels": 9157,
+            "saturated_fraction": 0.0621
+          },
+          "back": {
+            "saturated_pixels": 9481,
+            "saturated_fraction": 0.064297
+          },
+          "top": {
+            "saturated_pixels": 4008,
+            "saturated_fraction": 0.027181
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2702,
+              "saturated_fraction": 0.018324
+            },
+            "right45": {
+              "saturated_pixels": 2696,
+              "saturated_fraction": 0.018283
+            },
+            "back": {
+              "saturated_pixels": 2748,
+              "saturated_fraction": 0.018636
+            },
+            "top": {
+              "saturated_pixels": 830,
+              "saturated_fraction": 0.005629
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2706,
+              "saturated_fraction": 0.018351
+            },
+            "right45": {
+              "saturated_pixels": 2501,
+              "saturated_fraction": 0.016961
+            },
+            "back": {
+              "saturated_pixels": 2595,
+              "saturated_fraction": 0.017598
+            },
+            "top": {
+              "saturated_pixels": 1000,
+              "saturated_fraction": 0.006782
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2714,
+              "saturated_fraction": 0.018405
+            },
+            "right45": {
+              "saturated_pixels": 2638,
+              "saturated_fraction": 0.01789
+            },
+            "back": {
+              "saturated_pixels": 2736,
+              "saturated_fraction": 0.018555
+            },
+            "top": {
+              "saturated_pixels": 889,
+              "saturated_fraction": 0.006029
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 10,
+        "stem": "full_train_reach_backward_right_a40_s7301",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 9277,
+            "saturated_fraction": 0.062914
+          },
+          "right45": {
+            "saturated_pixels": 10272,
+            "saturated_fraction": 0.069661
+          },
+          "back": {
+            "saturated_pixels": 9644,
+            "saturated_fraction": 0.065403
+          },
+          "top": {
+            "saturated_pixels": 3824,
+            "saturated_fraction": 0.025933
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2701,
+              "saturated_fraction": 0.018317
+            },
+            "right45": {
+              "saturated_pixels": 2696,
+              "saturated_fraction": 0.018283
+            },
+            "back": {
+              "saturated_pixels": 2747,
+              "saturated_fraction": 0.018629
+            },
+            "top": {
+              "saturated_pixels": 838,
+              "saturated_fraction": 0.005683
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2578,
+              "saturated_fraction": 0.017483
+            },
+            "right45": {
+              "saturated_pixels": 2705,
+              "saturated_fraction": 0.018344
+            },
+            "back": {
+              "saturated_pixels": 2677,
+              "saturated_fraction": 0.018155
+            },
+            "top": {
+              "saturated_pixels": 957,
+              "saturated_fraction": 0.00649
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2692,
+              "saturated_fraction": 0.018256
+            },
+            "right45": {
+              "saturated_pixels": 2703,
+              "saturated_fraction": 0.018331
+            },
+            "back": {
+              "saturated_pixels": 2756,
+              "saturated_fraction": 0.01869
+            },
+            "top": {
+              "saturated_pixels": 851,
+              "saturated_fraction": 0.005771
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 11,
+        "stem": "full_train_reach_backward_right_a60_s7302",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 9318,
+            "saturated_fraction": 0.063192
+          },
+          "right45": {
+            "saturated_pixels": 10211,
+            "saturated_fraction": 0.069248
+          },
+          "back": {
+            "saturated_pixels": 9488,
+            "saturated_fraction": 0.064345
+          },
+          "top": {
+            "saturated_pixels": 3986,
+            "saturated_fraction": 0.027032
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2702,
+              "saturated_fraction": 0.018324
+            },
+            "right45": {
+              "saturated_pixels": 2695,
+              "saturated_fraction": 0.018277
+            },
+            "back": {
+              "saturated_pixels": 2745,
+              "saturated_fraction": 0.018616
+            },
+            "top": {
+              "saturated_pixels": 838,
+              "saturated_fraction": 0.005683
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2504,
+              "saturated_fraction": 0.016981
+            },
+            "right45": {
+              "saturated_pixels": 2705,
+              "saturated_fraction": 0.018344
+            },
+            "back": {
+              "saturated_pixels": 2602,
+              "saturated_fraction": 0.017646
+            },
+            "top": {
+              "saturated_pixels": 1006,
+              "saturated_fraction": 0.006822
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2651,
+              "saturated_fraction": 0.017978
+            },
+            "right45": {
+              "saturated_pixels": 2715,
+              "saturated_fraction": 0.018412
+            },
+            "back": {
+              "saturated_pixels": 2738,
+              "saturated_fraction": 0.018568
+            },
+            "top": {
+              "saturated_pixels": 900,
+              "saturated_fraction": 0.006104
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 12,
+        "stem": "full_train_reach_diagonal_left_a48_s7301",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 9569,
+            "saturated_fraction": 0.064894
+          },
+          "right45": {
+            "saturated_pixels": 10275,
+            "saturated_fraction": 0.069682
+          },
+          "back": {
+            "saturated_pixels": 9680,
+            "saturated_fraction": 0.065647
+          },
+          "top": {
+            "saturated_pixels": 4195,
+            "saturated_fraction": 0.028449
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2701,
+              "saturated_fraction": 0.018317
+            },
+            "right45": {
+              "saturated_pixels": 2691,
+              "saturated_fraction": 0.01825
+            },
+            "back": {
+              "saturated_pixels": 2745,
+              "saturated_fraction": 0.018616
+            },
+            "top": {
+              "saturated_pixels": 829,
+              "saturated_fraction": 0.005622
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2490,
+              "saturated_fraction": 0.016886
+            },
+            "right45": {
+              "saturated_pixels": 2712,
+              "saturated_fraction": 0.018392
+            },
+            "back": {
+              "saturated_pixels": 2681,
+              "saturated_fraction": 0.018182
+            },
+            "top": {
+              "saturated_pixels": 1003,
+              "saturated_fraction": 0.006802
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2684,
+              "saturated_fraction": 0.018202
+            },
+            "right45": {
+              "saturated_pixels": 2695,
+              "saturated_fraction": 0.018277
+            },
+            "back": {
+              "saturated_pixels": 2749,
+              "saturated_fraction": 0.018643
+            },
+            "top": {
+              "saturated_pixels": 858,
+              "saturated_fraction": 0.005819
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 13,
+        "stem": "full_train_reach_diagonal_left_a67_s7302",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 9317,
+            "saturated_fraction": 0.063185
+          },
+          "right45": {
+            "saturated_pixels": 10212,
+            "saturated_fraction": 0.069255
+          },
+          "back": {
+            "saturated_pixels": 9495,
+            "saturated_fraction": 0.064392
+          },
+          "top": {
+            "saturated_pixels": 4278,
+            "saturated_fraction": 0.029012
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2698,
+              "saturated_fraction": 0.018297
+            },
+            "right45": {
+              "saturated_pixels": 2694,
+              "saturated_fraction": 0.01827
+            },
+            "back": {
+              "saturated_pixels": 2752,
+              "saturated_fraction": 0.018663
+            },
+            "top": {
+              "saturated_pixels": 828,
+              "saturated_fraction": 0.005615
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2405,
+              "saturated_fraction": 0.01631
+            },
+            "right45": {
+              "saturated_pixels": 2714,
+              "saturated_fraction": 0.018405
+            },
+            "back": {
+              "saturated_pixels": 2621,
+              "saturated_fraction": 0.017775
+            },
+            "top": {
+              "saturated_pixels": 1029,
+              "saturated_fraction": 0.006978
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2622,
+              "saturated_fraction": 0.017782
+            },
+            "right45": {
+              "saturated_pixels": 2686,
+              "saturated_fraction": 0.018216
+            },
+            "back": {
+              "saturated_pixels": 2734,
+              "saturated_fraction": 0.018541
+            },
+            "top": {
+              "saturated_pixels": 933,
+              "saturated_fraction": 0.006327
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 14,
+        "stem": "full_train_reach_diagonal_right_a48_s7301",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10471,
+            "saturated_fraction": 0.071011
+          },
+          "right45": {
+            "saturated_pixels": 9474,
+            "saturated_fraction": 0.06425
+          },
+          "back": {
+            "saturated_pixels": 9622,
+            "saturated_fraction": 0.065253
+          },
+          "top": {
+            "saturated_pixels": 4158,
+            "saturated_fraction": 0.028198
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2702,
+              "saturated_fraction": 0.018324
+            },
+            "right45": {
+              "saturated_pixels": 2697,
+              "saturated_fraction": 0.01829
+            },
+            "back": {
+              "saturated_pixels": 2752,
+              "saturated_fraction": 0.018663
+            },
+            "top": {
+              "saturated_pixels": 839,
+              "saturated_fraction": 0.00569
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2723,
+              "saturated_fraction": 0.018467
+            },
+            "right45": {
+              "saturated_pixels": 2496,
+              "saturated_fraction": 0.016927
+            },
+            "back": {
+              "saturated_pixels": 2686,
+              "saturated_fraction": 0.018216
+            },
+            "top": {
+              "saturated_pixels": 1013,
+              "saturated_fraction": 0.00687
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2706,
+              "saturated_fraction": 0.018351
+            },
+            "right45": {
+              "saturated_pixels": 2685,
+              "saturated_fraction": 0.018209
+            },
+            "back": {
+              "saturated_pixels": 2758,
+              "saturated_fraction": 0.018704
+            },
+            "top": {
+              "saturated_pixels": 871,
+              "saturated_fraction": 0.005907
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 15,
+        "stem": "full_train_reach_diagonal_right_a67_s7302",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10406,
+            "saturated_fraction": 0.07057
+          },
+          "right45": {
+            "saturated_pixels": 9237,
+            "saturated_fraction": 0.062642
+          },
+          "back": {
+            "saturated_pixels": 9457,
+            "saturated_fraction": 0.064134
+          },
+          "top": {
+            "saturated_pixels": 4274,
+            "saturated_fraction": 0.028985
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2698,
+              "saturated_fraction": 0.018297
+            },
+            "right45": {
+              "saturated_pixels": 2695,
+              "saturated_fraction": 0.018277
+            },
+            "back": {
+              "saturated_pixels": 2750,
+              "saturated_fraction": 0.01865
+            },
+            "top": {
+              "saturated_pixels": 840,
+              "saturated_fraction": 0.005697
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2716,
+              "saturated_fraction": 0.018419
+            },
+            "right45": {
+              "saturated_pixels": 2404,
+              "saturated_fraction": 0.016303
+            },
+            "back": {
+              "saturated_pixels": 2620,
+              "saturated_fraction": 0.017768
+            },
+            "top": {
+              "saturated_pixels": 1042,
+              "saturated_fraction": 0.007067
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2687,
+              "saturated_fraction": 0.018222
+            },
+            "right45": {
+              "saturated_pixels": 2620,
+              "saturated_fraction": 0.017768
+            },
+            "back": {
+              "saturated_pixels": 2732,
+              "saturated_fraction": 0.018528
+            },
+            "top": {
+              "saturated_pixels": 941,
+              "saturated_fraction": 0.006382
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 16,
+        "stem": "full_train_reach_forward_left_a44_s7301",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 9490,
+            "saturated_fraction": 0.064358
+          },
+          "right45": {
+            "saturated_pixels": 10389,
+            "saturated_fraction": 0.070455
+          },
+          "back": {
+            "saturated_pixels": 9490,
+            "saturated_fraction": 0.064358
+          },
+          "top": {
+            "saturated_pixels": 3798,
+            "saturated_fraction": 0.025757
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2703,
+              "saturated_fraction": 0.018331
+            },
+            "right45": {
+              "saturated_pixels": 2691,
+              "saturated_fraction": 0.01825
+            },
+            "back": {
+              "saturated_pixels": 2747,
+              "saturated_fraction": 0.018629
+            },
+            "top": {
+              "saturated_pixels": 826,
+              "saturated_fraction": 0.005602
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2567,
+              "saturated_fraction": 0.017409
+            },
+            "right45": {
+              "saturated_pixels": 2705,
+              "saturated_fraction": 0.018344
+            },
+            "back": {
+              "saturated_pixels": 2627,
+              "saturated_fraction": 0.017815
+            },
+            "top": {
+              "saturated_pixels": 966,
+              "saturated_fraction": 0.006551
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2690,
+              "saturated_fraction": 0.018243
+            },
+            "right45": {
+              "saturated_pixels": 2691,
+              "saturated_fraction": 0.01825
+            },
+            "back": {
+              "saturated_pixels": 2749,
+              "saturated_fraction": 0.018643
+            },
+            "top": {
+              "saturated_pixels": 835,
+              "saturated_fraction": 0.005663
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 17,
+        "stem": "full_train_reach_forward_left_a66_s7302",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 9712,
+            "saturated_fraction": 0.065864
+          },
+          "right45": {
+            "saturated_pixels": 10321,
+            "saturated_fraction": 0.069994
+          },
+          "back": {
+            "saturated_pixels": 9151,
+            "saturated_fraction": 0.062059
+          },
+          "top": {
+            "saturated_pixels": 3887,
+            "saturated_fraction": 0.02636
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2708,
+              "saturated_fraction": 0.018365
+            },
+            "right45": {
+              "saturated_pixels": 2695,
+              "saturated_fraction": 0.018277
+            },
+            "back": {
+              "saturated_pixels": 2748,
+              "saturated_fraction": 0.018636
+            },
+            "top": {
+              "saturated_pixels": 829,
+              "saturated_fraction": 0.005622
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2523,
+              "saturated_fraction": 0.01711
+            },
+            "right45": {
+              "saturated_pixels": 2675,
+              "saturated_fraction": 0.018141
+            },
+            "back": {
+              "saturated_pixels": 2505,
+              "saturated_fraction": 0.016988
+            },
+            "top": {
+              "saturated_pixels": 1036,
+              "saturated_fraction": 0.007026
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2633,
+              "saturated_fraction": 0.017856
+            },
+            "right45": {
+              "saturated_pixels": 2710,
+              "saturated_fraction": 0.018378
+            },
+            "back": {
+              "saturated_pixels": 2716,
+              "saturated_fraction": 0.018419
+            },
+            "top": {
+              "saturated_pixels": 888,
+              "saturated_fraction": 0.006022
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 18,
+        "stem": "full_train_reach_forward_right_a44_s7301",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10565,
+            "saturated_fraction": 0.071648
+          },
+          "right45": {
+            "saturated_pixels": 9415,
+            "saturated_fraction": 0.06385
+          },
+          "back": {
+            "saturated_pixels": 9429,
+            "saturated_fraction": 0.063944
+          },
+          "top": {
+            "saturated_pixels": 3837,
+            "saturated_fraction": 0.026021
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2697,
+              "saturated_fraction": 0.01829
+            },
+            "right45": {
+              "saturated_pixels": 2697,
+              "saturated_fraction": 0.01829
+            },
+            "back": {
+              "saturated_pixels": 2747,
+              "saturated_fraction": 0.018629
+            },
+            "top": {
+              "saturated_pixels": 842,
+              "saturated_fraction": 0.00571
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2703,
+              "saturated_fraction": 0.018331
+            },
+            "right45": {
+              "saturated_pixels": 2566,
+              "saturated_fraction": 0.017402
+            },
+            "back": {
+              "saturated_pixels": 2631,
+              "saturated_fraction": 0.017843
+            },
+            "top": {
+              "saturated_pixels": 976,
+              "saturated_fraction": 0.006619
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2714,
+              "saturated_fraction": 0.018405
+            },
+            "right45": {
+              "saturated_pixels": 2690,
+              "saturated_fraction": 0.018243
+            },
+            "back": {
+              "saturated_pixels": 2752,
+              "saturated_fraction": 0.018663
+            },
+            "top": {
+              "saturated_pixels": 843,
+              "saturated_fraction": 0.005717
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 19,
+        "stem": "full_train_reach_forward_right_a66_s7302",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10489,
+            "saturated_fraction": 0.071133
+          },
+          "right45": {
+            "saturated_pixels": 9640,
+            "saturated_fraction": 0.065375
+          },
+          "back": {
+            "saturated_pixels": 9111,
+            "saturated_fraction": 0.061788
+          },
+          "top": {
+            "saturated_pixels": 3910,
+            "saturated_fraction": 0.026516
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2698,
+              "saturated_fraction": 0.018297
+            },
+            "right45": {
+              "saturated_pixels": 2701,
+              "saturated_fraction": 0.018317
+            },
+            "back": {
+              "saturated_pixels": 2747,
+              "saturated_fraction": 0.018629
+            },
+            "top": {
+              "saturated_pixels": 839,
+              "saturated_fraction": 0.00569
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2671,
+              "saturated_fraction": 0.018114
+            },
+            "right45": {
+              "saturated_pixels": 2522,
+              "saturated_fraction": 0.017103
+            },
+            "back": {
+              "saturated_pixels": 2508,
+              "saturated_fraction": 0.017008
+            },
+            "top": {
+              "saturated_pixels": 1050,
+              "saturated_fraction": 0.007121
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2724,
+              "saturated_fraction": 0.018473
+            },
+            "right45": {
+              "saturated_pixels": 2629,
+              "saturated_fraction": 0.017829
+            },
+            "back": {
+              "saturated_pixels": 2720,
+              "saturated_fraction": 0.018446
+            },
+            "top": {
+              "saturated_pixels": 896,
+              "saturated_fraction": 0.006076
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 20,
+        "stem": "full_train_reach_high_left_a45_s7301",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 9779,
+            "saturated_fraction": 0.066318
+          },
+          "right45": {
+            "saturated_pixels": 10023,
+            "saturated_fraction": 0.067973
+          },
+          "back": {
+            "saturated_pixels": 9870,
+            "saturated_fraction": 0.066935
+          },
+          "top": {
+            "saturated_pixels": 4332,
+            "saturated_fraction": 0.029378
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2700,
+              "saturated_fraction": 0.018311
+            },
+            "right45": {
+              "saturated_pixels": 2693,
+              "saturated_fraction": 0.018263
+            },
+            "back": {
+              "saturated_pixels": 2744,
+              "saturated_fraction": 0.018609
+            },
+            "top": {
+              "saturated_pixels": 830,
+              "saturated_fraction": 0.005629
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2591,
+              "saturated_fraction": 0.017571
+            },
+            "right45": {
+              "saturated_pixels": 2641,
+              "saturated_fraction": 0.01791
+            },
+            "back": {
+              "saturated_pixels": 2753,
+              "saturated_fraction": 0.01867
+            },
+            "top": {
+              "saturated_pixels": 1020,
+              "saturated_fraction": 0.006917
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2688,
+              "saturated_fraction": 0.018229
+            },
+            "right45": {
+              "saturated_pixels": 2694,
+              "saturated_fraction": 0.01827
+            },
+            "back": {
+              "saturated_pixels": 2742,
+              "saturated_fraction": 0.018595
+            },
+            "top": {
+              "saturated_pixels": 879,
+              "saturated_fraction": 0.005961
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 21,
+        "stem": "full_train_reach_high_left_a70_s7302",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 9664,
+            "saturated_fraction": 0.065538
+          },
+          "right45": {
+            "saturated_pixels": 10108,
+            "saturated_fraction": 0.068549
+          },
+          "back": {
+            "saturated_pixels": 9854,
+            "saturated_fraction": 0.066827
+          },
+          "top": {
+            "saturated_pixels": 4340,
+            "saturated_fraction": 0.029433
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2703,
+              "saturated_fraction": 0.018331
+            },
+            "right45": {
+              "saturated_pixels": 2694,
+              "saturated_fraction": 0.01827
+            },
+            "back": {
+              "saturated_pixels": 2749,
+              "saturated_fraction": 0.018643
+            },
+            "top": {
+              "saturated_pixels": 829,
+              "saturated_fraction": 0.005622
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2562,
+              "saturated_fraction": 0.017375
+            },
+            "right45": {
+              "saturated_pixels": 2637,
+              "saturated_fraction": 0.017883
+            },
+            "back": {
+              "saturated_pixels": 2748,
+              "saturated_fraction": 0.018636
+            },
+            "top": {
+              "saturated_pixels": 1043,
+              "saturated_fraction": 0.007073
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2637,
+              "saturated_fraction": 0.017883
+            },
+            "right45": {
+              "saturated_pixels": 2643,
+              "saturated_fraction": 0.017924
+            },
+            "back": {
+              "saturated_pixels": 2742,
+              "saturated_fraction": 0.018595
+            },
+            "top": {
+              "saturated_pixels": 959,
+              "saturated_fraction": 0.006504
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 22,
+        "stem": "full_train_reach_high_right_a45_s7301",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10182,
+            "saturated_fraction": 0.069051
+          },
+          "right45": {
+            "saturated_pixels": 9654,
+            "saturated_fraction": 0.06547
+          },
+          "back": {
+            "saturated_pixels": 9857,
+            "saturated_fraction": 0.066847
+          },
+          "top": {
+            "saturated_pixels": 4306,
+            "saturated_fraction": 0.029202
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2700,
+              "saturated_fraction": 0.018311
+            },
+            "right45": {
+              "saturated_pixels": 2694,
+              "saturated_fraction": 0.01827
+            },
+            "back": {
+              "saturated_pixels": 2749,
+              "saturated_fraction": 0.018643
+            },
+            "top": {
+              "saturated_pixels": 839,
+              "saturated_fraction": 0.00569
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2641,
+              "saturated_fraction": 0.01791
+            },
+            "right45": {
+              "saturated_pixels": 2586,
+              "saturated_fraction": 0.017537
+            },
+            "back": {
+              "saturated_pixels": 2756,
+              "saturated_fraction": 0.01869
+            },
+            "top": {
+              "saturated_pixels": 1034,
+              "saturated_fraction": 0.007012
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2697,
+              "saturated_fraction": 0.01829
+            },
+            "right45": {
+              "saturated_pixels": 2680,
+              "saturated_fraction": 0.018175
+            },
+            "back": {
+              "saturated_pixels": 2755,
+              "saturated_fraction": 0.018684
+            },
+            "top": {
+              "saturated_pixels": 880,
+              "saturated_fraction": 0.005968
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 23,
+        "stem": "full_train_reach_high_right_a70_s7302",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10235,
+            "saturated_fraction": 0.069411
+          },
+          "right45": {
+            "saturated_pixels": 9545,
+            "saturated_fraction": 0.064731
+          },
+          "back": {
+            "saturated_pixels": 9832,
+            "saturated_fraction": 0.066678
+          },
+          "top": {
+            "saturated_pixels": 4344,
+            "saturated_fraction": 0.02946
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2701,
+              "saturated_fraction": 0.018317
+            },
+            "right45": {
+              "saturated_pixels": 2694,
+              "saturated_fraction": 0.01827
+            },
+            "back": {
+              "saturated_pixels": 2749,
+              "saturated_fraction": 0.018643
+            },
+            "top": {
+              "saturated_pixels": 843,
+              "saturated_fraction": 0.005717
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2642,
+              "saturated_fraction": 0.017917
+            },
+            "right45": {
+              "saturated_pixels": 2562,
+              "saturated_fraction": 0.017375
+            },
+            "back": {
+              "saturated_pixels": 2761,
+              "saturated_fraction": 0.018724
+            },
+            "top": {
+              "saturated_pixels": 1050,
+              "saturated_fraction": 0.007121
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2648,
+              "saturated_fraction": 0.017958
+            },
+            "right45": {
+              "saturated_pixels": 2640,
+              "saturated_fraction": 0.017904
+            },
+            "back": {
+              "saturated_pixels": 2747,
+              "saturated_fraction": 0.018629
+            },
+            "top": {
+              "saturated_pixels": 970,
+              "saturated_fraction": 0.006578
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 24,
+        "stem": "full_train_reach_left_a50_s6201",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 9667,
+            "saturated_fraction": 0.065559
+          },
+          "right45": {
+            "saturated_pixels": 9979,
+            "saturated_fraction": 0.067674
+          },
+          "back": {
+            "saturated_pixels": 9870,
+            "saturated_fraction": 0.066935
+          },
+          "top": {
+            "saturated_pixels": 4314,
+            "saturated_fraction": 0.029256
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2701,
+              "saturated_fraction": 0.018317
+            },
+            "right45": {
+              "saturated_pixels": 2693,
+              "saturated_fraction": 0.018263
+            },
+            "back": {
+              "saturated_pixels": 2746,
+              "saturated_fraction": 0.018623
+            },
+            "top": {
+              "saturated_pixels": 830,
+              "saturated_fraction": 0.005629
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2575,
+              "saturated_fraction": 0.017463
+            },
+            "right45": {
+              "saturated_pixels": 2649,
+              "saturated_fraction": 0.017965
+            },
+            "back": {
+              "saturated_pixels": 2739,
+              "saturated_fraction": 0.018575
+            },
+            "top": {
+              "saturated_pixels": 1031,
+              "saturated_fraction": 0.006992
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2686,
+              "saturated_fraction": 0.018216
+            },
+            "right45": {
+              "saturated_pixels": 2684,
+              "saturated_fraction": 0.018202
+            },
+            "back": {
+              "saturated_pixels": 2735,
+              "saturated_fraction": 0.018548
+            },
+            "top": {
+              "saturated_pixels": 904,
+              "saturated_fraction": 0.006131
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 25,
+        "stem": "full_train_reach_left_a62_s6202",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 9640,
+            "saturated_fraction": 0.065375
+          },
+          "right45": {
+            "saturated_pixels": 10011,
+            "saturated_fraction": 0.067891
+          },
+          "back": {
+            "saturated_pixels": 9838,
+            "saturated_fraction": 0.066718
+          },
+          "top": {
+            "saturated_pixels": 4328,
+            "saturated_fraction": 0.029351
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2700,
+              "saturated_fraction": 0.018311
+            },
+            "right45": {
+              "saturated_pixels": 2694,
+              "saturated_fraction": 0.01827
+            },
+            "back": {
+              "saturated_pixels": 2746,
+              "saturated_fraction": 0.018623
+            },
+            "top": {
+              "saturated_pixels": 829,
+              "saturated_fraction": 0.005622
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2550,
+              "saturated_fraction": 0.017293
+            },
+            "right45": {
+              "saturated_pixels": 2624,
+              "saturated_fraction": 0.017795
+            },
+            "back": {
+              "saturated_pixels": 2734,
+              "saturated_fraction": 0.018541
+            },
+            "top": {
+              "saturated_pixels": 1045,
+              "saturated_fraction": 0.007087
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2672,
+              "saturated_fraction": 0.018121
+            },
+            "right45": {
+              "saturated_pixels": 2682,
+              "saturated_fraction": 0.018188
+            },
+            "back": {
+              "saturated_pixels": 2734,
+              "saturated_fraction": 0.018541
+            },
+            "top": {
+              "saturated_pixels": 913,
+              "saturated_fraction": 0.006192
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 26,
+        "stem": "full_train_reach_right_a50_s6201",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10175,
+            "saturated_fraction": 0.069004
+          },
+          "right45": {
+            "saturated_pixels": 9568,
+            "saturated_fraction": 0.064887
+          },
+          "back": {
+            "saturated_pixels": 9845,
+            "saturated_fraction": 0.066766
+          },
+          "top": {
+            "saturated_pixels": 4334,
+            "saturated_fraction": 0.029392
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2700,
+              "saturated_fraction": 0.018311
+            },
+            "right45": {
+              "saturated_pixels": 2697,
+              "saturated_fraction": 0.01829
+            },
+            "back": {
+              "saturated_pixels": 2748,
+              "saturated_fraction": 0.018636
+            },
+            "top": {
+              "saturated_pixels": 827,
+              "saturated_fraction": 0.005608
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2650,
+              "saturated_fraction": 0.017971
+            },
+            "right45": {
+              "saturated_pixels": 2572,
+              "saturated_fraction": 0.017442
+            },
+            "back": {
+              "saturated_pixels": 2748,
+              "saturated_fraction": 0.018636
+            },
+            "top": {
+              "saturated_pixels": 1048,
+              "saturated_fraction": 0.007107
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2688,
+              "saturated_fraction": 0.018229
+            },
+            "right45": {
+              "saturated_pixels": 2690,
+              "saturated_fraction": 0.018243
+            },
+            "back": {
+              "saturated_pixels": 2746,
+              "saturated_fraction": 0.018623
+            },
+            "top": {
+              "saturated_pixels": 899,
+              "saturated_fraction": 0.006097
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      },
+      {
+        "sample_index": 27,
+        "stem": "full_train_reach_right_a62_s6202",
+        "decoded_target_video": {
+          "width": 768,
+          "height": 768,
+          "frames": 107,
+          "fps": "24/1"
+        },
+        "target_mid_four_quadrants": {
+          "left45": {
+            "saturated_pixels": 10166,
+            "saturated_fraction": 0.068943
+          },
+          "right45": {
+            "saturated_pixels": 9519,
+            "saturated_fraction": 0.064555
+          },
+          "back": {
+            "saturated_pixels": 9839,
+            "saturated_fraction": 0.066725
+          },
+          "top": {
+            "saturated_pixels": 4388,
+            "saturated_fraction": 0.029758
+          }
+        },
+        "first_reference_image_size": [
+          768,
+          768
+        ],
+        "first_reference_image_square": true,
+        "first_reference_image_exact_if_same_dims": null,
+        "sparse_reference_video_tensor_shape": [
+          9,
+          768,
+          768,
+          3
+        ],
+        "sparse_reference_video_sample_stats": [
+          {
+            "left45": {
+              "saturated_pixels": 2706,
+              "saturated_fraction": 0.018351
+            },
+            "right45": {
+              "saturated_pixels": 2697,
+              "saturated_fraction": 0.01829
+            },
+            "back": {
+              "saturated_pixels": 2750,
+              "saturated_fraction": 0.01865
+            },
+            "top": {
+              "saturated_pixels": 841,
+              "saturated_fraction": 0.005703
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2630,
+              "saturated_fraction": 0.017836
+            },
+            "right45": {
+              "saturated_pixels": 2546,
+              "saturated_fraction": 0.017266
+            },
+            "back": {
+              "saturated_pixels": 2740,
+              "saturated_fraction": 0.018582
+            },
+            "top": {
+              "saturated_pixels": 1057,
+              "saturated_fraction": 0.007168
+            }
+          },
+          {
+            "left45": {
+              "saturated_pixels": 2697,
+              "saturated_fraction": 0.01829
+            },
+            "right45": {
+              "saturated_pixels": 2674,
+              "saturated_fraction": 0.018134
+            },
+            "back": {
+              "saturated_pixels": 2744,
+              "saturated_fraction": 0.018609
+            },
+            "top": {
+              "saturated_pixels": 911,
+              "saturated_fraction": 0.006178
+            }
+          }
+        ],
+        "caption_fourcam_preserved": true,
+        "conditioning_files_present": true,
+        "note": "Soft sampled Pose reference, not hard 107-frame pose control"
+      }
+    ],
+    "decoded_target_contact": "F:\\anymove\\runs\\human\\lora_synth_A\\conditioned_backend\\fal_h3_ref2va\\remote\\h3_ref2va_v6_28_fourview_debug_1step\\audit\\fourcam_fal_decoded_targets_contact.jpg"
+  },
+  "caveats": [
+    "LoRA training completed only 1 step; weights are debug artifact, not validated motion quality",
+    "Training ZIP heldout 8 clips were NOT submitted to fal",
+    "Video conditioning is sparse and soft, not hard 3D joint control",
+    "Some fal resize/conditioning image preprocessing can change nominal pixel resolution",
+    "fal audio missing -> silence substitution is expected for silent synthetic Blender inputs"
+  ],
+  "no_paid_inference_video": true,
+  "no_full_training_400step": true
+}

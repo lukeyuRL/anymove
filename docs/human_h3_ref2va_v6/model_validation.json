@@ -1,0 +1,29 @@
+{
+  "status": "PASS_400STEP_MODEL_ARTIFACTS",
+  "request_id": "01a1a04e-19bd-7340-8b68-c3bfd4566976",
+  "steps": 400,
+  "training_source": "H3_BASE",
+  "dataset_sha256": "76faf527f9e5cd7f9521b8a42f306b7f07fda04f6c2d7cc2d4d233f57f102141",
+  "files": {
+    "lora_file": {
+      "local_path": "F:\\anymove\\runs\\human\\lora_synth_A\\conditioned_backend\\fal_h3_ref2va\\remote\\h3_ref2va_v6_28_fourview_400step\\model\\human_v6_fourcam_h3_400.safetensors",
+      "bytes": 65628056,
+      "sha256": "cc837f9122caa0619b5357a25563e319b8438102f07128ad057d2dbe70add6a2"
+    },
+    "config_file": {
+      "local_path": "F:\\anymove\\runs\\human\\lora_synth_A\\conditioned_backend\\fal_h3_ref2va\\remote\\h3_ref2va_v6_28_fourview_400step\\model\\config.json",
+      "bytes": 57,
+      "sha256": "ef3c101d21fa61f3c926e6301df57c0aa644ffc41eea4bbeb312912bd82e1b53"
+    }
+  },
+  "weights": {
+    "sha256": "cc837f9122caa0619b5357a25563e319b8438102f07128ad057d2dbe70add6a2",
+    "bytes": 65628056,
+    "tensors": 208
+  },
+  "config": {
+    "instance_prompt": "FOURCAM",
+    "training_type": "ref2va"
+  },
+  "no_paid_video_inference": true
+}

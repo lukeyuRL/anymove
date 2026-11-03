@@ -1,0 +1,136 @@
+{
+  "status": "PASS_FOUR_PAID_VIDEOS_COMPLETED",
+  "model": {
+    "request_id": "01a1a04e-19bd-7340-8b68-c3bfd4566976",
+    "training_steps": 400,
+    "dataset": "V6 28 train, 8 heldout",
+    "weights_sha256": "cc837f9122caa0619b5357a25563e319b8438102f07128ad057d2dbe70add6a2",
+    "trigger": "FOURCAM",
+    "fal_inference_endpoint": "minimax/h3/reference-to-video/lora"
+  },
+  "full_videos": {
+    "forward_left": {
+      "scale0": {
+        "request_id": "01a1a10d-983c-7220-a919-5e5ee98b04ca",
+        "local_video": "EXTERNAL_RUNTIME_VIDEO_NOT_GIT_TRACKED",
+        "bytes": 1442472,
+        "sha256": "a2606301a759c0b7f941922d2d83f5b8fdc12c1b1ce2d0fb64d1e455f6db0cd1"
+      },
+      "scale1": {
+        "request_id": "01a1a10d-9b80-72a3-a037-0f3306ae1800",
+        "local_video": "EXTERNAL_RUNTIME_VIDEO_NOT_GIT_TRACKED",
+        "bytes": 1308794,
+        "sha256": "19d371aad61275c938b643ea8fca962b83ba12da82dac2a420d69d287585bc7c"
+      }
+    },
+    "backward_right": {
+      "scale0": {
+        "request_id": "01a1a10e-23f0-77b2-a801-fd0ac2fe2460",
+        "local_video": "EXTERNAL_RUNTIME_VIDEO_NOT_GIT_TRACKED",
+        "bytes": 1505556,
+        "sha256": "2486e6591d3a93ae2f424fe26ada72073f8bc05d68cecba9deac0f5832a0dd66"
+      },
+      "scale1": {
+        "request_id": "01a1a10e-26f9-7fc1-a523-300f9c6c2e7a",
+        "local_video": "EXTERNAL_RUNTIME_VIDEO_NOT_GIT_TRACKED",
+        "bytes": 1225729,
+        "sha256": "47c7e28b201e8d9d1b276195f0ea99e093827995511114f551ce02e2044521a3"
+      }
+    }
+  },
+  "statistics": {
+    "forward_left": {
+      "scale0": {
+        "eight_regions_mean_IoU_whole": 0.66673,
+        "eight_regions_mean_IoU_active": 0.66831,
+        "four_views_target_arm_active_IoU": 0.7638,
+        "per_view_target_arm_active_IoU": {
+          "left_45": 0.7514,
+          "right_45": 0.7847,
+          "back": 0.7956,
+          "top": 0.7235
+        }
+      },
+      "scale1": {
+        "eight_regions_mean_IoU_whole": 0.69883,
+        "eight_regions_mean_IoU_active": 0.69689,
+        "four_views_target_arm_active_IoU": 0.76772,
+        "per_view_target_arm_active_IoU": {
+          "left_45": 0.7633,
+          "right_45": 0.7941,
+          "back": 0.7761,
+          "top": 0.7374
+        }
+      },
+      "scale1_minus_scale0_active_IoU": 0.02858,
+      "scale1_minus_scale0_full_IoU": 0.0321
+    },
+    "backward_right": {
+      "scale0": {
+        "eight_regions_mean_IoU_whole": 0.6453,
+        "eight_regions_mean_IoU_active": 0.6409,
+        "four_views_target_arm_active_IoU": 0.51892,
+        "per_view_target_arm_active_IoU": {
+          "left_45": 0.2778,
+          "right_45": 0.6134,
+          "back": 0.5231,
+          "top": 0.6614
+        }
+      },
+      "scale1": {
+        "eight_regions_mean_IoU_whole": 0.67989,
+        "eight_regions_mean_IoU_active": 0.67148,
+        "four_views_target_arm_active_IoU": 0.57673,
+        "per_view_target_arm_active_IoU": {
+          "left_45": 0.3382,
+          "right_45": 0.663,
+          "back": 0.6188,
+          "top": 0.6869
+        }
+      },
+      "scale1_minus_scale0_active_IoU": 0.03058,
+      "scale1_minus_scale0_full_IoU": 0.03459
+    },
+    "combined": {
+      "same_seed_controlled_paired_cases": 2,
+      "fal_paid_inference_videos_submitted": 4,
+      "moving_upperarm_color_association_preserved_in_both_video_families": "Visual evidence only; not certified 3D joint rig",
+      "sixteen_view_color_pairs_where_scale1_IoU_higher": 13,
+      "out_of_total_pairs": 16,
+      "all_color_regions_mean_active_IoU_scale0": 0.6546,
+      "all_color_regions_mean_active_IoU_scale1": 0.68419
+    }
+  },
+  "warnings": [
+    "Four-view output preserves 2x2 layout but this does not prove same 3D motion in all views.",
+    "IoU is 2D pixel color-mask overlap with Blender reference, not 3D skeletal joint error.",
+    "Reference Pose Video uses fal native sparse / soft video conditioning, not hard per-frame joint-camera constraints.",
+    "Model generated 124 frames versus Blender source 107; metrics use normalized clip phase, not exact time.",
+    "Only one seed (42), two heldout cases; results cannot establish robust generalization.",
+    "Forward LEFT red upperarm/backward RIGHT blue upperarm are anatomically designated per V6 colors; 45-degree camera silhouettes and self-occlusion can shift apparent 2D centroids."
+  ],
+  "blender_3d_gt": {
+    "families": {
+      "forward_left": {
+        "L": {
+          "hand_joint_total_3d_travel_from_rest_RMS_m": 0.392,
+          "hand_joint_max_3d_displacement_from_rest_m": 0.4968
+        },
+        "R": {
+          "hand_joint_total_3d_travel_from_rest_RMS_m": 0.0,
+          "hand_joint_max_3d_displacement_from_rest_m": 0.0
+        }
+      },
+      "backward_right": {
+        "L": {
+          "hand_joint_total_3d_travel_from_rest_RMS_m": 0.0,
+          "hand_joint_max_3d_displacement_from_rest_m": 0.0
+        },
+        "R": {
+          "hand_joint_total_3d_travel_from_rest_RMS_m": 0.3197,
+          "hand_joint_max_3d_displacement_from_rest_m": 0.4055
+        }
+      }
+    }
+  }
+}
