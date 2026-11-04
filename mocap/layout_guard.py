@@ -31,6 +31,8 @@ def verify_layout_for_rig(rig_info_path, layout):
     if not isinstance(expected,dict):
         raise RuntimeError("Missing Creature Layout in "+str(cfg))
     fields=("W_FRONT","W_SIDE","M_PER_PX","GROUND_V")
+    if "H" in expected:
+        fields=fields+("H",)
     angle_defaults={"FRONT_AZIMUTH_DEG":0.0,"SIDE_AZIMUTH_DEG":90.0}
     override=os.environ.get("MOCAP_CAMERA_AZIMUTHS")
     if override:

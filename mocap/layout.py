@@ -19,6 +19,7 @@ FRONT_AZIMUTH_DEG, SIDE_AZIMUTH_DEG = 0.0, 90.0
 _cfg = pathlib.Path(os.environ.get("MOCAP_CREATURE", "")) / "creature.json"
 if os.environ.get("MOCAP_CREATURE") and _cfg.exists():
     _l = json.load(open(_cfg)).get("layout", {})
+    H = _l.get("H", H)
     W_FRONT, W_SIDE = _l.get("W_FRONT", W_FRONT), _l.get("W_SIDE", W_SIDE)
     M_PER_PX, GROUND_V = _l.get("M_PER_PX", M_PER_PX), _l.get("GROUND_V", GROUND_V)
     FRONT_AZIMUTH_DEG = _l.get("FRONT_AZIMUTH_DEG", FRONT_AZIMUTH_DEG)

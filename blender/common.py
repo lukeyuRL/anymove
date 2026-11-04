@@ -32,6 +32,7 @@ CREATURE = os.environ.get("MOCAP_CREATURE")
 if CREATURE and (pathlib.Path(CREATURE) / "creature.json").exists():
     _c = json.load(open(pathlib.Path(CREATURE) / "creature.json"))
     _l = _c.get("layout", {})
+    H = _l.get("H", H)
     W_FRONT, W_SIDE = _l.get("W_FRONT", W_FRONT), _l.get("W_SIDE", W_SIDE)
     M_PER_PX = _l.get("M_PER_PX", M_PER_PX)
     GROUND_V = _l.get("GROUND_V", GROUND_V)
