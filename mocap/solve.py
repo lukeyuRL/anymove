@@ -415,6 +415,8 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=None):
         raise ValueError("Solver frame_indices must increase monotonically")
     dt=torch.tensor(np.diff(frame_idx),dtype=torch.float64,device=dev).clamp_min(1e-6)
     human_mode=(info.get("schema")=="anymove.human_v3_nose_hr_v2_rig_solver_contract/1")
+    if human_mode and (rig.names[0]!="RL_BoneRoot" or rig.parent[0]!=-1):
+        raise ValueError("Human V3 root contract: RL_BoneRoot must be first and parentless")
     f_obs = torch.tensor(d["front_uv"], dtype=torch.float64, device=dev)
     s_obs = torch.tensor(d["side_uv"], dtype=torch.float64, device=dev)
     f_c = torch.tensor(d["front_conf"], dtype=torch.float64, device=dev).clamp(0, 1) ** 2
@@ -424,11 +426,40 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=None):
     hips = names.index(info["bones"][0]["head_joint"])
     trans = (tri[:, hips] - rig.rest_kp[hips]).clone().requires_grad_(True)
     conf = np.minimum(d["front_conf"], d["side_conf"]).clip(1e-3, 1)
-    root0 = root_from_triangulation(tri_np, conf, rig, names, info) + 1e-4
+    # The default Root estimator only trusts directly root-rigid children.
+    # Human RL_BoneRoot has one such child, so the old Kabsch degenerates to
+    # zero orientation and the optimizer pushes compensating yaw into Spine.
+    # The TRAIN-calibrated opt-in research rig can instead initialize Root
+    # from four proximal anatomical bone heads (no GT at inference).
+    prior_for_root=info.get("experimental_motion_prior")
+    if prior_for_root is not None and prior_for_root.get("root_anchor_initializer")=="KABSCH_HIP_WAIST_THIGHS":
+        from mocap.human_root_initializer import estimate_human_v3_root_axis_angle
+        root_rest=rotation_only(rig.B[0,:3,:3].detach().cpu().numpy())
+        root0=estimate_human_v3_root_axis_angle(
+            tri_np,rig.rest_kp.detach().cpu().numpy(),
+            names,root_rest,conf,smoothing_window=3)
+    else:
+        root0=root_from_triangulation(tri_np, conf, rig, names, info)
+    root0=np.asarray(root0,dtype=np.float64)+1e-4
     root = torch.tensor(root0, dtype=torch.float64, device=dev).requires_grad_(True)
     nb = len(rig.names)
     # Euler = lo + (hi - lo) * sigmoid(phi), starting from the analytic IK pose
     e0 = torch.tensor(ik_init(tri_np, root0, info, rig), dtype=torch.float64, device=dev)
+    if prior_for_root is not None and "train_spine_neutral_init" in prior_for_root:
+        config=prior_for_root["train_spine_neutral_init"]
+        if not human_mode or config.get("source_train_clips")!=96:
+            raise ValueError("Train Spine initializer requires 96-clip calibrated V3 SO3 research profile")
+        fraction=float(config.get("weight",0))
+        if not np.isfinite(fraction) or not 0<=fraction<=1:
+            raise ValueError("Invalid Train-based Spine IK blending weight")
+        bones=config.get("bone_names")
+        if bones!=prior_for_root["spine_bone_names"]:
+            raise ValueError("Train Spine initializer bone order mismatch")
+        initial_indices=[rig.names.index(name) for name in bones]
+        neutral=torch.as_tensor(config.get("median_euler_xyz_rad"),dtype=torch.float64,device=dev)
+        if neutral.shape!=(len(initial_indices),3) or not bool(torch.isfinite(neutral).all()):
+            raise ValueError("Invalid Train Spine median rotations")
+        e0[:,initial_indices,:]=(1-fraction)*e0[:,initial_indices,:]+fraction*neutral[None]
     z = ((e0 - rig.lo) / (rig.hi - rig.lo)).clamp(1e-3, 1 - 1e-3)
     phi = torch.logit(z).clone().requires_grad_(True)
     paws = [names.index(n) for n in names if any(n.startswith(p) for p in ("fpaw", "ftoe", "hpaw", "htoe"))]
@@ -437,6 +468,63 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=None):
     vel_strength=0.1 if human_mode else 2.0
     prior_strength=0.005 if human_mode else 0.05
     observation_strength=4.0 if human_mode else 1.0
+    # Experimental opt-in (separate rig only): TRAIN-derived spine
+    # observability priors. Never affect default Human, Dragon or Wolf rigs.
+    spine_profile=info.get("experimental_spine_stabilizer")
+    so3_profile=info.get("experimental_motion_prior")
+    if spine_profile is not None and so3_profile is not None:
+        raise ValueError("Experimental SO3 and legacy Spine stabilizers are mutually exclusive")
+    so3_indices=None
+    if so3_profile is not None:
+        root_observation_weight=float(so3_profile.get("root_orientation_observation_weight",0.0))
+        if not np.isfinite(root_observation_weight) or root_observation_weight<0 or root_observation_weight>1e6:
+            raise ValueError("Invalid source-measured Root SO3 orientation evidence weight")
+        if root_observation_weight>0 and so3_profile.get("root_anchor_initializer")!="KABSCH_HIP_WAIST_THIGHS":
+            raise ValueError("Root SO3 evidence requires Kabsch Root initializer, not assumed zero heading")
+        if (not human_mode or
+            so3_profile.get("schema")!="anymove.human_v3_so3_prior/1" or
+            so3_profile.get("train_clips")!=96 or
+            so3_profile.get("source_blend_sha256")!=info.get("source_blend_sha256") or
+            so3_profile.get("camera_azimuth_deg")!=[315,45] or
+            so3_profile.get("rig_bone_names")!=rig.names):
+            raise ValueError("Human SO3 motion prior calibration/rig provenance mismatch")
+        if (abs(layout.FRONT_AZIMUTH_DEG-315)>1e-7 or
+            abs(layout.SIDE_AZIMUTH_DEG-45)>1e-7 or
+            info.get("limits_status")!="PROVISIONAL_TRAIN_SO3_MOTION_PRIOR_RESEARCH_ONLY"):
+            raise ValueError("Human SO3 prior requires explicit provisional 315/45 research layout")
+        idx=so3_profile.get("spine_bone_indices")
+        if (not isinstance(idx,list) or
+            len(idx)!=len(so3_profile["spine_bone_names"]) or
+            any(not isinstance(i,int) or i<0 or i>=len(rig.names) for i in idx) or
+            [rig.names[i] for i in idx]!=so3_profile["spine_bone_names"]):
+            raise ValueError("Human SO3 motion prior bone indices and labels inconsistent")
+        so3_indices=idx
+    spine_idle_bones=[]
+    spine_idle_axes=[]
+    spine_active_bones=[]
+    if spine_profile is not None:
+        if not human_mode or spine_profile.get("status")!="PROVISIONAL_TRAIN_ONLY":
+            raise ValueError("Spine stabilization profile requires explicitly provisional Human rig")
+        def _nonnegative(key):
+            value=float(spine_profile.get(key,0.0))
+            if not np.isfinite(value) or not 0<=value<=100000:
+                raise ValueError("Invalid experimental spine penalty "+key)
+            return value
+        idle_weight=_nonnegative("idle_axis_weight")
+        spine_acc_weight=_nonnegative("spine_angular_acc_weight")
+        root_angle_weight=_nonnegative("root_angle_weight")
+        root_acc_weight=_nonnegative("root_angular_acc_weight")
+        if "source_train_clips" not in spine_profile or spine_profile["source_train_clips"]!=144:
+            raise ValueError("Spine profile must be calibrated from exactly 144 TRAIN clips")
+        for name,axes in spine_profile["inactive_axes"].items():
+            if name not in rig.names or not isinstance(axes,list) or not all(a in (0,1,2) for a in axes):
+                raise ValueError("Unknown spine axis in experimental rig "+name)
+            spine_idle_bones.extend([rig.names.index(name)]*len(axes))
+            spine_idle_axes.extend(axes)
+        for name in spine_profile["spine_chain"]:
+            if name not in rig.names:
+                raise ValueError("Unknown spine chain bone "+name)
+            spine_active_bones.append(rig.names.index(name))
     # Original 0/90 Front height was experimentally downweighted. For arbitrary
     # oblique camera slots the default is symmetric, with confidence per view.
     f_axis = torch.tensor([1.0, front_height_weight], dtype=torch.float64, device=dev)
@@ -444,6 +532,10 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=None):
     def loss_fn(stage):
         nonlocal sigma
         eul = rig.lo + (rig.hi - rig.lo) * torch.sigmoid(phi)
+        if human_mode and rig.names[0]=="RL_BoneRoot":
+            # Root local pose is an immutable identity bone. The separate
+            # root_rot is global character motion, NOT a keyed root bone.
+            eul=torch.cat((torch.zeros_like(eul[:,:1,:]),eul[:,1:,:]),dim=1)
         J, _ = rig.forward(trans, axis_angle(root), eul)
         pf, ps = project(J)
         rf = ((pf - f_obs) ** 2 * f_axis).sum(-1)
@@ -460,7 +552,42 @@ def fit(d, info, iters=1500, dev="cpu", log=True, front_height_weight=None):
         prior=(eul**2).sum()*prior_strength
         ground = (torch.relu(-J[:, paws, 2]) ** 2).sum() / layout.M_PER_PX ** 2 * 0.5
         total = data + acc + vel + prior + ground
-        return total, {"data": data.item(), "acc": acc.item(), "vel": vel.item(), "prior": prior.item(), "ground": ground.item()}, J, pf, ps, eul
+        losses={"data": data.item(), "acc": acc.item(), "vel": vel.item(), "prior": prior.item(), "ground": ground.item()}
+        if so3_profile is not None:
+            from mocap.so3_motion_prior import excess_angular_motion_loss
+            chosen=eul[:,so3_indices,:]
+            chosen_R=euler_xyz(chosen)
+            root_R=axis_angle(root)
+            so3loss,so3terms=excess_angular_motion_loss(
+                chosen_R,root_R,chosen,dt,so3_profile)
+            if root_observation_weight>0:
+                from mocap.so3_motion_prior import relative_rotvec
+                reference_R=axis_angle(torch.tensor(root0,dtype=torch.float64,device=dev))
+                root_measurement_residual=relative_rotvec(
+                    torch.stack((reference_R,root_R),dim=0))[0]
+                root_evidence=root_observation_weight*root_measurement_residual.square().sum()
+                so3loss=so3loss+root_evidence
+                so3terms["root_geom_observation"]=root_evidence
+            total=total+so3loss
+            losses.update({k:v.item() for k,v in so3terms.items()})
+        if spine_profile is not None:
+            idle=eul[:,spine_idle_bones,spine_idle_axes]
+            idle_loss=idle_weight*(idle**2).sum()
+            if T>=3:
+                curvature=time_normalized_joint_acceleration(eul[:,spine_active_bones,:],dt)
+                spine_acc_loss=spine_acc_weight*(curvature**2).sum()
+                root_curvature=time_normalized_joint_acceleration(root[:,None,:],dt)
+                root_acc_loss=root_acc_weight*(root_curvature**2).sum()
+            else:
+                spine_acc_loss=eul.new_zeros(())
+                root_acc_loss=eul.new_zeros(())
+            root_prior_loss=root_angle_weight*(root**2).sum()
+            total=total+idle_loss+spine_acc_loss+root_prior_loss+root_acc_loss
+            losses.update({"spine_idle":idle_loss.item(),
+                "spine_angular_acc":spine_acc_loss.item(),
+                "root_angle_prior":root_prior_loss.item(),
+                "root_angular_acc":root_acc_loss.item()})
+        return total,losses,J,pf,ps,eul
 
     opt = torch.optim.Adam([{"params": [trans], "lr": 0.001 if human_mode else 0.01}, {"params": [root], "lr": 0.002 if human_mode else 0.03}, {"params": [phi], "lr": 0.005 if human_mode else 0.05}])
     best_human=None
@@ -626,7 +753,11 @@ def main():
               "source_frames_contiguous": bool("frame_indices" not in raw.files or np.all(np.diff(raw["frame_indices"])==1)),
               "temporal_joint_tracking":temporal_report,
               "solver_rig_limits_status":info.get("limits_status"),
-              "motion_space_warning":"BLENDER_LOCAL_EULER_NOT_ICLONE_FK_CHANNELS"}
+              "motion_space_warning":"BLENDER_LOCAL_EULER_NOT_ICLONE_FK_CHANNELS",
+              "root_bone_static":bool(info.get("schema")=="anymove.human_v3_nose_hr_v2_rig_solver_contract/1"),
+              "root_pose_bone_name":("RL_BoneRoot" if info.get("schema")=="anymove.human_v3_nose_hr_v2_rig_solver_contract/1" else None),
+              "root_motion_carrier":("ArmatureObject" if info.get("schema")=="anymove.human_v3_nose_hr_v2_rig_solver_contract/1" else None),
+              "root_quat_semantics":("Solver local root rotation; bake into Armature.matrix_world through RL_BoneRoot rest-basis conjugation, never key RL_BoneRoot" if info.get("schema")=="anymove.human_v3_nose_hr_v2_rig_solver_contract/1" else None)}
     json.dump(motion, open(out, "w"))
     print("saved", out)
 
